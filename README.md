@@ -1,3 +1,3 @@
-# Toolbox for Deep RL with easy integration of environments that follow OpenAI Gym format
+## Deep RL Toolbox
 
-This toolbox allows for the easy implementation of deep rl algorithms
+This toolbox allows for the easy implementation of deep RL algorithms in OpenAI-esque environments

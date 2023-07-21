@@ -1,21 +1,33 @@
 #! /usr/bin/env python
-import pathlib
 
+import os
 import sys
-
 import argparse
 import numpy as np
-import jax
 import flax.linen as nn
 import yaml
+import jax
 
-from dl_algos.madqn import MultiAgentDQN
+from dl_algos.madqn import MultiAgentDQN, CentralizedTrainingMADQN
 from dl_envs.lb_foraging_coop import FoodCOOPLBForaging
 from pathlib import Path
-from gym.spaces.multi_discrete import MultiDiscrete
+from gymnasium.spaces.multi_discrete import MultiDiscrete
 from itertools import product
+from typing import List
+from datetime import datetime
 
 RNG_SEED = 13042023
+TEST_RNG_SEED = 4072023
+
+
+def get_history_entry(obs: np.ndarray, actions: List[int], n_agents: int) -> List:
+	entry = []
+	for a_idx in range(n_agents):
+		state_str = ' '.join([str(int(x)) for x in obs[a_idx]])
+		action = actions[a_idx]
+		entry += [state_str, str(action)]
+	
+	return entry
 
 
 def main():
@@ -27,6 +39,8 @@ def main():
 	parser.add_argument('--buffer', dest='buffer_size', type=int, required=True, help='Size of the replay buffer in the DQN')
 	parser.add_argument('--gamma', dest='gamma', type=float, required=False, default=0.99, help='Discount factor for agent\'s future rewards')
 	parser.add_argument('--gpu', dest='use_gpu', action='store_true', help='Flag that signals the use of gpu for the training')
+	parser.add_argument('--ddqn', dest='use_ddqn', action='store_true', help='Flag that signals the use of a Double DQN')
+	parser.add_argument('--dueling', dest='dueling_dqn', action='store_true', help='Flag that signals the use of a Dueling DQN architecture')
 	parser.add_argument('--tensorboard', dest='use_tensorboard', action='store_true',
 						help='Flag the signals the use of a tensorboard summary writer. Expects argument --tensorboardDetails to be present')
 	parser.add_argument('--tensorboardDetails', dest='tensorboard_details', nargs='+', required=False, default=None,
@@ -36,8 +50,9 @@ def main():
 	parser.add_argument('--agent-ids', dest='agent_ids', type=str, required=True, nargs='+', help='ID for each agent in the environment')
 	
 	# Train parameters
-	parser.add_argument('--steps', dest='n_steps', type=int, required=True,
-						help='Number of epochs to run training (negative value signals run until convergence)')
+	parser.add_argument('--cycles', dest='n_cycles', type=int, required=True,
+						help='Number of training cycles, each cycle spawns the field with a different number of food items.')
+	parser.add_argument('--iterations', dest='n_iterations', type=int, required=True, help='Number of iterations to run training')
 	parser.add_argument('--batch', dest='batch_size', type=int, required=True, help='Number of samples in each training batch')
 	parser.add_argument('--train-freq', dest='train_freq', type=int, required=True, help='Number of epochs between each training update')
 	parser.add_argument('--target-freq', dest='target_freq', type=int, required=True, help='Number of epochs between updates to target network')
@@ -58,6 +73,7 @@ def main():
 	parser.add_argument('--n-food', dest='n_foods', type=int, required=True, help='Number of food items in the field')
 	parser.add_argument('--food-level', dest='food_level', type=int, required=True, help='Level of the food items')
 	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
+	parser.add_argument('--render', dest='use_render', action='store_true', help='Flag that signals the use of the field render while training')
 	
 	args = parser.parse_args()
 	n_agents = args.n_agents
@@ -65,16 +81,19 @@ def main():
 	buffer_size = args.buffer_size
 	gamma = args.gamma
 	use_gpu = args.use_gpu
+	dueling_dqn = args.dueling_dqn
+	use_ddqn = args.use_ddqn
 	use_tensorboard = args.use_tensorboard
 	tensorboard_details = args.tensorboard_details
 	layer_sizes = args.layer_sizes
 	agent_ids = args.agent_ids
-	n_steps = args.n_steps
+	n_cycles = args.n_cycles
+	n_iterations = args.n_iterations
 	batch_size = args.batch_size
 	train_freq = args.train_freq
 	target_freq = args.target_freq
 	learn_rate = args.learn_rate
-	target_learn_rate = args.target_learn_rate
+	target_update_rate = args.target_learn_rate
 	initial_eps = args.initial_eps
 	final_eps = args.final_eps
 	eps_decay = args.eps_decay
@@ -86,7 +105,11 @@ def main():
 	n_foods = args.n_foods
 	food_level = args.food_level
 	max_steps = args.max_steps
+	use_render = args.use_render
 	
+	os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+	
+	# print(gamma, initial_eps, final_eps, eps_decay, eps_type, warmup, learn_rate, target_learn_rate)
 	field_dims = len(field_lengths)
 	if 2 >= field_dims > 0:
 		if field_dims == 1:
@@ -98,13 +121,15 @@ def main():
 	else:
 		print('[ARGS ERROR] Field size must either be composed of only 1 or 2 arguments; %d were given. Exiting program' % field_dims)
 		return
-	
+
+	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
 	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
-	log_filename = ('train_lb_coop_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents, n_foods, food_level))
+	log_filename = (('train_lb_coop_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents, n_foods, food_level)) +
+					'_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / 'lb_coop_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-agents' % n_agents) /
-						 ('%d-foods_%d-food-level' % (n_foods, food_level)))
+						 ('%d-foods_%d-food-level' % (n_foods, food_level)) / now.strftime("%Y%m%d-%H%M%S"))
 	with open(data_dir / 'configs' / 'lbforaging_plan_configs.yaml') as file:
 		config_params = yaml.full_load(file)
 		dict_idx = str(field_size[0]) + 'x' + str(field_size[1]) + '_food_locs'
@@ -120,25 +145,79 @@ def main():
 	print('Starting LB Foraging DQN Train')
 	print('##############################')
 	print('Environment setup')
-	env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, food_locs)
-	env.spawn_players(player_level)
-	env.spawn_food(n_foods, food_level)
+	env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs)
+	env.seed(RNG_SEED)
+	rng_gen = np.random.default_rng(RNG_SEED)
 	
-	print('Starting training for different food locations')
-	for loc in food_locs:
-		print('Training for location: %dx%d' % (loc[0], loc[1]))
-		env.obj_food = loc
-		print('Setup multi-agent DQN')
-		agents_dqns = MultiAgentDQN(n_agents, agent_ids, env.action_space[0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma,
-									MultiDiscrete(env.observation_space[0].high - env.observation_space[0].low), use_gpu, False, use_tensorboard,
-									tensorboard_details)
+	# print('Starting training for different food locations')
+	# for loc in food_locs:
+	# loc = food_locs[0]
+	loc = (5, 4)
+	print('Training for location: %dx%d' % (loc[0], loc[1]))
+	env.obj_food = loc
+	print('Setup multi-agent DQN')
+	obs_dims = [field_size[0], field_size[1], *([2] * (food_level + 1))] * n_foods + [field_size[0], field_size[1], *([2] * (player_level + 1))] * n_agents
+	agents_dqns = MultiAgentDQN(n_agents, agent_ids, env.action_space[0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, MultiDiscrete(obs_dims),
+								use_gpu, dueling_dqn, use_ddqn, False, use_tensorboard, tensorboard_details)
+	for cycle in range(n_cycles):
+		print('Cycle %d of %d' % (cycle+1, n_cycles))
+		if cycle == 0:
+			foods_spawn = n_foods
+		else:
+			foods_spawn = rng_gen.choice(range(1, n_foods))
+		env.spawn_players(player_level)
+		env.spawn_food(foods_spawn, food_level)
+		print('Cycle params:')
+		print('Number of food spawn:\t%d' % foods_spawn)
+		print('Food locations: ', env.food_spawn_pos if foods_spawn < n_foods else food_locs)
 	
 		print('Starting train')
-		agents_dqns.train_dqns(env, n_steps, batch_size, learn_rate, target_learn_rate, initial_eps, final_eps, eps_type,
-							   RNG_SEED, log_filename + '_log.txt', eps_decay, warmup, train_freq, target_freq, tensorboard_freq)
+		sys.stdout.flush()
+		agents_dqns.train_dqns(env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, initial_eps, final_eps, eps_type,
+							   RNG_SEED, log_filename + '_log.txt', eps_decay, warmup, train_freq, target_freq, tensorboard_freq, use_render, cycle)
+		
+		# Reset params that determine how foods are spawn
+		env.food_spawn_pos = None
+		env.food_spawn = 0
 	
-		Path.mkdir(model_path, parents=True, exist_ok=True)
-		agents_dqns.save_models(('food_%dx%d' % (loc[0], loc[1])), model_path)
+	Path.mkdir(model_path, parents=True, exist_ok=True)
+	agents_dqns.save_models(('food_%dx%d' % (loc[0], loc[1])), model_path)
+	sys.stdout.flush()
+	
+	print('Testing for location: %dx%d' % (loc[0], loc[1]))
+	env.seed(TEST_RNG_SEED)
+	rng_gen = np.random.default_rng(TEST_RNG_SEED)
+	np.random.seed(TEST_RNG_SEED)
+	env.spawn_players(player_level)
+	env.spawn_food(n_foods, food_level)
+	print([p.position for p in env.players])
+	obs, _, _, _ = env.reset()
+	epoch = 0
+	history = []
+	game_over = False
+	while not game_over:
+		
+		actions = []
+		for a_id in agents_dqns.agent_ids:
+			agent_dqn = agents_dqns.agent_dqns[a_id]
+			a_idx = agents_dqns.agent_ids.index(a_id)
+			q_values = agent_dqn.q_network.apply(agent_dqn.online_state.params, obs[a_idx])
+			action = q_values.argmax(axis=-1)
+			action = jax.device_get(action)
+			actions += [action]
+		actions = np.array(actions)
+		next_obs, rewards, finished, infos = env.step(actions)
+		history += [get_history_entry(obs, actions, len(agent_ids))]
+		obs = next_obs
+		
+		if all(finished) or epoch >= 500:
+			game_over = True
+		
+		sys.stdout.flush()
+		epoch += 1
+	
+	print('Test history:')
+	print(history)
 	
 
 if __name__ == '__main__':

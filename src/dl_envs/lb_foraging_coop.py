@@ -19,8 +19,9 @@ from termcolor import colored
 from typing import List, Tuple, Dict
 
 
+MOVE_REWARD = -0.5
 REWARD_PICK = 10
-ADJ_FOOD_REWARD = 1
+ADJ_FOOD_REWARD = 0.75
 WRONG_PICK = -10
 RNG_SEED = 27062023
 
@@ -102,6 +103,8 @@ class LimitedCOOPLBForaging(ForagingEnv):
 					)
 		
 		else:
+			if self._pos_food_spawn is None:
+				self._pos_food_spawn = []
 			# Spawn all food items
 			for pos in self._foods_pos:
 				row, col = pos
@@ -117,17 +120,26 @@ class LimitedCOOPLBForaging(ForagingEnv):
 		obs = []
 		
 		for a_idx in range(self.n_agents):
-			a_obs = []
+			food_obs = ([-1, -1, 1] + [0] * self._food_lvl) * self.max_food
+			food_offset = self._food_lvl + 3
+			agent_obs = []
 			a_raw_obs = raw_obs[a_idx]
 			for obs_idx in range(0, len(a_raw_obs), 3):
 				if obs_idx < self.max_food * 3:
-					one_hot = [0] * (self._food_lvl + 1)
-					one_hot[int(a_raw_obs[obs_idx + 2])] = 1
+					food_row = int(a_raw_obs[obs_idx])
+					food_col = int(a_raw_obs[obs_idx + 1])
+					food_lvl = int(a_raw_obs[obs_idx + 2])
+					if self.field[food_row, food_col] != 0:
+						food_idx = self._foods_pos.index((food_row, food_col))
+						food_obs[food_idx*food_offset] = food_row
+						food_obs[food_idx * food_offset + 1] = food_col
+						food_obs[food_idx * food_offset + 2] = 0
+						food_obs[food_idx * food_offset + food_lvl + 2] = 1
 				else:
 					one_hot = [0] * (self.max_player_level + 1)
 					one_hot[int(a_raw_obs[obs_idx + 2])] = 1
-				a_obs += [a_raw_obs[obs_idx], a_raw_obs[obs_idx + 1], *one_hot]
-			obs += [a_obs]
+					agent_obs += [a_raw_obs[obs_idx], a_raw_obs[obs_idx + 1], *one_hot]
+			obs += [food_obs + agent_obs]
 		
 		return np.array(obs, dtype=np.float32)
 	
@@ -282,8 +294,12 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 						self.field[row, col] = (
 							self._food_lvl if self._food_lvl > 0 else (min_level if min_level == max_level else self.np_random.randint(min_level, max_level))
 						)
+			elif self._pos_food_spawn is None:
+				self._pos_food_spawn = []
 			
 		else:
+			if self._pos_food_spawn is None:
+				self._pos_food_spawn = []
 			# Spawn all food items
 			for pos in self._foods_pos:
 				# print(self._foods_pos)
@@ -301,18 +317,19 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 		before_field = self.field.copy()
 		
 		if before_foods > 0:
-			obs, rewards, dones, infos = super().step(actions)
+			rewards = [MOVE_REWARD] * self.n_agents
+			obs, raw_rewards, dones, infos = super().step(actions)
 			after_field = self.field.copy()
 			after_foods = np.count_nonzero(self.field)
 			p_idx_adj_food = self.get_players_adj_food()
 			if after_foods < before_foods:
 				pick_food = tuple(np.transpose(np.nonzero(before_field - after_field))[0])
 				if pick_food != self._obj_food:
-					rewards = [WRONG_PICK if x > 0 else 0 for x in rewards]
+					rewards = [WRONG_PICK if x > 0 else 0 for x in raw_rewards]
 					dones = [False for _ in dones]
 					
 				else:
-					rewards = [REWARD_PICK if x > 0 else 0 for x in rewards]
+					rewards = [REWARD_PICK if x > 0 else 0 for x in raw_rewards]
 					dones = [True for _ in dones]
 					self._game_over = True
 					
@@ -320,13 +337,13 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 				for player in self.players:
 					p_idx = self.players.index(player)
 					if p_idx in p_idx_adj_food:
-						rewards[p_idx] = ADJ_FOOD_REWARD * len(p_idx_adj_food) / self.n_agents
+						rewards[p_idx] += ADJ_FOOD_REWARD * len(p_idx_adj_food) / self.n_agents
 					else:
-						rewards[p_idx] = 0
+						rewards[p_idx] += 0
 			
 			return obs, rewards, dones, infos
 		else:
-			return self._make_gym_obs()
+			return super().step(actions)
 		
 	#################
 	### Utilities ###

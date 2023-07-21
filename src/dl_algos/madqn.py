@@ -174,6 +174,7 @@ class MultiAgentDQN(object):
 		start_record_it = cycle * num_iterations
 		start_record_epoch = cycle * max_timesteps
 		sys.stdout.flush()
+		history = []
 		
 		for it in range(num_iterations):
 			if use_render:
@@ -181,9 +182,9 @@ class MultiAgentDQN(object):
 			done = False
 			episode_rewards = [0] * self._num_agents
 			episode_start = epoch
+			episode_history = []
 			print("Iteration %d out of %d" % (it + 1, num_iterations))
 			while not done:
-				print("Epoch %d" % (epoch + 1))
 				
 				# interact with environment
 				if eps_type == 'linear':
@@ -205,6 +206,7 @@ class MultiAgentDQN(object):
 						actions += [action]
 					actions = np.array(actions)
 				next_obs, rewards, finished, infos, *_ = env.step(actions)
+				episode_history += [self.get_history_entry(obs, actions)]
 				if use_render:
 					env.render()
 				
@@ -235,9 +237,12 @@ class MultiAgentDQN(object):
 				
 				epoch += 1
 				sys.stdout.flush()
+				
+				# Check if iteration is over
 				if all(finished):
 					done = True
 					obs, *_ = env.reset()
+					history += [episode_history]
 					if self._write_tensorboard:
 						for a_idx in range(self._num_agents):
 							a_id = self._agent_ids[a_idx]
@@ -245,6 +250,16 @@ class MultiAgentDQN(object):
 							self._agent_dqns[a_id].summary_writer.add_scalar("charts/episodic_length", epoch - episode_start, it + start_record_it)
 							self._agent_dqns[a_id].summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
 							print("Agent %s episode over:\tReward: %f\tLength: %d" % (a_id, episode_rewards[a_idx], epoch - episode_start))
+							
+		return history
+	
+	def get_history_entry(self, obs: np.ndarray, actions: List):
+		
+		entry = []
+		for idx in range(self._num_agents):
+			entry += [' '.join([str(x) for x in obs[idx]]), str(actions[idx])]
+		
+		return entry
 	
 	def update_models(self, batch_size: int, epoch: int, start_time: float, tensorboard_frequency: int):
 		train_info = ('epoch: %d \t' % epoch)

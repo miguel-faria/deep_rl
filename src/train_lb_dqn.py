@@ -7,6 +7,7 @@ import numpy as np
 import flax.linen as nn
 import yaml
 import jax
+import json
 
 from dl_algos.madqn import MultiAgentDQN, CentralizedTrainingMADQN
 from dl_envs.lb_foraging_coop import FoodCOOPLBForaging
@@ -51,7 +52,7 @@ def main():
 	
 	# Train parameters
 	parser.add_argument('--cycles', dest='n_cycles', type=int, required=True,
-						help='Number of training cycles, each cycle spawns the field with a different number of food items.')
+						help='Number of training cycles, each cycle spawns the field with a different food items configurations.')
 	parser.add_argument('--iterations', dest='n_iterations', type=int, required=True, help='Number of iterations to run training')
 	parser.add_argument('--batch', dest='batch_size', type=int, required=True, help='Number of samples in each training batch')
 	parser.add_argument('--train-freq', dest='train_freq', type=int, required=True, help='Number of epochs between each training update')
@@ -66,6 +67,11 @@ def main():
 	parser.add_argument('--warmup-steps', dest='warmup', type=int, required=False, default=10000, help='Number of epochs to pass before training starts')
 	parser.add_argument('--tensorboard-freq', dest='tensorboard_freq', type=int, required=False, default=1,
 						help='Number of epochs between each log in tensorboard. Use only in combination with --tensorboard option')
+	parser.add_argument('--restart', dest='restart_train', action='store_true',
+						help='Flag that signals that train is suppose to restart from a previously saved point.')
+	parser.add_argument('--restart-info', dest='restart_info', type=str, nargs='+', required=False, default=None,
+						help='List with the info required to recover previously saved model and restart from same point: '
+							 '<model_dirname: str> <model_filename: str> <last_cycle: int> Use only in combination with --restart option')
 	
 	# Environment parameters
 	parser.add_argument('--player-level', dest='player_level', type=int, required=True, help='Level of the agents collecting food')
@@ -74,8 +80,10 @@ def main():
 	parser.add_argument('--food-level', dest='food_level', type=int, required=True, help='Level of the food items')
 	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
 	parser.add_argument('--render', dest='use_render', action='store_true', help='Flag that signals the use of the field render while training')
+	parser.add_argument('--n-foods-spawn', dest='n_foods_spawn', type=int, required=True, help='Number of foods to be spawned for training.')
 	
 	args = parser.parse_args()
+	# DQN args
 	n_agents = args.n_agents
 	n_layers = args.n_layers
 	buffer_size = args.buffer_size
@@ -87,6 +95,7 @@ def main():
 	tensorboard_details = args.tensorboard_details
 	layer_sizes = args.layer_sizes
 	agent_ids = args.agent_ids
+	# Train args
 	n_cycles = args.n_cycles
 	n_iterations = args.n_iterations
 	batch_size = args.batch_size
@@ -100,12 +109,16 @@ def main():
 	eps_type = args.eps_type
 	warmup = args.warmup
 	tensorboard_freq = args.tensorboard_freq
+	restart_train = args.restart_train
+	restart_info = args.restart_info
+	# LB-Foraging environment args
 	player_level = args.player_level
 	field_lengths = args.field_lengths
 	n_foods = args.n_foods
 	food_level = args.food_level
 	max_steps = args.max_steps
 	use_render = args.use_render
+	n_foods_spawn = args.n_foods_spawn
 	
 	os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 	
@@ -126,10 +139,10 @@ def main():
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
 	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
-	log_filename = (('train_lb_coop_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents, n_foods, food_level)) +
+	log_filename = (('train_lb_coop_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents, n_foods_spawn, food_level)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / 'lb_coop_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-agents' % n_agents) /
-						 ('%d-foods_%d-food-level' % (n_foods, food_level)) / now.strftime("%Y%m%d-%H%M%S"))
+						 ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / now.strftime("%Y%m%d-%H%M%S"))
 	with open(data_dir / 'configs' / 'lbforaging_plan_configs.yaml') as file:
 		config_params = yaml.full_load(file)
 		dict_idx = str(field_size[0]) + 'x' + str(field_size[1]) + '_food_locs'
@@ -140,6 +153,7 @@ def main():
 	
 	sys.stdout = open(log_dir / (log_filename + '_log.txt'), 'a')
 	sys.stderr = open(log_dir / (log_filename + '_err.txt'), 'w')
+	Path.mkdir(model_path, parents=True, exist_ok=True)
 	
 	print('##############################')
 	print('Starting LB Foraging DQN Train')
@@ -159,28 +173,49 @@ def main():
 	obs_dims = [field_size[0], field_size[1], *([2] * (food_level + 1))] * n_foods + [field_size[0], field_size[1], *([2] * (player_level + 1))] * n_agents
 	agents_dqns = MultiAgentDQN(n_agents, agent_ids, env.action_space[0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, MultiDiscrete(obs_dims),
 								use_gpu, dueling_dqn, use_ddqn, False, use_tensorboard, tensorboard_details)
-	for cycle in range(n_cycles):
+	if restart_train:
+		start_cycle = int(restart_info[2])
+		print('Load trained model')
+		agents_dqns.load_models(restart_info[1], model_path.parent.absolute() / restart_info[0])
+		cycles_range = range(start_cycle, n_cycles)
+		print('Restarting train from cycle %d' % start_cycle)
+	else:
+		cycles_range = range(n_cycles)
+		print('Starting train')
+	for cycle in cycles_range:
 		print('Cycle %d of %d' % (cycle+1, n_cycles))
-		if cycle == 0:
-			foods_spawn = n_foods
-		else:
-			foods_spawn = rng_gen.choice(range(1, n_foods))
+		# if cycle == 0:
+		# 	n_foods_spawn = n_foods
+		# else:
+		# 	n_foods_spawn = rng_gen.choice(range(1, n_foods))
 		env.spawn_players(player_level)
-		env.spawn_food(foods_spawn, food_level)
+		env.spawn_food(n_foods_spawn, food_level)
 		print('Cycle params:')
-		print('Number of food spawn:\t%d' % foods_spawn)
-		print('Food locations: ', env.food_spawn_pos if foods_spawn < n_foods else food_locs)
+		print('Number of food spawn:\t%d' % n_foods_spawn)
+		print('Food locations: ', env.food_spawn_pos + [loc]  if n_foods_spawn < n_foods else food_locs)
+		print('Food objective: ', env.obj_food)
 	
 		print('Starting train')
 		sys.stdout.flush()
-		agents_dqns.train_dqns(env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, initial_eps, final_eps, eps_type,
-							   RNG_SEED, log_filename + '_log.txt', eps_decay, warmup, train_freq, target_freq, tensorboard_freq, use_render, cycle)
+		history = agents_dqns.train_dqns(env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, initial_eps, final_eps,
+										 eps_type, RNG_SEED, log_filename + '_log.txt', eps_decay, warmup, train_freq, target_freq, tensorboard_freq,
+										 use_render, cycle)
 		
 		# Reset params that determine how foods are spawn
 		env.food_spawn_pos = None
 		env.food_spawn = 0
+		
+		print('Saving cycle iteration history')
+		json_path = model_path / ('food_%dx%d_history.json' % (loc[0], loc[1]))
+		with open(json_path, 'a') as json_file:
+			json_file.write(json.dumps({('cycle_%d' % (cycle + 1)): history}))
 	
-	Path.mkdir(model_path, parents=True, exist_ok=True)
+		print('Saving model after cycle %d' % (cycle + 1))
+		Path.mkdir(model_path, parents=True, exist_ok=True)
+		agents_dqns.save_models(('food_%dx%d_cycle_%d' % (loc[0], loc[1], cycle + 1)), model_path)
+		sys.stdout.flush()
+	
+	print('Saving final model')
 	agents_dqns.save_models(('food_%dx%d' % (loc[0], loc[1])), model_path)
 	sys.stdout.flush()
 	

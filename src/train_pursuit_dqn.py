@@ -13,12 +13,12 @@ import time
 import json
 
 from dl_algos.dqn import EPS_TYPE
-from dl_algos.madqn import MultiAgentDQN, CentralizedTrainingMADQN
-from dl_envs.pursuit_env import PursuitEnv, Action
+from dl_algos.multi_model_madqn import MultiAgentDQN
+from dl_envs.pursuit.pursuit_env import PursuitEnv, Action
 from pathlib import Path
 from gymnasium.spaces.multi_discrete import MultiDiscrete
 from termcolor import colored
-from typing import List, Callable, Tuple
+from typing import List, Callable
 from flax.training.train_state import TrainState
 from datetime import datetime
 
@@ -283,6 +283,8 @@ def main():
 	max_steps = args.max_steps
 	
 	os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+	if not use_gpu:
+		jax.config.update('jax_platform_name', 'cpu')
 	
 	# print(gamma, initial_eps, final_eps, eps_decay, eps_type, warmup, learn_rate, target_learn_rate)
 	field_dims = len(field_lengths)

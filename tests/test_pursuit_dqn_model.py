@@ -6,13 +6,11 @@ import sys
 import jax
 import numpy as np
 import flax.linen as nn
-import yaml
 
-from dl_algos.madqn import MultiAgentDQN, CentralizedTrainingMADQN
-from dl_envs.pursuit_env import PursuitEnv, Action
+from dl_algos.multi_model_madqn import MultiAgentDQN
+from dl_envs.pursuit.pursuit_env import PursuitEnv, Action
 from pathlib import Path
 from gymnasium.spaces.multi_discrete import MultiDiscrete
-from itertools import product
 from typing import List
 
 
@@ -129,7 +127,7 @@ def main():
 	# 	init_pos_prey[prey] = (max(field_size[0] - (prey_idx // n_preys) - 1, 0), max(field_size[1] - (prey_idx % n_preys) - 1, 0))
 	env.spawn_hunters(init_pos_hunter)
 	env.spawn_preys(init_pos_prey)
-	obs, _, _, _ = env.reset()
+	obs, *_ = env.reset()
 	epoch = 0
 	history = []
 	game_over = False
@@ -146,7 +144,7 @@ def main():
 			actions += [action]
 		actions = np.array(actions)
 		print(' '.join([str(Action(action)) for action in actions]))
-		next_obs, rewards, finished, infos = env.step(actions)
+		next_obs, rewards, finished, timeout, infos = env.step(actions)
 		history += [get_history_entry(obs, actions, hunters)]
 		obs = next_obs
 		print(env.field)

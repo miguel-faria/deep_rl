@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 import numpy as np
 
-from dl_envs.pursuit_env import PursuitEnv, Action
+from dl_envs.pursuit.pursuit_env import PursuitEnv, Action
 
 
 RNG_SEED = 12072023
@@ -33,7 +33,7 @@ def main():
 		init_pos_prey[prey] = (max(field_size[0] - (prey_idx // n_preys) - 1, 0), max(field_size[1] - (prey_idx % n_preys) - 1, 0))
 	env.spawn_hunters(init_pos_hunter)
 	env.spawn_preys(init_pos_prey)
-	state, _, _, _ = env.reset()
+	state, *_ = env.reset()
 	print(env.field)
 	
 	for i in range(max_steps * 2):
@@ -55,13 +55,13 @@ def main():
 			actions += [np.random.choice(len(Action))]
 		
 		print(' '.join([str(Action(action)) for action in actions]))
-		state, rewards, finished, _ = env.step(actions)
-		print(state, rewards, finished)
+		state, rewards, finished, timeout, _ = env.step(actions)
+		print(state, rewards, finished, timeout)
 		print(env.field)
 
 		if finished:
 			print('Finished\n\n')
-			state, _, _, _ = env.reset()
+			state, *_ = env.reset()
 			it += 1
 
 

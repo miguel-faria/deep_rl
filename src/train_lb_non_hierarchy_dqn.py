@@ -1,16 +1,15 @@
 #! /usr/bin/env python
-import pathlib
 
 import sys
 
 import argparse
 import numpy as np
-import jax
 import flax.linen as nn
 import yaml
+import jax
 
-from dl_algos.madqn import MultiAgentDQN
-from dl_envs.lb_foraging_coop import FoodCOOPLBForaging
+from dl_algos.multi_model_madqn import MultiAgentDQN
+from dl_envs.lb_foraging.lb_foraging_coop import FoodCOOPLBForaging
 from pathlib import Path
 from gym.spaces.multi_discrete import MultiDiscrete
 from itertools import product
@@ -89,6 +88,9 @@ def main():
 	n_foods = args.n_foods
 	food_level = args.food_level
 	max_steps = args.max_steps
+	
+	if not use_gpu:
+		jax.config.update('jax_platform_name', 'cpu')
 	
 	# print(gamma, initial_eps, final_eps, eps_decay, eps_type, warmup, learn_rate, target_learn_rate)
 	field_dims = len(field_lengths)

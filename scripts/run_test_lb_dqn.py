@@ -30,7 +30,7 @@ USE_GPU = True
 
 # Testing params
 N_CYCLES = 1
-MODEL_INFO = ["20230721-192721", "food_5x4_cycle_1"]
+MODEL_INFO = ["20230803-113919", "all_final"]
 N_SPAWN_FOODS = 8
 
 args = (" --nagents %d --nlayers %d --buffer %d --gamma %f --layer-sizes %s --agent-ids %s "
@@ -40,7 +40,7 @@ args = (" --nagents %d --nlayers %d --buffer %d --gamma %f --layer-sizes %s --ag
 		   PLAYER_LEVEL, FIELD_LENGTH, N_FOODS, FOOD_LVL, STEPS_EPISODE,															# Environment parameters
 		   N_CYCLES, MODEL_INFO[0], MODEL_INFO[1], N_SPAWN_FOODS))																	# Testing parameters
 args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else ""))
-commamd = "python " + str(tests_dir / 'test_lb_foraging_dqn_model.py') + args
+commamd = "python " + str(tests_dir / 'test_lb_dqn_model.py') + args
 if not USE_SHELL:
 	commamd = shlex.split(commamd)
 	

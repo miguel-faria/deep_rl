@@ -5,7 +5,7 @@ import gym
 import numpy as np
 import flax.linen as nn
 
-from dl_algos.madqn import MultiAgentDQN
+from dl_algos.multi_model_madqn import MultiAgentDQN
 from pettingzoo.sisl import pursuit_v4
 from pathlib import Path
 
@@ -52,8 +52,8 @@ def test_madqn():
 						 n_pursuers=args.n_agents, obs_range=7, n_catch=2, freeze_evaders=False, tag_reward=0.01,
 						 catch_reward=5.0, urgency_reward=-0.1, surround=True, constraint_window=1.0)
 	
-	agents_dqns = MultiAgentDQN(args.n_agents, args.agent_ids, env.action_space(env.possible_agents[1]).n, args.n_layers, nn.relu, args.layer_sizes,
-								args.buffer_size, args.gamma, env.observation_space(env.possible_agents[1]), args.use_gpu, True, args.use_tensorboard,
+	agents_dqns = MultiAgentDQN(args.n_agents, args.agent_ids, env._action_space(env.possible_agents[1]).n, args.n_layers, nn.relu, args.layer_sizes,
+								args.buffer_size, args.gamma, env._observation_space(env.possible_agents[1]), args.use_gpu, True, args.use_tensorboard,
 								args.tensorboard_details)
 	
 	agents_dqns.train_dqns(env, args.n_steps, args.batch_size, args.learn_rate, args.target_learn_rate, args.initial_eps, args.final_eps, args.eps_type,

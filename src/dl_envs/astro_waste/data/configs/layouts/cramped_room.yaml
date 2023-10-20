@@ -1,0 +1,27 @@
+field:  ["XXXXXXXXXXXXXXX",
+         "XXXXXXXXXXXXXXX",
+         "XXXXXXXXXXXXXXX",
+         "XXXXXXXXXXXXXXX",
+         "XXXXXXXXXXXXXXX",
+         "XXXX   O   XXXX",
+         "XXXX1    2 XXXX",
+         "XXXX   X   XXXX",
+         "XXXX XOXOX XXXX",
+         "XXXXIIXIXIIXXXX",
+         "XXXXIIIIIIIXXXX",
+         "XXXXXXXXXXXXXXX",
+         "XXXXXXXXXXXXXXX",
+         "XXXXXXXXXXXXXXX",
+         "XXXXXXXXXXXXXXX",
+         "XXXXXXXXXXXXXXX"]
+
+players: [
+  { orientation: [-1, 0], id: 'human', type: 'human' },
+  { orientation: [-1, 0], id: 'astro', type: 'robot' }
+  ]
+
+objects : [ 'object_1', 'object_2', 'object_3']
+
+slip_prob: 0.1
+
+sight: -1

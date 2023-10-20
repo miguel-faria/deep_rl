@@ -3,7 +3,7 @@ import csv
 import json
 
 from pathlib import Path
-from dl_envs.pursuit_env import Action
+from dl_envs.pursuit.pursuit_env import Action
 
 
 HUNTERS = 4

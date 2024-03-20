@@ -1,7 +1,7 @@
 #! /usr/bin/env python
 import numpy as np
 
-from dl_envs.pursuit.pursuit_env import PursuitEnv, Action
+from dl_envs.pursuit.pursuit_env import PursuitEnv, Action, TargetPursuitEnv
 
 
 RNG_SEED = 12072023
@@ -11,15 +11,24 @@ def main():
 	
 	# hunters = ['hunter_1', 'hunter_2', 'hunter_3', 'hunter_4']
 	# preys = ['prey_1', 'prey_2']
-	hunters = ['hunter_1', 'hunter_2']
-	preys = ['prey_1']
+	hunter_ids = ['hunter_1', 'hunter_2']
+	prey_ids = ['prey_1', 'prey_2']
 	field_size = (10, 10)
 	hunter_sight = 10
 	max_steps = 50
 	n_catch = 3
 	it = 0
+	hunters = []
+	preys = []
+	n_hunters = len(hunter_ids)
+	n_preys = len(prey_ids)
+	for idx in range(n_hunters):
+		hunters += [(hunter_ids[idx], 1)]
+	for idx in range(n_preys):
+		preys += [(prey_ids[idx], 0)]
 	
-	env = PursuitEnv(hunters, preys, field_size, hunter_sight, n_catch, max_steps)
+	# env = PursuitEnv(hunters, preys, field_size, hunter_sight, n_catch, max_steps)
+	env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids, n_catch, max_steps, use_layer_obs=True)
 	env.seed(RNG_SEED)
 	n_hunters = len(hunters)
 	n_preys = len(preys)

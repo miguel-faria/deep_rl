@@ -126,22 +126,26 @@ class Viewer(object):
 
     def _draw_grid(self):
         batch = pyglet.graphics.Batch()
+        w_grid_size = self.window.width / self.cols
+        h_grid_size = self.window.height / self.rows
         for r in range(self.rows + 1):
-            batch.add(2, gl.GL_LINES, None, ("v2f", (0, self.grid_size * r, self.grid_size * self.cols, self.grid_size * r)), ("c3B", (*_WHITE, *_WHITE)))
+            batch.add(2, gl.GL_LINES, None, ("v2f", (0, h_grid_size * r, w_grid_size * self.cols, h_grid_size * r)), ("c3B", (*_WHITE, *_WHITE)))
         for c in range(self.cols + 1):
-            batch.add(2, gl.GL_LINES, None, ("v2f", (self.grid_size * c, 0, self.grid_size * c, self.grid_size * self.rows)), ("c3B", (*_WHITE, *_WHITE)))
+            batch.add(2, gl.GL_LINES, None, ("v2f", (w_grid_size * c, 0, w_grid_size * c, h_grid_size * self.rows)), ("c3B", (*_WHITE, *_WHITE)))
         batch.draw()
 
     def _draw_food(self, env):
         apples = []
         batch = pyglet.graphics.Batch()
+        w_grid_size = self.window.width / self.cols
+        h_grid_size = self.window.height / self.rows
 
         for food in env.foods:
             if not food.picked:
                 row, col = food.position
-                apples.append(pyglet.sprite.Sprite(self.img_apple, self.grid_size * col, self.height - self.grid_size * (row + 1), batch=batch))
+                apples.append(pyglet.sprite.Sprite(self.img_apple, w_grid_size * col, self.window.height - h_grid_size * (row + 1), batch=batch))
         for a in apples:
-            a.update(scale=self.grid_size / a.width)
+            a.update(scale_y=h_grid_size / a.height, scale_x=w_grid_size / a.width)
         batch.draw()
         for food in env.foods:
             if not food.picked:
@@ -150,32 +154,37 @@ class Viewer(object):
     def _draw_players(self, env):
         players = []
         batch = pyglet.graphics.Batch()
+        w_grid_size = self.window.width / self.cols
+        h_grid_size = self.window.height / self.rows
 
         for player in env.players:
             row, col = player.position
-            players.append(pyglet.sprite.Sprite(self.img_agent, self.grid_size * col, self.height - self.grid_size * (row + 1), batch=batch))
+            players.append(pyglet.sprite.Sprite(self.img_agent, w_grid_size * col, self.window.height - h_grid_size * (row + 1), batch=batch))
         for p in players:
-            p.update(scale=self.grid_size / p.width)
+            p.update(scale_y=h_grid_size / p.height, scale_x=w_grid_size / p.width)
         batch.draw()
         for p in env.players:
             self._draw_badge(*p.position, p.level, p.player_id)
 
     def _draw_badge(self, row, col, level, badge_id):
         resolution = 6
-        radius = self.grid_size / 5
+        w_grid_size = self.window.width / self.cols
+        h_grid_size = self.window.height / self.rows
+        radius_x = w_grid_size / 5
+        radius_y = h_grid_size / 5
 
-        lvl_badge_x = col * self.grid_size + (3 / 4) * self.grid_size
-        lvl_badge_y = self.height - self.grid_size * (row + 1) + (1 / 4) * self.grid_size
-        id_badge_x = col * self.grid_size + (4 / 5) * self.grid_size
-        id_badge_y = self.height - self.grid_size * (row + 1) + (4 / 5) * self.grid_size
+        lvl_badge_x = col * w_grid_size + (3 / 4) * w_grid_size
+        lvl_badge_y = self.window.height - h_grid_size * (row + 1) + (1 / 4) * h_grid_size
+        id_badge_x = col * w_grid_size + (4 / 5) * w_grid_size
+        id_badge_y = self.window.height - h_grid_size * (row + 1) + (4 / 5) * h_grid_size
         
 
         # make a circle for each badge
         verts = []
         for i in range(resolution):
             angle = 2 * math.pi * i / resolution
-            x = radius * math.cos(angle) + lvl_badge_x
-            y = radius * math.sin(angle) + lvl_badge_y
+            x = radius_x * math.cos(angle) + lvl_badge_x
+            y = radius_y * math.sin(angle) + lvl_badge_y
             verts += [x, y]
         circle = pyglet.graphics.vertex_list(resolution, ("v2f", verts))
         glColor3ub(*_BLACK)
@@ -189,8 +198,8 @@ class Viewer(object):
         verts = []
         for i in range(resolution):
             angle = 2 * math.pi * i / resolution
-            x = radius * math.cos(angle) + id_badge_x
-            y = radius * math.sin(angle) + id_badge_y
+            x = radius_x * math.cos(angle) + id_badge_x
+            y = radius_y * math.sin(angle) + id_badge_y
             verts += [x, y]
         circle = pyglet.graphics.vertex_list(resolution, ("v2f", verts))
         glColor3ub(*_BLACK)

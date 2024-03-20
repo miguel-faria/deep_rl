@@ -220,6 +220,7 @@ def main():
 	parser.add_argument('--gamma', dest='gamma', type=float, required=False, default=0.99, help='Discount factor for agent\'s future rewards')
 	parser.add_argument('--gpu', dest='use_gpu', action='store_true', help='Flag that signals the use of gpu for the training')
 	parser.add_argument('--ddqn', dest='use_ddqn', action='store_true', help='Flag that signals the use of a Double DQN')
+	parser.add_argument('--vdn', dest='use_vdn', action='store_true', help='Flag that signals the use of a VDN DQN architecture')
 	parser.add_argument('--dueling', dest='dueling_dqn', action='store_true', help='Flag that signals the use of a Dueling DQN architecture')
 	parser.add_argument('--tensorboard', dest='use_tensorboard', action='store_true',
 						help='Flag the signals the use of a tensorboard summary writer. Expects argument --tensorboardDetails to be present')
@@ -260,6 +261,7 @@ def main():
 	use_gpu = args.use_gpu
 	dueling_dqn = args.dueling_dqn
 	use_ddqn = args.use_ddqn
+	use_vdn = args.use_vdn
 	use_tensorboard = args.use_tensorboard
 	tensorboard_details = args.tensorboard_details
 	layer_sizes = args.layer_sizes

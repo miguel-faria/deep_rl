@@ -1,5 +1,5 @@
 #! /usr/bin/env python
-
+import itertools
 import os
 import sys
 import argparse
@@ -8,25 +8,39 @@ import flax.linen as nn
 import gymnasium
 import jax
 import json
-import math
+import random
 import time
 import logging
 
 from dl_algos.single_model_madqn import SingleModelMADQN
 from dl_algos.dqn import DQNetwork, EPS_TYPE
-from dl_envs.pursuit.pursuit_env import PursuitEnv
+from dl_envs.pursuit.pursuit_env import PursuitEnv, TargetPursuitEnv
 from dl_envs.pursuit.agents.agent import Agent, AgentType
-from dl_envs.pursuit.agents.target_agent import TargetAgent
 from pathlib import Path
-from gymnasium.spaces.multi_discrete import MultiDiscrete
 from itertools import permutations
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from datetime import datetime
 
 
 RNG_SEED = 6102023
 TEST_RNG_SEED = 4072023
 N_TESTS = 100
+PREY_TYPES = {'idle': 0, 'greedy': 1, 'random': 2}
+
+
+def input_callback(env: Union[PursuitEnv, TargetPursuitEnv], stop_flag: bool):
+	try:
+		while not stop_flag:
+			command = input('Interactive commands:\n\trender - display renderization of the interaction\n\tstop_render - stops the renderization\nCommand: ')
+			if command == 'render':
+				env.use_render = True
+			elif command == 'stop_render':
+				if env.use_render:
+					env.close_render()
+					env.use_render = False
+	
+	except KeyboardInterrupt as ki:
+		return
 
 
 def eps_cycle_schedule(schedule_type: str, cycle_nr: int, max_cycles: int, init_eps: float, final_eps: float, decay_rate: float) -> float:
@@ -41,7 +55,7 @@ def eps_cycle_schedule(schedule_type: str, cycle_nr: int, max_cycles: int, init_
 def get_history_entry(obs: np.ndarray, actions: List[int], n_agents: int) -> List:
 	entry = []
 	for a_idx in range(n_agents):
-		state_str = ' '.join([str(int(x)) for x in obs[a_idx]])
+		state_str = ' '.join([str(int(x)) for x in obs[a_idx][0]])
 		action = actions[a_idx]
 		entry += [state_str, str(action)]
 	
@@ -66,27 +80,23 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 	# Setup DQNs for training
 	obs, *_ = env.reset()
 	dqn_model.agent_dqn.init_network_states(rng_seed, obs, optim_learn_rate)
-	
-	for hunter_id in env.hunter_ids:
-		if isinstance(env.agents[hunter_id], TargetAgent):
-			env.set_target(hunter_id, env.prey_ids[rng_gen.integers(0, env.n_preys)])
+	dqn_model.replay_buffer.reset_seed()
 	
 	start_time = time.time()
-	epoch = 0
 	sys.stdout.flush()
 	start_record_it = cycle * num_iterations
-	start_record_epoch = cycle * max_timesteps
-	model_history = []
+	start_record_epoch = cycle * max_timesteps * env.n_preys
+	epoch = start_record_epoch
 	
 	for it in range(num_iterations):
 		if use_render:
 			env.render()
 		done = False
 		episode_rewards = 0
+		episode_q_vals = 0
 		episode_start = epoch
 		episode_history = []
 		logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
-		preys_alive = env.n_preys
 		while not done:
 			
 			# interact with environment
@@ -94,8 +104,9 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 				eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, epoch, max_timesteps)
 			else:
 				eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
+			
 			if rng_gen.random() < eps:
-				actions = np.array(env.action_space.sample())
+				actions = np.array(list(env.action_space[0].sample()) + [env.agents[prey_id].act(env) for prey_id in env.prey_alive_ids])
 			else:
 				actions = []
 				for a_idx in range(env.n_hunters):
@@ -103,6 +114,7 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 						q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.agent_dqn.online_state.params, obs[a_idx].reshape((1, *obs[a_idx].shape)))[0]
 					else:
 						q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.agent_dqn.online_state.params, obs[a_idx])
+					
 					if greedy_action:
 						action = q_values.argmax(axis=-1)
 					else:
@@ -110,46 +122,50 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 						pol = pol / pol.sum()
 						action = rng_gen.choice(range(env.action_space[0].n), p=pol)
 					action = jax.device_get(action)
-					if dqn_model.agent_dqn.use_summary and epoch % tensorboard_frequency == 0:
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_q_vals", float(q_values[int(action)]), epoch + start_record_epoch)
+					episode_q_vals += (float(q_values[int(action)]) / env.n_hunters)
 					actions += [action]
-				for prey_id in env.prey_ids:
+				
+				for prey_id in env.prey_alive_ids:
 					actions += [env.agents[prey_id].act(env)]
 				actions = np.array(actions)
 			episode_history += [dqn_model.get_history_entry(obs, actions)]
+			logger.info(env.get_env_log())
 			next_obs, rewards, terminated, timeout, infos = env.step(actions)
-			for a_idx in range(env.n_hunters):
-				rewards[a_idx] = env.agents[env.hunter_ids[a_idx]].get_reward(rewards[a_idx], env=env)
 			if use_render:
 				env.render()
 			
 			if len(rewards) == 1:
 				rewards = np.array([rewards] * dqn_model.num_agents)
 			
-			if 0 < env.n_preys < preys_alive:
-				for hunter_id in env.hunter_ids:
-					if isinstance(env.agents[hunter_id], TargetAgent):
-						env.set_target(hunter_id, env.prey_ids[rng_gen.integers(0, env.n_preys)])
-				preys_alive -= 1
-			
-			if terminated:
-				finished = np.ones(dqn_model.num_agents)
+			if terminated or ('caught_target' in infos.keys() and infos['caught_target']):
+				finished = np.ones(dqn_model.num_agents, dtype=np.int32)
+				# env.reset_timestep()
 			else:
-				finished = np.zeros(dqn_model.num_agents)
+				finished = np.zeros(dqn_model.num_agents, dtype=np.int32)
+			
+			logger.info(str(finished) + '\tTimestep: %d' % env.env_timestep)
 			
 			# store new samples
-			real_next_obs = list(next_obs).copy()
-			for a_idx in range(env.n_hunters):
-				dqn_model.agent_dqn.replay_buffer.add(obs[a_idx], real_next_obs[a_idx], actions[a_idx], rewards[a_idx], finished[a_idx], [infos])
-				episode_rewards += (rewards[a_idx] / dqn_model.num_agents)
+			if dqn_model.use_vdn:
+				hunter_actions = actions[:env.n_hunters]
+				# print(obs.shape, next_obs.shape, hunter_actions, rewards[:env.n_hunters], finished[0])
+				dqn_model.replay_buffer.add(obs, next_obs, hunter_actions, rewards[:env.n_hunters], finished[0], [])
+			else:
+				for a_idx in range(env.n_hunters):
+					dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], rewards[a_idx], finished[a_idx], [])
+			episode_rewards += (sum(rewards[:env.n_hunters]) / env.n_hunters)
 			if dqn_model.agent_dqn.use_summary:
-				dqn_model.agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards), epoch + start_record_epoch)
-			obs = next_obs
+				dqn_model.agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards[:env.n_hunters]) / env.n_hunters, epoch + start_record_epoch)
+			
+			if 'real_obs' in infos.keys() and infos['real_obs'] is not None:
+				obs = infos['real_obs']
+			else:
+				obs = next_obs
 			
 			# update Q-network and target network
 			if epoch >= warmup:
 				if epoch % train_freq == 0:
-					dqn_model.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger)
+					dqn_model.update_model(batch_size, epoch- start_record_epoch, start_time, tensorboard_frequency, logger)
 				
 				if epoch % target_freq == 0:
 					dqn_model.agent_dqn.update_target_model(tau)
@@ -160,8 +176,10 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 			# Check if iteration is over
 			if terminated or timeout:
 				if dqn_model.write_tensorboard:
+					episode_len = epoch - episode_start
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_q_vals", episode_q_vals / episode_len, epoch)
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_return", episode_rewards, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", epoch - episode_start, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
 				env.reset_init_pos()
 				obs, *_ = env.reset()
@@ -184,6 +202,7 @@ def main():
 	parser.add_argument('--gamma', dest='gamma', type=float, required=False, default=0.99, help='Discount factor for agent\'s future rewards')
 	parser.add_argument('--gpu', dest='use_gpu', action='store_true', help='Flag that signals the use of gpu for the training')
 	parser.add_argument('--ddqn', dest='use_ddqn', action='store_true', help='Flag that signals the use of a Double DQN')
+	parser.add_argument('--vdn', dest='use_vdn', action='store_true', help='Flag that signals the use of a VDN DQN architecture')
 	parser.add_argument('--cnn', dest='use_cnn', action='store_true', help='Flag that signals the use of a CNN as entry for the DQN architecture')
 	parser.add_argument('--dueling', dest='dueling_dqn', action='store_true', help='Flag that signals the use of a Dueling DQN architecture')
 	parser.add_argument('--tensorboard', dest='use_tensorboard', action='store_true',
@@ -194,8 +213,8 @@ def main():
 	parser.add_argument('--layer-sizes', dest='layer_sizes', type=int, required=True, nargs='+', help='Size of each layer of the DQN\'s neural net')
 	
 	# Train parameters
-	# parser.add_argument('--cycles', dest='n_cycles', type=int, default=0,
-	# 					help='Number of training cycles, each cycle spawns the field with a different food items configurations.')
+	parser.add_argument('--cycles', dest='n_cycles', type=int, default=1,
+						help='Number of training cycles, each cycle spawns the field with a different food items configurations.')
 	parser.add_argument('--iterations', dest='n_iterations', type=int, required=True, help='Number of iterations to run training')
 	parser.add_argument('--batch', dest='batch_size', type=int, required=True, help='Number of samples in each training batch')
 	parser.add_argument('--train-freq', dest='train_freq', type=int, required=True, help='Number of epochs between each training update')
@@ -238,6 +257,7 @@ def main():
 	use_gpu = args.use_gpu
 	dueling_dqn = args.dueling_dqn
 	use_ddqn = args.use_ddqn
+	use_vdn = args.use_vdn
 	use_cnn = args.use_cnn
 	use_tensorboard = args.use_tensorboard
 	tensorboard_details = args.tensorboard_details
@@ -272,11 +292,10 @@ def main():
 	preys = []
 	n_hunters = len(hunter_ids)
 	n_preys = len(prey_ids)
-	has_targets = (hunter_class != 0)
 	for idx in range(n_hunters):
 		hunters += [(hunter_ids[idx], hunter_class)]
 	for idx in range(n_preys):
-		preys += [(prey_ids[idx], 1)]
+		preys += [(prey_ids[idx], PREY_TYPES['idle'])]
 	
 	os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 	if not use_gpu:
@@ -298,7 +317,8 @@ def main():
 	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
 	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
-	log_filename = (('train_pursuit_single_dqn_%dx%d-field_%d-hunters_%d-preys' % (field_size[0], field_size[1], n_hunters, n_preys)) +
+	log_filename = (('train_pursuit_single%s_dqn_%dx%d-field_%d-hunters_%d-preys' %
+					 ('_vdn' if use_vdn else '', field_size[0], field_size[1], n_hunters, n_preys)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / 'pursuit_single_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-hunters' % n_hunters) /
 				  ('%d-preys' % n_preys) / now.strftime("%Y%m%d-%H%M%S"))
@@ -315,6 +335,7 @@ def main():
 	handler.setFormatter(logging.Formatter('%(name)s %(asctime)s %(levelname)s:\t%(message)s'))
 	err_logger.addHandler(handler)
 	Path.mkdir(model_path, parents=True, exist_ok=True)
+	preys_permutations = list(permutations(prey_ids))
 	
 	#####################
 	## Training Models ##
@@ -322,16 +343,27 @@ def main():
 	logger.info('##########################')
 	logger.info('Starting Pursuit DQN Train')
 	logger.info('##########################')
-	n_cycles = n_preys
+	n_cycles = n_preys * args.n_cycles
 	logger.info('Number of cycles: %d' % n_cycles)
 	logger.info('Number of iterations per cycle: %d' % n_iterations)
 	logger.info('Environment setup')
-	env = PursuitEnv(hunters, preys, field_size, sight, require_catch, max_steps, use_layer_obs=True)
+	env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids, require_catch, max_steps, use_layer_obs=True)
+	# env = PursuitEnv(hunters, preys, field_size, sight, require_catch, max_steps, use_layer_obs=True)
 	logger.info('Setup multi-agent DQN')
-	dqn_model = SingleModelMADQN(n_agents, env.action_space[0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, env.observation_space[0],
-								 use_gpu, dueling_dqn, use_ddqn, use_cnn, False, use_tensorboard,
-								 tensorboard_details + ['%dh-%dp-%dc' % (n_hunters, n_preys, require_catch)])
-	
+	if use_vdn:
+		dqn_model = SingleModelMADQN(n_agents, env.action_space[0][0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, env.action_space[0],
+									 env.observation_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
+									 tensorboard_details + ['%dh-%dp-%dc' % (n_hunters, n_preys, require_catch)])
+	else:
+		if isinstance(env.observation_space, gymnasium.spaces.MultiBinary):
+			obs_space = gymnasium.spaces.MultiBinary([*env.observation_space.shape[1:]])
+		else:
+			obs_space = env.observation_space[0]
+		dqn_model = SingleModelMADQN(n_agents, env.action_space[0][0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, env.action_space[0][0], obs_space,
+									 use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
+									 tensorboard_details + ['%dh-%dp-%dc' % (n_hunters, n_preys, require_catch)])
+	random.seed(RNG_SEED)
+	prey_lists = [random.choice(preys_permutations) for _ in range(n_cycles)]
 	logger.info('Starting training')
 	for cycle in range(n_cycles):
 		logger.info('Cycle %d of %d' % (cycle+1, n_cycles))
@@ -341,6 +373,7 @@ def main():
 			cycle_init_eps = initial_eps
 		else:
 			cycle_init_eps = eps_cycle_schedule('exp', cycle, n_cycles, initial_eps, final_eps, cycle_decay)
+		env.target_list = prey_lists[cycle] if isinstance(prey_lists[cycle], list) else list(prey_lists[cycle])
 		logger.info('Starting exploration: %d with decay of %f' % (cycle_init_eps, eps_decay))
 		history = train_pursuit_dqn(dqn_model, env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
 									final_eps, eps_type, RNG_SEED, logger, eps_decay, warmup, train_freq, target_freq, tensorboard_freq, use_render, cycle)
@@ -358,32 +391,28 @@ def main():
 	####################
 	## Testing Model ##
 	####################
-	env = PursuitEnv(hunters, preys, field_size, sight, require_catch, max_steps, use_layer_obs=True)
+	env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids, require_catch, max_steps, use_layer_obs=True)
 	env.seed(TEST_RNG_SEED)
 	np.random.seed(TEST_RNG_SEED)
-	rng_gen = np.random.default_rng(TEST_RNG_SEED)
-	initial_target = prey_ids[rng_gen.integers(0, n_preys)]
-	for hunter_id in env.hunter_ids:
-		if isinstance(env.agents[hunter_id], TargetAgent):
-			env.set_target(hunter_id, initial_target)
+	random.seed(TEST_RNG_SEED)
 	failed_history = []
 	tests_passed = 0
-	for i in range(N_TESTS):
+	testing_prey_lists = [random.choice(preys_permutations) for _ in range(N_TESTS)]
+	for n_test in range(N_TESTS):
 		env.reset_init_pos()
 		obs, *_ = env.reset()
-		logger.info('Test number %d' % (i + 1))
-		logger.info('Prey locations: ' + ', '.join(['(%d, %d)' % env.agents[prey_id].pos for prey_id in env.prey_ids]))
+		logger.info('Test number %d' % (n_test + 1))
+		logger.info('Prey locations: ' + ', '.join(['(%d, %d)' % env.agents[prey_id].pos for prey_id in env.prey_alive_ids]))
 		logger.info('Agent positions: ' + ', '.join(['(%d, %d)' % env.agents[hunter_id].pos for hunter_id in env.hunter_ids]))
-		if has_targets:
-			logger.info('Starting target: %s' % initial_target + ' (%d, %d)' % env.agents[initial_target].pos)
+		logger.info('Testing sequence: ' + ', '.join(testing_prey_lists[n_test]))
 		obs, *_ = env.reset()
 		epoch = 0
-		agent_reward = [0, 0]
+		agent_reward = [0] * n_hunters
 		test_history = []
-		preys_alive = n_preys
 		game_over = False
 		finished = False
 		timeout = False
+		env.target_list = testing_prey_lists[n_test] if isinstance(testing_prey_lists[n_test], list) else list(testing_prey_lists[n_test])
 		while not game_over:
 			
 			actions = []
@@ -396,21 +425,14 @@ def main():
 				action = q_values.argmax(axis=-1)
 				action = jax.device_get(action)
 				actions += [action]
-			for prey_id in env.prey_ids:
+			for prey_id in env.prey_alive_ids:
 				actions += [env.agents[prey_id].act(env)]
 			actions = np.array(actions)
 			next_obs, rewards, finished, timeout, infos = env.step(actions)
+			for i in range(n_hunters):
+				agent_reward[i] = rewards[i]
 			test_history += [get_history_entry(env.make_array_obs(), actions, dqn_model.num_agents)]
 			obs = next_obs
-			
-			if 0 < env.n_preys < preys_alive:
-				nxt_target = env.prey_ids[rng_gen.integers(0, env.n_preys)]
-				for hunter_id in env.hunter_ids:
-					if isinstance(env.agents[hunter_id], TargetAgent):
-						env.set_target(hunter_id, nxt_target)
-				preys_alive -= 1
-				if has_targets:
-					logger.info('Next target: %s' % nxt_target)
 			
 			if finished or timeout:
 				game_over = True
@@ -420,13 +442,13 @@ def main():
 		
 		if finished:
 			tests_passed += 1
-			logger.info('Test %d finished in success' % (i + 1))
+			logger.info('Test %d finished in success' % (n_test + 1))
 			logger.info('Number of epochs: %d' % epoch)
 			logger.info('Accumulated reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0], agent_reward[1]))
 			logger.info('Average reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0] / epoch, agent_reward[1] / epoch))
 		if timeout:
 			failed_history += [test_history]
-			logger.info('Test %d timed out' % (i + 1))
+			logger.info('Test %d timed out' % (n_test + 1))
 		
 	logger.info('Passed %d tests out of %d' % (tests_passed, N_TESTS))
 	logger.info('Failed tests history:')

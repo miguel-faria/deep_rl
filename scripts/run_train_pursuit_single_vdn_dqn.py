@@ -19,6 +19,7 @@ LAYERS = (128, 128)
 TENSORBOARD_DATA = [str(log_dir), 50, 25, '.log']
 USE_DUELING = True
 USE_DDQN = True
+USE_VDN = True
 USE_CNN = True
 USE_TENSORBOARD = True
 
@@ -62,7 +63,7 @@ args = (" --nagents %d --nlayers %d --buffer %d --gamma %f --layer-sizes %s --it
 		   ' '.join(HUNTER_IDS), ' '.join(PREY_IDS), HUNTER_CLASSES, FIELD_LENGTH, N_REQUIRED_HUNTER, STEPS_EPISODE,									# Environment parameters
 		   TENSORBOARD_DATA[0], TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
 args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
-		 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") +
+		 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") + (" --vdn" if USE_VDN else "") +
 		 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
 		 (" --debug" if DEBUG else "") + ((" --train-targets %s" % " ".join(TRAIN_TARGETS)) if USE_TARGETS else ""))
 commamd = "python " + str(src_dir / 'train_pursuit_single_dqn.py') + args

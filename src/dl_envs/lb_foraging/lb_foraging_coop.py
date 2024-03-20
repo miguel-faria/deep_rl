@@ -1,20 +1,18 @@
 #! /usr/bin/env python
 
-import sys
-
+import gymnasium
 import numpy as np
 
-from pathlib import Path
+from collections import namedtuple
 from dl_envs.lb_foraging.lb_foraging import LBForagingEnv, CellEntity, Food
-from termcolor import colored
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from gymnasium.envs import Any
-from gymnasium.spaces import Box
+from gymnasium.spaces import Box, Space, MultiBinary
 
 
-MOVE_REWARD = 0.0
-REWARD_PICK = 20
-ADJ_FOOD_REWARD = 0.04
+MOVE_REWARD = 0.000
+REWARD_PICK = 1.0
+ADJ_FOOD_REWARD = 0.002
 WRONG_PICK = 0.0
 RNG_SEED = 27062023
 
@@ -27,10 +25,10 @@ class LimitedCOOPLBForaging(LBForagingEnv):
 	
 	def __init__(self, players: int, max_player_level: int, field_size: Tuple[int, int], max_food: int, sight: int, max_episode_steps: int,
 				 force_coop: bool, food_level: int, rng_seed: int, foods_pos: List = None, render_mode: List = None, use_encoding: bool = False,
-				 agent_center: bool = False, grid_observation: bool = False):
+				 agent_center: bool = False, grid_observation: bool = False, use_render: bool = False):
 		
 		super().__init__(players, max_player_level, field_size, max_food, sight, max_episode_steps, force_coop, max_food_lvl=food_level,
-						 render_mode=render_mode, use_encoding=use_encoding, agent_center=agent_center, grid_observation=grid_observation)
+						 render_mode=render_mode, use_encoding=use_encoding, agent_center=agent_center, grid_observation=grid_observation, use_render=use_render)
 		
 		self.reward_range = (MOVE_REWARD, REWARD_PICK)
 		self.seed(rng_seed)
@@ -53,19 +51,20 @@ class LimitedCOOPLBForaging(LBForagingEnv):
 		else:
 			self._foods_pos = foods_pos.copy()
 	
-	def spawn_players(self, max_player_level, player_pos=None):
+	def spawn_players(self, player_levels: List = None, player_pos: List = None):
 		if player_pos is None:
-			super().spawn_players(max_player_level)
+			super().spawn_players(player_levels)
 		else:
 			player_count = 0
 			for player in self.players:
 				player_idx = self.players.index(player)
 				row, col = player_pos[player_idx]
-				player.setup((row, col), max_player_level, self.field_size, player_count + 1)
+				player_lvl = player_levels[player_idx] if player_levels is not None else self.np_random.integers(1, self._max_player_level, endpoint=True)
+				player.setup((row, col), player_lvl, self.field_size, player_count + 1)
 				self.field[row, col] = CellEntity.AGENT
 				player_count += 1
 	
-	def spawn_food(self, max_food, max_level):
+	def spawn_food(self, max_food: int, max_level: int):
 		min_level = max_level if self._force_coop else 1
 		self.field = np.zeros(self.field_size, np.int32)
 		foods_spawned = []
@@ -209,18 +208,13 @@ class LimitedCOOPLBForaging(LBForagingEnv):
 		if seed is not None:
 			self.seed(seed)
 		
-		if self._game_over:
-			if self._n_food_spawn > 0:
-				self.spawn_food(self.food_spawn, self._max_food_lvl)
-			else:
-				print(colored('Number of food to spawn not set, defaulting for environment\'s maximum.', 'yellow'))
-				self.spawn_food(self._max_spawn_food, self._max_food_lvl)
-			self.spawn_players(self._max_player_level)
-			self._current_step = 0
-			self._game_over = False
-		else:
-			self._current_step = 0
-			self._game_over = False
+		self.field = np.zeros(self.field_size, np.int32)
+		player_lvls = [self.np_random.integers(1, self._max_player_level, endpoint=True) for _ in range(self.n_players)]
+		max_food_lvl = self._max_food_lvl if self._max_food_lvl > 0 else sum(player_lvls)
+		self.spawn_food(self._n_food_spawn, max_food_lvl)
+		self.spawn_players(player_lvls)
+		self._current_step = 0
+		self._game_over = False
 		
 		obs, _, _, _, info = self.make_gym_obs()
 		return obs, info
@@ -272,25 +266,25 @@ class LimitedCOOPLBForaging(LBForagingEnv):
 		else:
 			self._pos_food_spawn = None
 
+
 class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 	
-	_obj_food: Tuple
+	Observation = namedtuple("Observation", ["field", "foods", "players", "game_over", "sight", "current_step", "objective"])
+	_obj_food_pos: Tuple
 	
 	def __init__(self, players: int, max_player_level: int, field_size: Tuple[int, int], max_food: int, sight: int, max_episode_steps: int,
 				 force_coop: bool, food_level: int, rng_seed: int, foods_pos: List = None, objective: Tuple = None, render_mode: List = None,
-				 use_encoding: bool = False, agent_center: bool = False, grid_observation: bool = False):
+				 use_encoding: bool = False, agent_center: bool = False, grid_observation: bool = False, use_render: bool = False):
 		
 		super().__init__(players, max_player_level, field_size, max_food, sight, max_episode_steps, force_coop, food_level, rng_seed, foods_pos,
-						 render_mode, use_encoding, agent_center=agent_center, grid_observation=grid_observation)
+						 render_mode, use_encoding, agent_center=agent_center, grid_observation=grid_observation, use_render=use_render)
 		
 		if objective is None:
-			self._obj_food = self._foods_pos[self.np_random.choice(len(self._foods_pos))]
+			self._obj_food_pos = self._foods_pos[self.np_random.choice(len(self._foods_pos))]
 		else:
-			self._obj_food = objective
-			
-		self._foods_pos = [self._obj_food] + [pos for pos in self._foods_pos if pos != self._obj_food]
+			self._obj_food_pos = objective
 	
-	def _get_observation_space(self) -> Box:
+	def _get_observation_space(self) -> Space:
 		"""
 		The Observation Space for each agent.
 		- the board (board_size^2) with foods
@@ -311,55 +305,98 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 				min_obs = [-1, -1, 0] * max_food + [-1, -1, 0] * len(self._players) + [-1, -1]
 				max_obs = ([field_x - 1, field_y - 1, max_food_level] * max_food + [field_x - 1, field_y - 1, self._max_player_level] * len(self._players) +
 						  [field_x - 1, field_y - 1])
+			
+			return gymnasium.spaces.Tuple([Box(np.array(min_obs), np.array(max_obs), dtype=np.int32)] * len(self._players))
+		
 		else:
 			# grid observation space
 			grid_shape = (1 + 2 * self._sight, 1 + 2 * self._sight)
 			
-			# agents layer: agent levels
-			agents_min = np.zeros(grid_shape, dtype=np.int32)
-			agents_max = np.ones(grid_shape, dtype=np.int32) * self._max_player_level
-			
-			# foods layer: foods level
-			max_food_level = self._max_player_level * len(self._players)
-			foods_min = np.zeros(grid_shape, dtype=np.int32)
-			foods_max = np.ones(grid_shape, dtype=np.int32) * max_food_level
-			
-			# access layer: i the cell available
-			access_min = np.zeros(grid_shape, dtype=np.int32)
-			access_max = np.ones(grid_shape, dtype=np.int32)
-			
-			# targets layer: 1 for the target
-			targets_min = np.zeros(grid_shape, dtype=np.int32)
-			targets_max = np.ones(grid_shape, dtype=np.int32)
-			
-			# total layer
-			min_obs = np.stack([agents_min, foods_min, access_min, targets_min])
-			max_obs = np.stack([agents_max, foods_max, access_max, targets_max])
-		
-		return Box(np.array(min_obs), np.array(max_obs), dtype=np.int32)
+			return MultiBinary([len(self._players), 4, *grid_shape])	# Four overlapped observation layers (players, food, occupied spaces and target food)
 	
 	#################
 	### Utilities ###
 	#################
 	@property
 	def obj_food(self) -> Tuple:
-		return self._obj_food
+		return self._obj_food_pos
 	
 	@obj_food.setter
 	def obj_food(self, objective: Tuple):
-		self._obj_food = objective
+		self._obj_food_pos = objective
 	
 	def set_objective(self, objective: Tuple):
-		self._obj_food = objective
-		self._foods_pos = [self._obj_food] + [pos for pos in self._foods_pos if pos != self._obj_food]
+		self._obj_food_pos = objective
+	
+	def get_obj_food(self) -> Optional[Food]:
+		for food in self.foods:
+			if food.position == self._obj_food_pos:
+				return food
+		return None
 		
 	####################
 	### MAIN METHODS ###
 	####################
+	def get_env_log(self) -> str:
+		log = 'Environment state:\nPlayer\'s states:\n'
+		for player in self.players:
+			log += '\t- player %s has level %d is at (%d, %d) has score %f\n' % (player.player_id, player.level, player.position[0],
+																				 player.position[1], player.score)
+		
+		log += 'Food\'s states:\n'
+		for food in self.foods:
+			log += '\t- food %s has level %d is at (%d, %d) has %s\n' % (food.food_id, food.level, food.position[0], food.position[1],
+																		 'been picked' if food.picked else 'not been picked')
+
+		log += 'Food target: (%d, %d)\n' % (self.obj_food[0], self.obj_food[1])
+		log += 'Current timestep: %d\nGame is finished: %r\nGame has timed out: %r\n' % (self._current_step, self.game_over,
+																						 self._current_step > self._max_episode_steps)
+		
+		return log
+
+	def get_full_env_log(self) -> str:
+		
+		log = 'Environment state:\nPlayer\'s states:\n'
+		for player in self.players:
+			log += '\t- player %s has level %d is at (%d, %d) has score %f\n' % (player.player_id, player.level, player.position[0],
+																				 player.position[1], player.score)
+		
+		log += 'Food\'s states:\n'
+		for food in self.foods:
+			log += '\t- food %s has level %d is at (%d, %d) has %s\n' % (food.food_id, food.level, food.position[0], food.position[1],
+																		 'been picked' if food.picked else 'not been picked')
+		
+		log += 'Field state:\n%s\n' % str(self.field)
+		log += 'Food target: (%d, %d)\n' % (self.obj_food[0], self.obj_food[1])
+		log += 'Current timestep: %d\nGame is finished: %r\nGame has timed out: %r\n' % (self._current_step, self.game_over,
+																						 self._current_step > self._max_episode_steps)
+		
+		return log
+	
+	def make_obs(self, player) -> Observation:
+		return self.Observation(
+			players=[
+				self.PlayerObservation(
+					position=a.position,
+					level=a.level,
+					is_self=a == player,
+					history=a.history,
+					reward=a.reward if a == player else None,
+				)
+				for a in self._players
+				if self.get_centered_pos(player.position, a.position) is not None
+			],
+			foods=[food for food in self._foods if not food.picked and self.get_centered_pos(player.position, food.position) is not None],
+			field=np.copy(self.neighborhood(*player.position, self._sight)),
+			game_over=self.game_over,
+			sight=self._sight,
+			current_step=self._current_step,
+			objective=self._obj_food_pos
+		)
 	def make_obs_array(self) -> np.ndarray:
 		if self._grid_observation:
 			self._grid_observation = False
-			obs = np.array([np.zeros(self._get_observation_space().shape, dtype=np.int32)] * self._n_agents)
+			obs = np.array([np.zeros(self._get_observation_space()[0].shape, dtype=np.int32)] * self._n_agents)
 			self._grid_observation = True
 		else:
 			obs = np.array([np.zeros(self.observation_space[0].shape, dtype=np.int32)] * self._n_agents)
@@ -401,7 +438,7 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 					obs[idx][3 * self._max_spawn_food + 3 * i + 2] = 0
 			
 			if self._agent_center:
-				t_pos = self.get_centered_pos(self._players[idx].position, self._obj_food)
+				t_pos = self.get_centered_pos(self._players[idx].position, self._obj_food_pos)
 				if t_pos is not None:
 					obs[idx][-2] = t_pos[0]
 					obs[idx][-1] = t_pos[1]
@@ -409,33 +446,77 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 					obs[idx][-2] = -1
 					obs[idx][-1] = -1
 			else:
-				obs[idx][-2] = self._obj_food[0]
-				obs[idx][-1] = self._obj_food[1]
+				obs[idx][-2] = self._obj_food_pos[0]
+				obs[idx][-1] = self._obj_food_pos[1]
 			
 		return obs
 	
 	def make_grid_observations(self) -> np.ndarray:
 		layers_size = (self._field_size[0] + 2 * self._sight, self._field_size[1] + 2 * self._sight)
+		
+		# Initialize layers
 		agent_layer = np.zeros(layers_size)
 		food_layer = np.zeros(layers_size)
-		free_layer = np.ones(layers_size)
+		occupancy_layer = np.ones(layers_size)
 		target_layer = np.zeros(layers_size)
-		target_layer[self._sight + self._obj_food[0], self._sight + self._obj_food[1]] = 1
-		free_layer[:self._sight, :] = 0
-		free_layer[-self._sight:, :] = 0
-		free_layer[:, :self._sight] = 0
-		free_layer[:, -self._sight:] = 0
+		occupancy_layer[:self._sight, :] = 0
+		occupancy_layer[-self._sight:, :] = 0
+		occupancy_layer[:, :self._sight] = 0
+		occupancy_layer[:, -self._sight:] = 0
+		
+		# Update target layer
+		obj_food = self.get_obj_food()
+		if not obj_food.picked:
+			target_layer[self._sight + self._obj_food_pos[0], self._sight + self._obj_food_pos[1]] = 1
+		
+		# Update agent and occupancy layers
 		for a in self._players:
 			pos = a.position
 			agent_layer[pos[0] + self._sight, pos[1] + self._sight] = 1
-			free_layer[pos[0] + self._sight, pos[1] + self._sight] = 0
+			occupancy_layer[pos[0] + self._sight, pos[1] + self._sight] = 0
 			
+		# Update food and occupancy layers
 		for f in self._foods:
-			pos = f.position
-			food_layer[pos[0] + self._sight, pos[1] + self._sight] = f.level if not self._force_coop else 1
-			free_layer[pos[0] + self._sight, pos[1] + self._sight] = 0
+			if not f.picked:
+				pos = f.position
+				food_layer[pos[0] + self._sight, pos[1] + self._sight] = f.level if not self._force_coop else 1
+				occupancy_layer[pos[0] + self._sight, pos[1] + self._sight] = 0
 		
-		obs = np.stack([agent_layer, food_layer, free_layer, target_layer])
+		obs = np.stack([agent_layer, food_layer, occupancy_layer, target_layer])
+		padding = 2 * self._sight + 1
+		
+		return np.array([obs[:, a.position[0]:a.position[0] + padding, a.position[1]:a.position[1] + padding] for a in self._players])
+	
+	def make_target_grid_observations(self, obj_pos: Tuple) -> np.ndarray:
+		layers_size = (self._field_size[0] + 2 * self._sight, self._field_size[1] + 2 * self._sight)
+		
+		# Initialize layers
+		agent_layer = np.zeros(layers_size)
+		food_layer = np.zeros(layers_size)
+		occupancy_layer = np.ones(layers_size)
+		target_layer = np.zeros(layers_size)
+		occupancy_layer[:self._sight, :] = 0
+		occupancy_layer[-self._sight:, :] = 0
+		occupancy_layer[:, :self._sight] = 0
+		occupancy_layer[:, -self._sight:] = 0
+		
+		# Update target layer
+		target_layer[self._sight + obj_pos[0], self._sight + obj_pos[1]] = 1
+		
+		# Update agent and occupancy layers
+		for a in self._players:
+			pos = a.position
+			agent_layer[pos[0] + self._sight, pos[1] + self._sight] = 1
+			occupancy_layer[pos[0] + self._sight, pos[1] + self._sight] = 0
+		
+		# Update food and occupancy layers
+		for f in self._foods:
+			if not f.picked:
+				pos = f.position
+				food_layer[pos[0] + self._sight, pos[1] + self._sight] = f.level if not self._force_coop else 1
+				occupancy_layer[pos[0] + self._sight, pos[1] + self._sight] = 0
+		
+		obs = np.stack([agent_layer, food_layer, occupancy_layer, target_layer])
 		padding = 2 * self._sight + 1
 		
 		return np.array([obs[:, a.position[0]:a.position[0] + padding, a.position[1]:a.position[1] + padding] for a in self._players])
@@ -456,13 +537,22 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 			seen_agents = tuple([p for p in p_obs.players if p.is_self] + [p for p in p_obs.players if not p.is_self])
 			seen_foods = tuple(p_obs.foods)
 			n_seen_agents = len(seen_agents)
+			
 			for food in seen_foods:
 				if self._agent_center:
 					f_row, f_col = self.get_centered_pos(self._players[a_idx].position, food.position)
 				else:
 					f_row, f_col = food.position
 				food_lvl = food.level
-				idx = self._foods_pos.index(food.position)
+				if food == self._obj_food_pos:
+					idx = 0
+				else:
+					obj_idx = self.food_pos.index(self._obj_food_pos)
+					food_idx = self._foods_pos.index(food.position)
+					if food_idx < obj_idx:
+						idx = food_idx + 1
+					else:
+						idx = food_idx
 				food_obs[3 * idx] = f_row
 				food_obs[3 * idx + 1] = f_col
 				food_obs[3 * idx + 2] = 0
@@ -480,13 +570,13 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 				agent_obs[3 * idx + agent_lvl + 2] = 1
 			
 			if self._agent_center:
-				t_pos = self.get_centered_pos(self._players[a_idx].position, self._obj_food)
+				t_pos = self.get_centered_pos(self._players[a_idx].position, self._obj_food_pos)
 				if t_pos is not None:
 					target_obs = [t_pos[0], t_pos[1]]
 				else:
 					target_obs = [-(self._sight + 1), -(self._sight + 1)]
 			else:
-				target_obs = [self._obj_food[0], self._obj_food[1]]
+				target_obs = [self._obj_food_pos[0], self._obj_food_pos[1]]
 				
 			obs += [food_obs + agent_obs + target_obs]
 			
@@ -498,13 +588,11 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 	def get_players_adj_food(self) -> List:
 		
 		players_adj = []
+		food_adj_pos = self.get_adj_pos(*self._obj_food_pos)
 		
 		for player in self.players:
-			adj_pos = self.get_adj_pos(*player.position)
-			for pos in adj_pos:
-				if pos[0] == self._obj_food[0] and pos[1] == self._obj_food[1]:
-					players_adj += [self.players.index(player)]
-					break
+			if player.position in food_adj_pos:
+				players_adj += [self.players.index(player)]
 		
 		return players_adj
 	
@@ -518,43 +606,43 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 			self._n_food_spawn = max_food
 		
 		if max_food < self._max_spawn_food:
-			# Objective food must be spawned
-			row, col = self._obj_food
-			food_lvl = min_level if min_level == max_level else self.np_random.randint(min_level, max_level)
-			new_food = Food()
-			new_food.setup(self._obj_food, food_lvl, food_count + 1)
-			self.field[row, col] = CellEntity.FOOD
-			food_count += 1
-			foods_spawned.append(new_food)
-			
 			if max_food - 1 > 0:
 				# Randomly pick food items to spawn until maximum number
 				if self._pos_food_spawn is None:
 					idx_spawn = list(range(self._max_spawn_food))
-					idx_spawn.remove(self.food_pos.index(self._obj_food))
-					pos_spawn = [self.food_pos[idx] for idx in sorted(self.np_random.choice(idx_spawn, size=max_food-1, replace=False))]
-					self._pos_food_spawn = pos_spawn
-				for pos in self._pos_food_spawn:
-					row, col = pos
-					if self.field[row, col] == CellEntity.EMPTY:
-						food_lvl = min_level if min_level == max_level else self.np_random.randint(min_level, max_level)
-						new_food = Food()
-						new_food.setup(pos, food_lvl, food_count + 1)
-						self.field[row, col] = CellEntity.FOOD
-						food_count += 1
-						foods_spawned.append(new_food)
-			elif self._pos_food_spawn is None:
-				self._pos_food_spawn = []
+					idx_spawn.remove(self.food_pos.index(self._obj_food_pos))
+					pos_spawn = sorted(self.np_random.choice(idx_spawn, size=max_food-1, replace=False))
+					self._pos_food_spawn = [self._foods_pos[pos_idx] for pos_idx in pos_spawn]
+				else:
+					pos_spawn = []
+					for pos in self._pos_food_spawn:
+						pos_spawn.append(self._foods_pos.index(pos))
+			else:
+				pos_spawn = []
+				if self._pos_food_spawn is None:
+					self._pos_food_spawn = []
+			
+			foods_spawn = [self._foods_pos.index(self._obj_food_pos)] + pos_spawn
+			foods_spawn.sort()
+			for idx in foods_spawn:
+				pos = self._foods_pos[idx]
+				row, col = pos
+				if self.field[row, col] == CellEntity.EMPTY:
+					food_lvl = min_level if min_level == max_level else self.np_random.integers(min_level, max_level)
+					new_food = Food()
+					new_food.setup(pos, food_lvl, food_count + 1)
+					self.field[row, col] = CellEntity.FOOD
+					food_count += 1
+					foods_spawned.append(new_food)
 			
 		else:
 			if self._pos_food_spawn is None:
 				self._pos_food_spawn = []
 			# Spawn all food items
 			for pos in self._foods_pos:
-				# print(self._foods_pos)
 				row, col = pos
 				if self.field[row, col] == CellEntity.EMPTY:
-					food_lvl = min_level if min_level == max_level else self.np_random.randint(min_level, max_level)
+					food_lvl = min_level if min_level == max_level else self.np_random.integers(min_level, max_level)
 					new_food = Food()
 					new_food.setup(pos, food_lvl, food_count + 1)
 					self.field[row, col] = CellEntity.FOOD
@@ -579,7 +667,7 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 				field_changes = np.transpose(np.nonzero(before_field - after_field))
 				pick_correct = False
 				for pos in field_changes:
-					if pos[0] == self._obj_food[0] and pos[1] == self._obj_food[1]:
+					if pos[0] == self._obj_food_pos[0] and pos[1] == self._obj_food_pos[1]:
 						pick_correct = True
 						break
 				if pick_correct:
@@ -596,10 +684,8 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 				for player in self.players:
 					p_idx = self.players.index(player)
 					if p_idx in p_idx_adj_food:
-						rewards[p_idx] += (REWARD_PICK / self._max_episode_steps) * len(p_idx_adj_food) / self._n_agents
-					else:
-						rewards[p_idx] += 0
-			
+						rewards[p_idx] = ADJ_FOOD_REWARD * len(p_idx_adj_food) / self._n_agents
+						
 			return obs, rewards, dones, force_stop, infos
 		else:
 			return super().step(actions)

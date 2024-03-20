@@ -1,5 +1,7 @@
 #! /usr/bin/env python
 
+import numpy as np
+
 from typing import Tuple
 from enum import IntEnum, Enum
 
@@ -31,14 +33,16 @@ class Agent(object):
 	_agent_type: AgentType
 	_pos: Tuple[int, int]
 	_alive: bool
+	_np_random: np.random.Generator
 	
-	def __init__(self, a_id: str, agent_type: int, rank: int = 0):
+	def __init__(self, a_id: str, agent_type: int, rank: int = 0, rng_seed: int = 123456789):
 		self._id = a_id
 		self._agent_type = AgentType(agent_type)
 		self._pos = (-1, -1)
 		self._rank = rank
 		self._alive = False
 		self._team = ''
+		self._np_random = np.random.default_rng(rng_seed)
 	
 	@property
 	def agent_id(self) -> str:
@@ -80,4 +84,4 @@ class Agent(object):
 		return raw_reward
 	
 	def act(self, env) -> int:
-		return env.sample_action()
+		return Action.STAY

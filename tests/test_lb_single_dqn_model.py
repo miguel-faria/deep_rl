@@ -13,16 +13,18 @@ import json
 import time
 import signal
 import multiprocessing as mp
+import threading
 
 from dl_algos.single_model_madqn import SingleModelMADQN
-from dl_envs.lb_foraging.lb_foraging import LBForagingEnv, CellEntity
+from dl_envs.lb_foraging.lb_foraging import LBForagingEnv, CellEntity, Action
 from dl_envs.lb_foraging.lb_foraging_coop import FoodCOOPLBForaging
 from pathlib import Path
-from gymnasium.spaces.multi_discrete import MultiDiscrete
+from gymnasium.spaces import MultiDiscrete, MultiBinary
 from itertools import product, combinations, permutations
 from typing import List, Tuple, Dict
-from termcolor import colored
+from scipy.stats import sem
 from enum import IntEnum
+from datetime import datetime
 
 
 RNG_SEED = 4072023
@@ -57,6 +59,21 @@ def signal_handler(signum, frame):
 	
 	elif signum == signal.SIGINT.value:
 		raise KeyboardInterrupt()
+
+
+def input_callback(env: FoodCOOPLBForaging, stop_flag: threading.Event):
+	try:
+		while not stop_flag.is_set():
+			command = input('Interactive commands:\n\trender - display renderization of the interaction\n\tstop_render - stops the renderization\nCommand: ')
+			if command == 'render':
+				env.use_render = True
+			elif command == 'stop_render':
+				if env.use_render:
+					env.close_render()
+					env.use_render = False
+	
+	except KeyboardInterrupt as ki:
+		return
 
 
 def get_history_entry(obs: np.ndarray, actions: List[int], n_agents: int) -> List:
@@ -97,7 +114,10 @@ def test_configuration(n_agents: int, player_level: int, field_size: Tuple[int, 
 	logger.info('Environment setup')
 	env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs,
 							 use_encoding=True, agent_center=False, grid_observation=use_cnn)
-	
+
+	stop_thread = False
+	command_thread = threading.Thread(target=input_callback, args=(env, stop_thread))
+	command_thread.start()
 	# DQN model loading
 	results = {}
 	loc = obj_loc
@@ -129,7 +149,7 @@ def test_configuration(n_agents: int, player_level: int, field_size: Tuple[int, 
 	env.obj_food = loc
 	env.food_spawn_pos = food_spawn_pos
 	env.spawn_food(n_food_spawn, food_level)
-	env.spawn_players(player_level, players_pos)
+	env.spawn_players([player_level] * n_agents, players_pos)
 	finished, timeout, epoch = False, False, 0
 	try:
 		logger.info('Cycle params:')
@@ -191,13 +211,14 @@ def test_configuration(n_agents: int, player_level: int, field_size: Tuple[int, 
 		results[loc] = [finished_epochs, avg_reward, avg_epochs, n_epochs, test_history]
 		logger.info('Keyboard interrupt caught %s\n Finishing testing cycle' % ki)
 	
+	stop_thread = True
 	return results
 	
 
 def test_full_scenario(n_agents: int, player_level: int, field_size: Tuple[int, int], n_foods: int, sight: int, max_steps: int, food_level: int, food_locs: List,
-					   n_layers: int, layer_sizes: List, buffer_size: int, gamma: float, use_gpu: bool, use_tensorboard: bool, tensorboard_details: List,
+					   n_layers: int, layer_sizes: List, buffer_size: int, gamma: float, use_gpu: bool,
 					   n_cycles: int, use_render: bool, dueling_dqn: bool, use_ddqn: bool, use_cnn: bool, agent_ids: List, model_path: Path, model_dirname: str,
-					   test_len: int, n_foods_spawn: int, logger: logging.Logger) -> Dict:
+					   test_len: int, n_foods_spawn: int, logger: logging.Logger, debug: bool = False, use_vdn: bool = False) -> Dict:
 	
 	logger.info('#################################')
 	logger.info('  Starting LB Foraging DQN Test')
@@ -207,17 +228,18 @@ def test_full_scenario(n_agents: int, player_level: int, field_size: Tuple[int, 
 	
 	# DQN model loading
 	results = {}
-	for loc in [food_locs[0]]:
-		results[loc] = run_loc_test_full(n_agents, player_level, field_size, n_foods, sight, max_steps, food_level, food_locs, n_layers, layer_sizes,
-										 buffer_size, gamma, use_gpu, use_tensorboard, tensorboard_details, n_cycles, use_render, dueling_dqn, use_ddqn, use_cnn,
-										 agent_ids, model_path, model_dirname, test_len, n_foods_spawn, loc, logger)
-	
+	for loc in food_locs:
+		key = ', '.join([str(pos) for pos in loc])
+		results[key] = run_loc_test_full(n_agents, player_level, field_size, n_foods, sight, max_steps, food_level, food_locs, n_layers, layer_sizes,
+										 buffer_size, gamma, use_gpu, n_cycles, use_render, dueling_dqn, use_ddqn, use_cnn,
+										 agent_ids, model_path, model_dirname, test_len, n_foods_spawn, loc, logger, debug, use_vdn)
+
 	return results
 
 def test_number_foods(n_agents: int, player_level: int, field_size: Tuple[int, int], n_foods: int, sight: int, max_steps: int, food_level: int, food_locs: List,
-					  n_layers: int, layer_sizes: List, buffer_size: int, gamma: float, use_gpu: bool, use_tensorboard: bool, tensorboard_details: List,
+					  n_layers: int, layer_sizes: List, buffer_size: int, gamma: float, use_gpu: bool,
 					  n_cycles: int, use_render: bool, dueling_dqn: bool, use_ddqn: bool, use_cnn: bool, agent_ids: List,
-					  n_foods_spawn: int, model_path: Path, logger: logging.Logger) -> Dict:
+					  n_foods_spawn: int, model_path: Path, logger: logging.Logger, debug: bool = False, use_vdn: bool = False) -> Dict:
 	
 	logger.info('#################################')
 	logger.info('  Starting LB Foraging DQN Test')
@@ -228,73 +250,96 @@ def test_number_foods(n_agents: int, player_level: int, field_size: Tuple[int, i
 	food_locs_test = food_locs
 	results = {}
 	for loc in food_locs_test:
-		results[loc] = run_loc_test(n_agents, player_level, field_size, n_foods, sight, max_steps, food_level, food_locs, n_layers, layer_sizes, buffer_size,
-									gamma, use_gpu, use_tensorboard, tensorboard_details, n_cycles, use_render, dueling_dqn, use_ddqn, use_cnn, agent_ids,
-									n_foods_spawn, model_path, loc, logger)
+		key = ', '.join([str(pos) for pos in loc])
+		results[key] = run_loc_test(n_agents, player_level, field_size, n_foods, sight, max_steps, food_level, food_locs, n_layers, layer_sizes, buffer_size,
+									gamma, use_gpu, n_cycles, use_render, dueling_dqn, use_ddqn, use_cnn, agent_ids, n_foods_spawn, model_path, loc, logger,
+									debug, use_vdn)
 
 	return results
 
 
 def run_loc_test_full(n_agents: int, player_level: int, field_size: Tuple[int, int], n_foods: int, sight: int, max_steps: int, food_level: int, food_locs: List,
-					   n_layers: int, layer_sizes: List, buffer_size: int, gamma: float, use_gpu: bool, use_tensorboard: bool, tensorboard_details: List,
-					   n_cycles: int, use_render: bool, dueling_dqn: bool, use_ddqn: bool, use_cnn: bool, agent_ids: List, model_path: Path, model_dirname: str,
-					   test_len: int, n_foods_spawn: int, loc: Tuple[int, int], logger: logging.Logger) -> Tuple:
+					  n_layers: int, layer_sizes: List, buffer_size: int, gamma: float, use_gpu: bool, n_cycles: int, use_render: bool, dueling_dqn: bool,
+					  use_ddqn: bool, use_cnn: bool, agent_ids: List, model_path: Path, model_dirname: str, test_len: int, n_foods_spawn: int,
+					  loc: Tuple[int, int], logger: logging.Logger, debug: bool = False, use_vdn: bool = False) -> Tuple:
 	
 	env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs,
 							 use_encoding=True, agent_center=False, grid_observation=use_cnn)
-	rnd_gen = np.random.default_rng(RNG_SEED)
+	stop_thread = threading.Event()
+	command_thread = threading.Thread(target=input_callback, args=(env, stop_thread))
+	command_thread.start()
+	rn_gen = np.random.default_rng(RNG_SEED)
 	food_test_seqs = []
 	locs_cp = food_locs.copy()
 	locs_cp.pop(food_locs.index(loc))
 	for _ in range(n_cycles):
-		rnd_locs = rnd_gen.choice(range(len(locs_cp)), size=test_len - 1, replace=False)
+		rnd_locs = rn_gen.choice(range(len(locs_cp)), size=test_len - 1, replace=False)
 		food_test_seqs.append([locs_cp[idx] for idx in rnd_locs])
 	env.seed(RNG_SEED)
 	np.random.seed(RNG_SEED)
-	rnd_gen = np.random.default_rng(RNG_SEED)
+	rn_gen = np.random.default_rng(RNG_SEED)
 	avg_reward = 0
 	avg_foods_caught = 0
 	avg_epochs = 0
 	finished_epochs = 0
 	foods_caught = []
 	n_epochs = []
+	run_rewards = []
 	test_history = []
 	initial_pos = []
 	steps_food = []
 	cycle = 0
 	finished, timeout, epoch = False, False, 0
 	obs_shape = env.observation_space[0].shape if not use_cnn else (1, *env.observation_space[0].shape)
+	seq_nr = 0
 	try:
 		for seq in food_test_seqs:
 			remain_foods = n_foods_spawn
 			test_seq = [loc] + seq.copy()
-			logger.info('Test for sequence: ', test_seq)
+			logger.info('Test for sequence %d out of %d: %s' % ((seq_nr + 1), n_cycles, ', '.join(['(%d, %d)' % (pos[0], pos[1]) for pos in test_seq])))
 			history = []
 			game_over = False
 			
-			players_pos = rnd_gen.choice(PLAYER_POS, size=2, replace=False)
+			players_pos = rn_gen.choice(PLAYER_POS, size=2, replace=False)
 			initial_pos.append([players_pos])
 			logger.info('Environment setup')
 			env.obj_food = loc
 			test_seq.pop(0)
 			env.spawn_food(n_foods_spawn, food_level)
-			env.spawn_players(player_level, players_pos)
+			env.spawn_players([player_level] * n_agents, players_pos)
 			obs, *_ = env.reset()
 			if use_render:
 				env.render()
-				input()
+				time.sleep(0.1)
 			
 			logger.info('Setup multi-agent DQN')
-			agents_dqn = SingleModelMADQN(n_agents, env.action_space[0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, env.observation_space[0],
-										  use_gpu, dueling_dqn, use_ddqn, use_cnn, False, use_tensorboard, tensorboard_details)
+			agent_action_space = env.action_space[0]
+			if use_vdn:
+				action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
+				obs_space = env.observation_space
+			else:
+				action_space = agent_action_space
+				if isinstance(env.observation_space, MultiBinary):
+					obs_space = MultiBinary([*env.observation_space.shape[1:]])
+				else:
+					obs_space = env.observation_space[0]
+			agents_dqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space,
+										  obs_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, False)
 			agents_dqn.load_model(('food_%dx%d' % (loc[0], loc[1])), model_path / ('%d-foods_%d-food-level' % (remain_foods, food_level)) / model_dirname,
 								  logger, obs_shape)
 			
 			epoch = 0
 			acc_reward = 0
-			logger.info('Initial observation:')
-			logger.info(env.field)
+			logger.info('Initial Information')
+			logger.info('Objective food:\t(%d, %d)' % (loc[0], loc[1]))
+			logger.info(env.get_full_env_log())
+			deadlock_window = []
 			while not game_over:
+				if debug:
+					logger.info('Player\'s observations:')
+					for idx in range(env.n_players):
+						p_obs = obs[idx]
+						logger.info('Player %s observation:\n%s' % (env.players[idx].player_id, '\n'.join([str(layer) for layer in p_obs])))
 				actions = []
 				for a_idx in range(agents_dqn.num_agents):
 					if agents_dqn.agent_dqn.cnn_layer:
@@ -302,16 +347,19 @@ def run_loc_test_full(n_agents: int, player_level: int, field_size: Tuple[int, i
 																		obs[a_idx].reshape((1, *obs[a_idx].shape)))[0]
 					else:
 						q_values = agents_dqn.agent_dqn.q_network.apply(agents_dqn.agent_dqn.online_state.params, obs[a_idx])
-					action = q_values.argmax(axis=-1)
+					pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
+					pol = pol / pol.sum()
+					action = rn_gen.choice(range(env.action_space[0].n), p=pol)
 					action = jax.device_get(action)
 					actions += [action]
 				actions = np.array(actions)
 				next_obs, rewards, finished, timeout, _ = env.step(actions)
+				logger.info('Action: %s\n' % str([Action(act).name for act in actions]))
+				logger.info(env.get_full_env_log())
 				if use_render:
 					env.render()
 					time.sleep(0.1)
-				obs_out, *_ = env.make_gym_obs()
-				history += [get_history_entry(obs_out, actions, len(agent_ids))]
+				history += [get_history_entry(env.make_obs_array(), actions, len(agent_ids))]
 				acc_reward += sum(rewards) / n_agents
 				obs = next_obs
 				
@@ -327,6 +375,7 @@ def run_loc_test_full(n_agents: int, player_level: int, field_size: Tuple[int, i
 						game_over = True
 						test_history += [history]
 						foods_caught += [n_foods_spawn]
+						run_rewards += [acc_reward / n_cycles]
 					else:
 						env.obj_food = test_seq.pop(0)
 						agents_dqn.load_model(('food_%dx%d' % (env.obj_food[0], env.obj_food[1])),
@@ -334,6 +383,10 @@ def run_loc_test_full(n_agents: int, player_level: int, field_size: Tuple[int, i
 						steps_food.append(env.timestep)
 						logger.info('New food observation:')
 						logger.info(env.field)
+						logger.info('Agents positions:\t' + ', '.join(['(%d, %d)' % p.position for p in env.players]))
+						logger.info('Foods remaining: %d' % env.count_foods())
+						logger.info('Food locations: ' + ', '.join(['(%d, %d)' % food.position for food in env.foods if not food.picked]))
+						logger.info('Objective food:\t(%d, %d)' % env.obj_food)
 					env.reset_timesteps()
 				
 				elif timeout or epoch >= MAX_EPOCH:
@@ -348,6 +401,7 @@ def run_loc_test_full(n_agents: int, player_level: int, field_size: Tuple[int, i
 					game_over = True
 					test_history += [history]
 					foods_caught += [n_foods_spawn - remain_foods]
+					run_rewards += [acc_reward / n_cycles]
 					steps_food.append(env.timestep)
 				
 				sys.stdout.flush()
@@ -359,39 +413,71 @@ def run_loc_test_full(n_agents: int, player_level: int, field_size: Tuple[int, i
 				env.close_render()
 			
 			logger.info('Environment hard reset')
-			env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs)
+			env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED + cycle + 1, food_locs,
+									 use_encoding=True, agent_center=False, grid_observation=use_cnn)
 			env.seed(RNG_SEED + cycle + 1)
 			np.random.seed(RNG_SEED + cycle + 1)
+			seq_nr += 1
 		
 		ratio_finished = finished_epochs / n_cycles
-		logger.info('Loc: (%d, %d) results: ' % (loc[0], loc[1]),
-			  [ratio_finished, avg_reward, avg_epochs, avg_foods_caught, n_epochs, test_history, foods_caught, steps_food])
+		epochs_sem = sem(n_epochs)
+		foods_caught_sem = sem(foods_caught)
+		rewards_sem = sem(run_rewards)
+		logger.info('Loc: (%d, %d) results:\n\t- completed: %f%%\n\t- average reward: %f +/- %f\n\t- average number epochs: %f +/- %f\n\t'
+					'- average number of foods caught: %f +/- %f\n' %
+					(loc[0], loc[1], ratio_finished * 100, avg_reward, rewards_sem, avg_epochs, epochs_sem, avg_foods_caught, foods_caught_sem))
 		logger.info('##########################################\n\n')
-		return ratio_finished, avg_reward, avg_epochs, avg_foods_caught, n_epochs, test_history, foods_caught, steps_food
+		stop_thread.set()
+		env.close()
+		command_thread.join()
+		return (ratio_finished, avg_reward, rewards_sem, avg_epochs, epochs_sem, avg_foods_caught, foods_caught_sem, n_epochs, test_history,
+				foods_caught, steps_food)
 	
 	except KeyboardInterrupt as ki:
 		logger.info('Finished? %r\nTimeout? %r\nEpoch: %d' % (finished, timeout, epoch))
 		logger.info('Keyboard interrupt caught %s\n Finishing testing cycle' % ki)
-		return finished_epochs / n_cycles, avg_reward, avg_epochs, avg_foods_caught, n_epochs, test_history, foods_caught, steps_food
+		epochs_sem = sem(n_epochs)
+		foods_caught_sem = sem(foods_caught)
+		rewards_sem = sem(run_rewards)
+		stop_thread.set()
+		env.close()
+		command_thread.join()
+		return (finished_epochs / n_cycles, avg_reward, rewards_sem, avg_epochs, epochs_sem, avg_foods_caught, foods_caught_sem, n_epochs, test_history,
+				foods_caught, steps_food)
 
 
 def run_loc_test(n_agents: int, player_level: int, field_size: Tuple[int, int], n_foods: int, sight: int, max_steps: int, food_level: int, food_locs: List,
-				 n_layers: int, layer_sizes: List, buffer_size: int, gamma: float, use_gpu: bool, use_tensorboard: bool, tensorboard_details: List,
-				 n_cycles: int, use_render: bool, dueling_dqn: bool, use_ddqn: bool, use_cnn: bool, agent_ids: List,
-				 n_food_spawn: int, model_path: Path, loc: Tuple[int, int], logger: logging.Logger) -> Tuple:
+				 n_layers: int, layer_sizes: List, buffer_size: int, gamma: float, use_gpu: bool, n_cycles: int, use_render: bool, dueling_dqn: bool,
+				 use_ddqn: bool, use_cnn: bool, agent_ids: List, n_foods_spawn: int, model_path: Path, loc: Tuple[int, int], logger: logging.Logger,
+				 debug: bool = False, use_vdn: bool = False) -> Tuple:
 	
 	logger.info('Environment setup')
 	env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs,
-							 use_encoding=True, agent_center=False, grid_observation=use_cnn)
+							 use_encoding=True, agent_center=False, grid_observation=use_cnn, use_render=use_render)
+	stop_thread = threading.Event()
+	command_thread = threading.Thread(target=input_callback, args=(env, stop_thread))
+	command_thread.start()
 	env.seed(RNG_SEED)
 	np.random.seed(RNG_SEED)
-	rnd_gen = np.random.default_rng(RNG_SEED)
-	logger.info('Testing for location: %dx%d' % (loc[0], loc[1]))
+	rn_gen = np.random.default_rng(RNG_SEED)
+	logger.info('Testing model %s for location: %dx%d' % (model_path.name, loc[0], loc[1]))
 	logger.info('Setup multi-agent DQN')
-	agents_dqn = SingleModelMADQN(n_agents, env.action_space[0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, env.observation_space[0],
-								   use_gpu, dueling_dqn, use_ddqn, use_cnn, False, use_tensorboard, tensorboard_details)
-	agents_dqn.load_model(('food_%dx%d' % (loc[0], loc[1])), model_path, logger,
-						  env.observation_space[0].shape if not use_cnn else (1, *env.observation_space[0].shape))
+	agent_action_space = env.action_space[0]
+	if use_vdn:
+		action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
+		obs_space = env.observation_space
+		obs_shape = obs_space.shape if not use_cnn else (1, *obs_space.shape)
+	else:
+		action_space = agent_action_space
+		if isinstance(env.observation_space, MultiBinary):
+			obs_space = MultiBinary([*env.observation_space.shape[1:]])
+			obs_shape = obs_space.shape if not use_cnn else (1, *obs_space.shape)
+		else:
+			obs_space = env.observation_space[0]
+			obs_shape = obs_space[0].shape if not use_cnn else (1, *obs_space[0].shape)
+	agents_dqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space,
+								  obs_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, False)
+	agents_dqn.load_model(('food_%dx%d' % (loc[0], loc[1])), model_path, logger, obs_shape)
 	
 	# Testing cycle
 	logger.info('Starting testing cycles')
@@ -401,8 +487,6 @@ def run_loc_test(n_agents: int, player_level: int, field_size: Tuple[int, int], 
 	n_epochs = []
 	test_history = []
 	initial_pos = []
-	env.obj_food = loc
-	env.spawn_food(n_food_spawn, food_level)
 	test_pos, force_test_pos = get_test_pos(env)
 	n_force_cycles = len(force_test_pos)
 	finished, timeout, epoch = False, False, 0
@@ -412,24 +496,30 @@ def run_loc_test(n_agents: int, player_level: int, field_size: Tuple[int, int], 
 			logger.info('Cycle %d out of %d' % (cycle + 1, n_cycles))
 			history = []
 			game_over = False
-			if cycle < n_force_cycles:
-				players_pos = force_test_pos[cycle]
-			else:
-				players_pos = rnd_gen.choice(test_pos, size=2, replace=False)
+			# if cycle < n_force_cycles:
+			# 	players_pos = force_test_pos[cycle]
+			# else:
+			players_pos = rn_gen.choice(test_pos, size=2, replace=False)
 			initial_pos.append([players_pos])
-			env.spawn_players(player_level, players_pos)
-			logger.info('Cycle params:')
-			logger.info('Agents positions:\t' + ', '.join(['(%d, %d)' % p.position for p in env.players]))
-			logger.info('Number of food spawn:\t%d' % n_food_spawn)
-			logger.info('Objective food:\t(%d, %d)' % (loc[0], loc[1]))
+			env.set_objective(loc)
+			env.spawn_players([player_level] * n_agents, players_pos)
+			env.spawn_food(n_foods_spawn, food_level)
 			obs, *_ = env.reset()
-			if use_render:
+			logger.info('Cycle params:')
+			logger.info(env.get_full_env_log())
+			if env.use_render:
 				env.render()
-				input()
+			else:
+				env.close_render()
 			
 			epoch = 0
 			acc_reward = 0
 			while not game_over:
+				if debug:
+					logger.info('Player\'s observations:')
+					for idx in range(env.n_players):
+						p_obs = obs[idx]
+						logger.info('Player %s observation:\n%s' % (env.players[idx].player_id, '\n'.join([str(layer) for layer in p_obs])))
 				actions = []
 				for a_idx in range(agents_dqn.num_agents):
 					if agents_dqn.agent_dqn.cnn_layer:
@@ -437,14 +527,15 @@ def run_loc_test(n_agents: int, player_level: int, field_size: Tuple[int, int], 
 																		 obs[a_idx].reshape((1, *obs[a_idx].shape)))[0]
 					else:
 						q_values = agents_dqn.agent_dqn.q_network.apply(agents_dqn.agent_dqn.online_state.params, obs[a_idx])
-					action = q_values.argmax(axis=-1)
+					pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
+					pol = pol / pol.sum()
+					action = rn_gen.choice(range(env.action_space[0].n), p=pol)
 					action = jax.device_get(action)
 					actions += [action]
 				actions = np.array(actions)
 				next_obs, rewards, finished, timeout, _ = env.step(actions)
-				if use_render:
+				if env.use_render:
 					env.render()
-					time.sleep(0.1)
 				history += [get_history_entry(env.make_obs_array(), actions, len(agent_ids))]
 				acc_reward += sum(rewards) / n_agents
 				obs = next_obs
@@ -460,42 +551,47 @@ def run_loc_test(n_agents: int, player_level: int, field_size: Tuple[int, int], 
 						avg_epochs += max_steps / n_cycles
 						n_epochs += [max_steps]
 					game_over = True
+					env.food_spawn_pos = None
+					env.food_spawn = 0
 					test_history += [history]
 				
 				sys.stdout.flush()
 				epoch += 1
 			
-			env.close()
-			
 			logger.info('Environment hard reset')
-			env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs,
-									 use_encoding=True, agent_center=False, grid_observation=use_cnn)
-			env.seed(RNG_SEED + cycle + 1)
 			np.random.seed(RNG_SEED + cycle + 1)
-			env.obj_food = loc
-			env.spawn_food(n_food_spawn, food_level)
+			env.seed(RNG_SEED + cycle + 1)
+			rn_gen = np.random.default_rng(RNG_SEED + cycle + 1)
 		
 		ratio_finished = finished_epochs / n_cycles
 		logger.info('Loc: (%d, %d) results:\n\t- completed: %f%%\n\t- average reward: %f\n\t- average number epochs: %f\n\t' %
 					(loc[0], loc[1], ratio_finished * 100, avg_reward, avg_epochs))
 		logger.info('##########################################\n\n')
+		
+		stop_thread.set()
+		env.close()
+		command_thread.join()
 		return ratio_finished, avg_reward, avg_epochs, n_epochs, test_history
 	
 	except KeyboardInterrupt as ki:
 		logger.info('Finished? %r\nTimeout? %r\nEpoch: %d' % (finished, timeout, epoch))
 		logger.info('Keyboard interrupt caught %s\n Finishing testing cycle' % ki)
+		stop_thread.set()
+		env.close()
+		command_thread.join()
 		return finished_epochs / n_cycles, avg_reward, avg_epochs, n_epochs, test_history
 
 
 def write_results_full_file(data_dir: Path, filename: str, results: Dict, logger: logging.Logger) -> None:
 	try:
 		with open(data_dir / (filename + '.csv'), 'w') as results_file:
-			headers = ['food_loc', 'ratio_finished', 'average_rewards', 'average_epochs', 'average_foods_caught']
+			headers = ['food_loc', 'ratio_finished', 'average_rewards', 'rewards_error', 'average_epochs',
+					   'epochs_error', 'average_foods_caught', 'food_caught_error']
 			writer = csv.DictWriter(results_file, fieldnames=headers, delimiter=',', lineterminator='\n')
 			writer.writeheader()
 			for key in results.keys():
 				row = {}
-				for header, val in zip(headers, [key] + results[key]):
+				for header, val in zip(headers, [key] + list(results[key])):
 					row[header] = val
 				writer.writerow(row)
 		
@@ -545,6 +641,7 @@ def main():
 	parser.add_argument('--ddqn', dest='use_ddqn', action='store_true', help='Flag that signals the use of a Double DQN')
 	parser.add_argument('--dueling', dest='dueling_dqn', action='store_true', help='Flag that signals the use of a Dueling DQN architecture')
 	parser.add_argument('--cnn', dest='use_cnn', action='store_true', help='Flag that signals the use of a CNN as entry for the DQN architecture')
+	parser.add_argument('--vdn', dest='use_vdn', action='store_true', help='Flag that signals the use of a VDN DQN architecture')
 	parser.add_argument('--tensorboard', dest='use_tensorboard', action='store_true',
 						help='Flag the signals the use of a tensorboard summary writer. Expects argument --tensorboardDetails to be present')
 	parser.add_argument('--tensorboardDetails', dest='tensorboard_details', nargs='+', required=False, default=None,
@@ -574,8 +671,11 @@ def main():
 	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
 	parser.add_argument('--render', dest='use_render', action='store_true', help='Flag that signals the use of the field render while training')
 	parser.add_argument('--n-foods-spawn', dest='n_foods_spawn', type=int, required=True, help='Number of foods to be spawned for training.')
+	parser.add_argument('--debug', dest='debug', action='store_true', help='Flag signalling debug mode for model training')
 	
 	args = parser.parse_args()
+	
+	# DQN parameters
 	n_agents = args.n_agents
 	n_layers = args.n_layers
 	buffer_size = args.buffer_size
@@ -584,19 +684,25 @@ def main():
 	dueling_dqn = args.dueling_dqn
 	use_ddqn = args.use_ddqn
 	use_cnn = args.use_cnn
+	use_vdn = args.use_vdn
 	use_tensorboard = args.use_tensorboard
 	tensorboard_details = args.tensorboard_details
 	layer_sizes = args.layer_sizes
-	n_cycles = args.n_cycles
+	
+	# Environment parameters
 	agent_ids = args.agent_ids
 	player_level = args.player_level
 	field_lengths = args.field_lengths
+	debug = args.debug
+	n_foods_spawn = args.n_foods_spawn
+	use_render = args.use_render
 	n_foods = args.n_foods
 	food_level = args.food_level
 	max_steps = args.max_steps
-	use_render = args.use_render
+	
+	# Testing parameters
+	n_cycles = args.n_cycles
 	model_info = args.model_info
-	n_foods_spawn = args.n_foods_spawn
 	test_mode = args.test_mode
 	test_len = args.test_len
 	use_parallel = args.use_parallel
@@ -617,6 +723,7 @@ def main():
 		print('[ARGS ERROR] Field size must either be composed of only 1 or 2 arguments; %d were given. Exiting program' % field_dims)
 		return
 	
+	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
 	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
@@ -633,8 +740,9 @@ def main():
 	signal.signal(signal.SIGINT, signal_handler)
 	if test_mode == TestType.FULL:
 		log_filename = ('test_lb_single_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level_%s-full' % (field_size[0], field_size[1], n_agents, n_foods_spawn,
-																								 food_level, model_name))
-		model_path = models_dir / 'lb_coop_single_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-agents' % n_agents)
+																								 food_level, model_name) + '_' + now.strftime("%Y%m%d-%H%M%S"))
+		model_path = (models_dir / ('lb_coop_single%s_dqn' % ('_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
+					  ('%d-agents' % n_agents))
 		filename = 'test_lb_foraging_full'
 		logging.basicConfig(filename=(log_dir / (log_filename + '_log.txt')), filemode='w', format='%(name)s %(asctime)s %(levelname)s:\t%(message)s',
 							level=logging.INFO, encoding='utf-8')
@@ -647,9 +755,9 @@ def main():
 			t_pool = mp.Pool(int(0.75 * mp.cpu_count()))
 			test_food_locs = food_locs
 			pool_results = [t_pool.apply_async(run_loc_test_full, args=(n_agents, player_level, field_size, n_foods, sight, max_steps, food_level, food_locs,
-																		n_layers, layer_sizes, buffer_size, gamma, use_gpu, use_tensorboard, tensorboard_details,
-																		n_cycles, use_render, dueling_dqn, use_ddqn, use_cnn, agent_ids, model_path,
-																		model_dirname, test_len, n_foods_spawn, loc, logger)) for loc in test_food_locs]
+																		n_layers, layer_sizes, buffer_size, gamma, use_gpu, n_cycles, use_render, dueling_dqn,
+																		use_ddqn, use_cnn, agent_ids, model_path, model_dirname, test_len, n_foods_spawn, loc,
+																		logger, debug, use_vdn)) for loc in test_food_locs]
 			t_pool.close()
 			results = {}
 			for idx in range(len(pool_results)):
@@ -658,14 +766,14 @@ def main():
 			t_pool.join()
 		else:
 			results = test_full_scenario(n_agents, player_level, field_size, n_foods, sight, max_steps, food_level, food_locs, n_layers, layer_sizes, buffer_size,
-										 gamma, use_gpu, use_tensorboard, tensorboard_details, n_cycles, use_render, dueling_dqn, use_ddqn, use_cnn, agent_ids,
-										 model_path, model_dirname, test_len, n_foods_spawn, logger)
-		write_results_full_file(data_dir, filename, results, logger)
+										 gamma, use_gpu, n_cycles, use_render, dueling_dqn, use_ddqn, use_cnn, agent_ids, model_path, model_dirname, test_len,
+										 n_foods_spawn, logger, debug, use_vdn)
+		write_results_full_file(data_dir / 'performances' / 'lb_foraging', filename, results, logger)
 	elif test_mode == TestType.SINGLE_FOOD:
 		log_filename = ('test_lb_single_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level_%s' % (field_size[0], field_size[1], n_agents, n_foods_spawn,
-																								 food_level, model_name))
-		model_path = (models_dir / 'lb_coop_single_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-agents' % n_agents) /
-					  ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / model_dirname)
+																								 food_level, model_dirname) + '_' + now.strftime("%Y%m%d-%H%M%S"))
+		model_path = (models_dir / ('lb_coop_single%s_dqn' % ('_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
+					  ('%d-agents' % n_agents) / ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / model_dirname)
 		filename = 'test_lb_foraging_%d_foods' % n_foods_spawn
 		logging.basicConfig(filename=(log_dir / (log_filename + '_log.txt')), filemode='w', format='%(name)s %(asctime)s %(levelname)s:\t%(message)s',
 							level=logging.INFO, encoding='utf-8')
@@ -678,9 +786,9 @@ def main():
 			t_pool = mp.Pool(int(0.75 * mp.cpu_count()))
 			test_food_locs = food_locs
 			pool_results = [t_pool.apply_async(run_loc_test, args=(n_agents, player_level, field_size, n_foods, sight, max_steps, food_level, food_locs,
-																   n_layers, layer_sizes, buffer_size, gamma, use_gpu, use_tensorboard, tensorboard_details,
-																   n_cycles, use_render, dueling_dqn, use_ddqn, use_cnn, agent_ids, n_foods_spawn, model_path,
-																   loc, logger)) for loc in test_food_locs]
+																   n_layers, layer_sizes, buffer_size, gamma, use_gpu, n_cycles, use_render, dueling_dqn,
+																   use_ddqn, use_cnn, agent_ids, n_foods_spawn, model_path,
+																   loc, logger, debug, use_vdn)) for loc in test_food_locs]
 			t_pool.close()
 			results = {}
 			for idx in range(len(pool_results)):
@@ -689,12 +797,12 @@ def main():
 			t_pool.join()
 		else:
 			results = test_number_foods(n_agents, player_level, field_size, n_foods, sight, max_steps, food_level, food_locs, n_layers, layer_sizes, buffer_size,
-										gamma, use_gpu, use_tensorboard, tensorboard_details, n_cycles, use_render, dueling_dqn, use_ddqn, use_cnn, agent_ids,
-										n_foods_spawn, model_path, logger)
-		write_results_file(data_dir, filename + '_' + model_dirname, results, logger)
+										gamma, use_gpu, n_cycles, use_render, dueling_dqn, use_ddqn, use_cnn, agent_ids, n_foods_spawn, model_path, logger,
+										debug, use_vdn)
+		write_results_file(data_dir / 'performances' / 'lb_foraging', filename + '_' + model_dirname, results, logger)
 	elif test_mode == TestType.CONFIGURATION:
 		log_filename = ('test_lb_single_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level_%s-config' % (field_size[0], field_size[1], n_agents, n_foods_spawn,
-																										food_level, model_name))
+																										food_level, model_name) + '_' + now.strftime("%Y%m%d-%H%M%S"))
 		logging.basicConfig(filename=(log_dir / (log_filename + '_log.txt')), filemode='w', format='%(name)s %(asctime)s %(levelname)s:\t%(message)s',
 							level=logging.INFO, encoding='utf-8')
 		logger = logging.getLogger('INFO')
@@ -702,7 +810,8 @@ def main():
 		handler = logging.StreamHandler(sys.stderr)
 		handler.setFormatter(logging.Formatter('%(name)s %(asctime)s %(levelname)s:\t%(message)s'))
 		err_logger.addHandler(handler)
-		model_path = models_dir / 'lb_coop_single_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-agents' % n_agents)
+		model_path = (models_dir / ('lb_coop_single%s_dqn' % ('_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
+					  ('%d-agents' % n_agents))
 		filename = 'test_lb_foraging_%d_foods_config' % n_foods_spawn
 		food_pos = [(1, 7), (3, 0), (3, 1), (5, 4), (6, 6), (7, 1)]
 		obj_loc = (7, 1)
@@ -710,7 +819,7 @@ def main():
 		results = test_configuration(n_agents, player_level, field_size, n_foods, sight, max_steps, food_level, food_locs, n_layers, layer_sizes, buffer_size,
 									 gamma, use_gpu, use_tensorboard, tensorboard_details, use_render, dueling_dqn, use_ddqn, use_cnn, agent_ids,
 									 n_foods_spawn, model_path, model_dirname, food_pos, obj_loc, agents_pos)
-		write_results_file(data_dir, filename, results, logger)
+		write_results_file(data_dir / 'performances' / 'lb_foraging', filename, results, logger)
 	else:
 		print('[ARGS ERROR] Invalid testing mode, please review test mode.')
 		return

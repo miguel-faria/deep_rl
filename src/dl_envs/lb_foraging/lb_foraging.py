@@ -9,9 +9,8 @@ from itertools import product
 from gymnasium import Env
 from gymnasium.envs import Any
 from gymnasium.utils import seeding
-from gymnasium.spaces import Box, Discrete
-from typing import Tuple, List, Dict
-from .render import Viewer
+from gymnasium.spaces import MultiBinary, MultiDiscrete, Space, Box
+from typing import Tuple, List, Dict, Optional, Union
 
 
 class Action(IntEnum):
@@ -84,10 +83,10 @@ class Food:
 
 	
 class Player:
-	def __init__(self):
+	def __init__(self, level: int=0):
 		self._controller = None
 		self._position = None
-		self._level = None
+		self._level = level
 		self._field_size = None
 		self._score = None
 		self._reward = 0
@@ -95,7 +94,7 @@ class Player:
 		self._current_step = None
 		self._id = None
 	
-	def setup(self, position: Tuple[int, int], level: int, field_size: Tuple[int, int], p_id):
+	def setup(self, position: Tuple[int, int], level: int, field_size: Tuple[int, int], p_id: Union[int, str, None]):
 		self._history = []
 		self._position = position
 		self._level = level
@@ -170,9 +169,15 @@ class LBForagingEnv(Env):
 	Observation = namedtuple("Observation", ["field", "foods", "players", "game_over", "sight", "current_step"])
 	PlayerObservation = namedtuple( "PlayerObservation", ["position", "level", "history", "reward", "is_self"])  # reward is available only if is_self
 	
+	_foods: Optional[List[Food]]
+	_game_over: Optional[bool]
+	_render_initialized: Optional[bool]
+	action_space: MultiDiscrete
+	observation_space: Union[MultiBinary, gymnasium.spaces.Tuple]
+	
 	def __init__(self, n_players: int, max_player_level: int, field_size: Tuple[int, int], max_food: int, sight: int, max_episode_steps: int, force_coop: bool,
 				 normalize_reward: bool = True, grid_observation: bool = False, penalty: float = 0.0, render_mode: List[str] = None, max_food_lvl: int = 0,
-				 priority_mode: int = Priority.NONE, use_encoding: bool = False, agent_center: bool = False):
+				 priority_mode: int = Priority.NONE, use_encoding: bool = False, agent_center: bool = False, use_render: bool = False):
 		self.logger = logging.getLogger(__name__)
 		self._players = [Player() for _ in range(n_players)]
 		self._field_size = field_size
@@ -191,6 +196,7 @@ class LBForagingEnv(Env):
 		self._rendering_initialized = False
 		self._max_episode_steps = max_episode_steps
 		self._render = None
+		self._use_render = use_render
 		self._priority_mode = priority_mode
 		
 		self._use_encoding = use_encoding
@@ -198,8 +204,8 @@ class LBForagingEnv(Env):
 		self._normalize_reward = normalize_reward
 		self._grid_observation = grid_observation
 		
-		self.action_space = gymnasium.spaces.Tuple(tuple([Discrete(6)] * len(self._players)))
-		self.observation_space = gymnasium.spaces.Tuple(tuple([self._get_observation_space()] * len(self._players)))
+		self.action_space = MultiDiscrete([len(self.action_set)] * n_players)
+		self.observation_space = self._get_observation_space()
 		self.reward_range = (0, self._max_food_lvl)
 		self.seed()
 		
@@ -212,12 +218,6 @@ class LBForagingEnv(Env):
 			self.metadata = {"render_modes": [render_mode]}
 			self._show_viewer = 'human' in render_mode
 			self.render_mode = 'rgb_array' if 'rgb_array' in render_mode else 'human'
-	
-	def seed(self, seed=None):
-		self._np_random, seed = seeding.np_random(seed)
-		self.action_space.seed(seed)
-		self.observation_space.seed(seed)
-		return [seed]
 	
 	###########################
 	### GETTERS AND SETTERS ###
@@ -247,6 +247,10 @@ class LBForagingEnv(Env):
 		return self._players
 	
 	@property
+	def n_players(self) -> int:
+		return self._n_agents
+	
+	@property
 	def foods(self) -> List[Food]:
 		return self._foods
 	
@@ -254,14 +258,34 @@ class LBForagingEnv(Env):
 	def timestep(self) -> int:
 		return self._current_step
 	
+	@property
+	def use_render(self) -> bool:
+		return self._use_render
+	
 	@field.setter
 	def field(self, new_field: np.ndarray) -> None:
 		self._field = new_field
 	
+	@use_render.setter
+	def use_render(self, new_val: bool) -> None:
+		self._use_render = new_val
+	
 	#######################
 	### UTILITY METHODS ###
 	#######################
-	def _get_observation_space(self) -> Box:
+	def seed(self, seed=None):
+		self._np_random, seed = seeding.np_random(seed)
+		self.action_space.seed(seed)
+		if isinstance(self.action_space, gymnasium.spaces.Tuple):
+			for idx in range(len(self.action_space)):
+				self.action_space[idx].seed(seed)
+		self.observation_space.seed(seed)
+		if isinstance(self.observation_space, gymnasium.spaces.Tuple):
+			for idx in range(len(self.observation_space)):
+				self.observation_space[idx].seed(seed)
+		return [seed]
+	
+	def _get_observation_space(self) -> Union[MultiBinary, gymnasium.spaces.Tuple]:
 		"""
 		The Observation Space for each agent.
 		- the board (board_size^2) with foods
@@ -272,44 +296,29 @@ class LBForagingEnv(Env):
 			field_y = self._field.shape[0]
 			
 			max_food = self._max_spawn_food
-			max_food_level = self._max_player_level * len(self._players)
+			max_food_level = self._max_player_level * self._n_agents
 			
 			if self._use_encoding:
-				min_obs = [-1, -1, 0, *[0] * max_food_level] * max_food + [-1, -1, 0] * len(self._players)
+				min_obs = [-1, -1, 0, *[0] * max_food_level] * max_food + [-1, -1, 0] * self._n_agents
 				max_obs = ([field_x - 1, field_y - 1, 1, *[1] * max_food_level] * max_food +
-						   [field_x - 1, field_y - 1, 1, *[1] * self._max_player_level]) * len(self._players)
+						   [field_x - 1, field_y - 1, 1, *[1] * self._max_player_level]) * self._n_agents
 			else:
 				min_obs = [-1, -1, 0] * max_food + [-1, -1, 0] * len(self._players)
-				max_obs = [field_x - 1, field_y - 1, max_food_level] * max_food + [field_x - 1, field_y - 1, self._max_player_level] * len(self._players)
+				max_obs = [field_x - 1, field_y - 1, max_food_level] * max_food + [field_x - 1, field_y - 1, self._max_player_level] * self._n_agents
+			
+			return gymnasium.spaces.Tuple([Box(np.array(min_obs), np.array(max_obs), dtype=np.int32)] * self._n_agents)
 		else:
 			# grid observation space
 			grid_shape = (1 + 2 * self._sight, 1 + 2 * self._sight)
-			
-			# agents layer: agent levels
-			agents_min = np.zeros(grid_shape, dtype=np.int32)
-			agents_max = np.ones(grid_shape, dtype=np.int32) * self._max_player_level
-			
-			# foods layer: foods level
-			max_food_level = self._max_player_level * len(self._players)
-			foods_min = np.zeros(grid_shape, dtype=np.int32)
-			foods_max = np.ones(grid_shape, dtype=np.int32) * max_food_level
-			
-			# access layer: i the cell available
-			access_min = np.zeros(grid_shape, dtype=np.int32)
-			access_max = np.ones(grid_shape, dtype=np.int32)
-			
-			# total layer
-			min_obs = np.stack([agents_min, foods_min, access_min])
-			max_obs = np.stack([agents_max, foods_max, access_max])
 		
-		return Box(np.array(min_obs), np.array(max_obs), dtype=np.int32)
+			return MultiBinary([self._n_agents, 3, *grid_shape])	# Three overlapped observation layers (agents, food, occupied spaces)
 	
 	@classmethod
 	def from_obs(cls, obs):
 		players = []
 		for p in obs.players:
 			player = Player()
-			player.setup(p.position, p.level, obs.field.shape)
+			player.setup(p.position, p.level, obs.field.shape, p.player_id)
 			player.score = p.score if p.score else 0
 			players.append(player)
 		
@@ -384,55 +393,15 @@ class LBForagingEnv(Env):
 		return transformed_pos if max([abs(transformed_pos[0]), abs(transformed_pos[1])]) <= self._sight else None
 	
 	def resolve_collisions(self, attempt_pos: dict) -> None:
-		exist_collisions = any([len(vals) > 1 for vals in attempt_pos.values()])
-		while exist_collisions:
-			for key in list(attempt_pos.keys()):
-				vals = attempt_pos[key]
-				if len(vals) > 0:
-					if any([key == a.position for a in vals]):
-						for agent in vals:
-							if agent.position != key:
-								attempt_pos[agent.position].append(agent)
-								attempt_pos[key].remove(agent)
-					else:
-						if self._priority_mode == Priority.NONE:
-							for agent in vals:
-								attempt_pos[agent.position].append(agent)
-								attempt_pos[key].remove(agent)
-						elif self._priority_mode == Priority.RANDOM:
-							agent_remain = self._np_random.choice(vals)
-							for agent in vals:
-								if agent_remain.position != agent.position:
-									attempt_pos[agent.position].append(agent)
-									attempt_pos[key].remove(agent)
-						elif self._priority_mode == Priority.ORDER:
-							idx = 1
-							for agent in vals:
-								if idx > 1:
-									attempt_pos[agent.position].append(agent)
-									attempt_pos[key].remove(agent)
-								idx += 1
-						else:
-							high_lvl = 0
-							agent = None
-							for a in vals:
-								if a.level > high_lvl:
-									agent = a
-									high_lvl = a.level
-							
-							for a in vals:
-								if a != agent:
-									attempt_pos[agent.position].append(a)
-									attempt_pos[key].remove(a)
-			
-			exist_collisions = any([len(vals) > 1 for vals in attempt_pos.values()])
-		
 		for key, vals in attempt_pos.items():
-			new_row, new_col = key
-			agent = vals[0]
-			self.field[agent.position[0], agent.position[1]] = CellEntity.EMPTY
-			self.field[new_row, new_col] = CellEntity.AGENT
-			agent.position = key
+			if len(vals) > 1:
+				continue
+			else:
+				new_row, new_col = key
+				agent = vals[0]
+				self.field[agent.position[0], agent.position[1]] = CellEntity.EMPTY
+				self.field[new_row, new_col] = CellEntity.AGENT
+				agent.position = key
 	
 	def resolve_loading(self, loading_agents: set) -> None:
 		remain_foods = [food for food in self._foods if not food.picked]
@@ -461,6 +430,40 @@ class LBForagingEnv(Env):
 	####################
 	### MAIN METHODS ###
 	####################
+	def get_env_log(self) -> str:
+		log = 'Environment state:\nPlayer\'s states:\n'
+		for player in self.players:
+			log += '\t- player %s has level %d is at (%d, %d) has score %f\n' % (player.player_id, player.level, player.position[0],
+																				 player.position[1], player.score)
+		
+		log += 'Food\'s states:\n'
+		for food in self.foods:
+			log += '\t- food %s has level %d is at (%d, %d) has %s\n' % (food.food_id, food.level, food.position[0], food.position[1],
+																		 'been picked' if food.picked else 'not been picked')
+		
+		log += 'Current timestep: %d\nGame is finished: %r\nGame has timed out: %r\n' % (self._current_step, self.game_over,
+																						 self._current_step > self._max_episode_steps)
+		
+		return log
+	
+	def get_full_env_log(self) -> str:
+	
+		log = 'Environment state:\nPlayer\'s states:\n'
+		for player in self.players:
+			log += '\t- player %s has level %d is at (%d, %d) has score %f\n' % (player.player_id, player.level, player.position[0],
+																				 player.position[1], player.score)
+		
+		log += 'Food\'s states:\n'
+		for food in self.foods:
+			log += '\t- food %s has level %d is at (%d, %d) has %s\n' % (food.food_id, food.level, food.position[0], food.position[1],
+																		 'been picked' if food.picked else 'not been picked')
+		
+		log += 'Field state:\n%s\n' % str(self.field)
+		log += 'Current timestep: %d\nGame is finished: %r\nGame has timed out: %r\n' % (self._current_step, self.game_over,
+																						 self._current_step > self._max_episode_steps)
+		
+		return log
+	
 	def spawn_food(self, max_food: int, max_level: int) -> None:
 		food_count = 0
 		min_level = max_level if self._force_coop else 1
@@ -487,15 +490,17 @@ class LBForagingEnv(Env):
 		self._food_spawned = food_count
 		self._foods = foods_spawn
 	
-	def spawn_players(self, max_player_level: int) -> None:
+	def spawn_players(self, player_levels: List = None) -> None:
 		valid_pos = list(product(range(self.rows), range(self.cols)))
 		for pos in np.transpose(np.nonzero(self._field)):
 			valid_pos.remove(tuple(pos))
 		
 		players_spawn = 0
-		for player in self._players:
-			row, col = self._np_random.choice(valid_pos)
-			player.setup((row, col), self.np_random.integers(1, max_player_level, endpoint=True), self.field_size, players_spawn + 1)
+		for player_idx in range(len(self._players)):
+			player = self._players[player_idx]
+			row, col = self.np_random.choice(valid_pos)
+			player_lvl = player_levels[player_idx] if player_levels is not None else self.np_random.integers(1, self._max_player_level, endpoint=True)
+			player.setup((row, col), player_lvl, self.field_size, players_spawn + 1)
 			player.reward = 0
 			self.field[row, col] = CellEntity.AGENT
 			valid_pos.remove(tuple([row, col]))
@@ -514,7 +519,7 @@ class LBForagingEnv(Env):
 				for a in self._players
 				if self.get_centered_pos(player.position, a.position) is not None
 			],
-			foods=[food for food in self._foods if self.get_centered_pos(player.position, food.position) is not None],
+			foods=[food for food in self._foods if not food.picked and self.get_centered_pos(player.position, food.position) is not None],
 			field=np.copy(self.neighborhood(*player.position, self._sight)),
 			game_over=self.game_over,
 			sight=self._sight,
@@ -542,22 +547,23 @@ class LBForagingEnv(Env):
 		layers_size = (self._field_size[0] + 2 * self._sight, self._field_size[1] + 2 * self._sight)
 		agent_layer = np.zeros(layers_size)
 		food_layer = np.zeros(layers_size)
-		free_layer = np.ones(layers_size)
-		free_layer[:self._sight, :] = 0
-		free_layer[-self._sight:, :] = 0
-		free_layer[:, :self._sight] = 0
-		free_layer[:, -self._sight:] = 0
+		occupancy_layer = np.ones(layers_size)
+		occupancy_layer[:self._sight, :] = 0
+		occupancy_layer[-self._sight:, :] = 0
+		occupancy_layer[:, :self._sight] = 0
+		occupancy_layer[:, -self._sight:] = 0
 		for a in self._players:
 			pos = a.position
-			agent_layer[pos[0] + self._sight, pos[1] + self._sight] = 1
-			free_layer[pos[0] + self._sight, pos[1] + self._sight] = 0
+			agent_layer[pos[0] + self._sight, pos[1] + self._sight] = a.level
+			occupancy_layer[pos[0] + self._sight, pos[1] + self._sight] = 0
 			
 		for f in self._foods:
-			pos = f.position
-			food_layer[pos[0] + self._sight, pos[1] + self._sight] = f.level if not self._force_coop else 1
-			free_layer[pos[0] + self._sight, pos[1] + self._sight] = 0
+			if not f.picked:
+				pos = f.position
+				food_layer[pos[0] + self._sight, pos[1] + self._sight] = f.level if not self._force_coop else 1
+				occupancy_layer[pos[0] + self._sight, pos[1] + self._sight] = 0
 		
-		obs = np.stack([agent_layer, food_layer, free_layer])
+		obs = np.stack([agent_layer, food_layer, occupancy_layer])
 		padding = 2 * self._sight + 1
 		return np.array([obs[:, a.position[0]:a.position[0] + padding, a.position[1]:a.position[1] + padding] for a in self._players])
 		
@@ -655,7 +661,7 @@ class LBForagingEnv(Env):
 		if seed is not None:
 			self.seed(seed)
 		self.field = np.zeros(self.field_size, np.int32)
-		self.spawn_players(self._max_player_level)
+		self.spawn_players()
 		max_food_lvl = self._max_food_lvl if self._max_food_lvl > 0 else sum([p.level for p in self._players])
 		self.spawn_food(self._max_spawn_food, max_food_lvl)
 		self._current_step = 0
@@ -673,7 +679,7 @@ class LBForagingEnv(Env):
 			
 		loading_agents = set()
 		agent_moves = defaultdict(list)
-		occupied_pos = [tuple(pos) for pos in np.transpose(np.nonzero(self.field)).tolist()]
+		occupied_pos = [tuple(food.position) for food in self._foods]
 		
 		for agent, act in zip(self._players, actions):
 			action = Action(act)
@@ -686,7 +692,7 @@ class LBForagingEnv(Env):
 				row_delta, col_delta = Direction[action.name].value
 				agent_row, agent_col = agent.position
 				next_pos = (min(max(0, agent_row + row_delta), self.rows - 1), min(max(0, agent_col + col_delta), self.cols - 1))
-				if self._priority_mode == Priority.NONE and next_pos in occupied_pos:
+				if next_pos in occupied_pos:
 					agent_moves[agent.position].append(agent)
 				else:
 					agent_moves[next_pos].append(agent)
@@ -701,10 +707,20 @@ class LBForagingEnv(Env):
 	
 	def render(self) -> np.ndarray | list[np.ndarray] | None:
 		if not self._rendering_initialized:
-			self._render = Viewer((self.rows, self.cols), visible=self._show_viewer)
-			self._rendering_initialized = True
+			try:
+				from .render import Viewer
+				self._render = Viewer((self.rows, self.cols), visible=self._show_viewer)
+				self._rendering_initialized = True
+			except Exception as e:
+				print('Caught exception %s when trying to import Viewer class.' % str(e.args))
 
 		return self._render.render(self, return_rgb_array=(self.render_mode == 'rgb_array'))
 	
 	def close_render(self):
-		self._render.close()
+		if self._render is not None:
+			self._render.close()
+			self._render = None
+	
+	def close(self):
+		super().close()
+		self.close_render()

@@ -37,12 +37,13 @@ INIT_EPS = 1.0
 FINAL_EPS = 0.05
 # EPS_DECAY = 0.5	# for linear eps
 EPS_DECAY = 0.25	# for log eps
-CYCLE_EPS = 0.98
+CYCLE_EPS = 0.99
 EPS_TYPE = "log"
 USE_GPU = True
 RESTART = False
 DEBUG = False
 RESTART_INFO = ["20230724-171745", "food_5x4_cycle_2", 2]
+PRECOMP_FRAC = 0.5
 
 # Environment params
 N_FOODS = 8
@@ -57,9 +58,13 @@ USE_RENDER = False
 parser = argparse.ArgumentParser()
 parser.add_argument('--limits', dest='limits', nargs=2, type=int, required=False, default=[1, MAX_SPAWN_FOODS],
 					help='Minimum and maximum food spawns')
+parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH,
+					help='Length of the field')
 args = parser.parse_args()
+field_len = args.field_len
+limits = args.limits
 
-for i in range(args.limits[0], args.limits[1] + 1):
+for i in range(limits[0], limits[1] + 1):
 	print('Launching training script for %d foods spawned' % i)
 	N_SPAWN_FOODS = i
 	args = (" --nagents %d --nlayers %d --buffer %d --gamma %f --layer-sizes %s --iterations %d --max-cycles %d --batch %d --train-freq %d "
@@ -67,12 +72,12 @@ for i in range(args.limits[0], args.limits[1] + 1):
 			"--player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --tensorboardDetails %s %d %d %s"
 			% (N_AGENTS, N_LAYERS, BUFFER, GAMMA, ' '.join([str(x) for x in LAYERS]),																			# DQN parameters
 			   N_ITERATIONS, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, CYCLE_EPS,	# Train parameters
-			   PLAYER_LEVEL, FIELD_LENGTH, N_FOODS, FOOD_LVL, STEPS_EPISODE, N_SPAWN_FOODS,																		# Environment parameters
+			   PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, STEPS_EPISODE, N_SPAWN_FOODS,																		# Environment parameters
 			   TENSORBOARD_DATA[0], TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
-			 (" --debug" if DEBUG else "") + (" --vdn" if USE_VDN else "") )
+			 (" --debug" if DEBUG else "") + (" --vdn" if USE_VDN else "") + (" --fraction %f" % PRECOMP_FRAC))
 	commamd = "python " + str(src_dir / 'train_lb_single_dqn.py') + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)

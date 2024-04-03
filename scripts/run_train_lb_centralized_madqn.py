@@ -55,7 +55,10 @@ USE_RENDER = False
 parser = argparse.ArgumentParser()
 parser.add_argument('--limits', dest='limits', nargs=2, type=int, required=False, default=[1, MAX_SPAWN_FOODS],
 					help='Minimum and maximum food spawns')
+parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH,
+					help='Length of the field')
 args = parser.parse_args()
+field_len = args.field_len
 
 for i in range(args.limits[0], args.limits[1] + 1):
 	print('Launching training script for %d foods spawned' % i)
@@ -64,8 +67,8 @@ for i in range(args.limits[0], args.limits[1] + 1):
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f "
 			"--player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --tensorboardDetails %s %d %d %s"
 			% (N_AGENTS, N_LAYERS, BUFFER, GAMMA, ' '.join([str(x) for x in LAYERS]),																			# DQN parameters
-			   N_ITERATIONS, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, CYCLE_EPS,	# Train parameters
-			   PLAYER_LEVEL, FIELD_LENGTH, N_FOODS, FOOD_LVL, STEPS_EPISODE, N_SPAWN_FOODS,																		# Environment parameters
+			   N_ITERATIONS, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, CYCLE_EPS,				# Train parameters
+			   PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, STEPS_EPISODE, N_SPAWN_FOODS,																		# Environment parameters
 			   TENSORBOARD_DATA[0], TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") +

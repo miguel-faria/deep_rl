@@ -158,6 +158,7 @@ class SingleModelMADQN(object):
 		self._replay_buffer.reseed(rng_seed)
 		
 		# Setup DQNs for training
+		logger.info('Initializing network')
 		obs, *_ = env.reset()
 		if not self._agent_dqn.dqn_initialized:
 			if self._agent_dqn.cnn_layer:
@@ -207,10 +208,10 @@ class SingleModelMADQN(object):
 							pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
 							pol = pol / pol.sum()
 							action = rng_gen.choice(range(env.action_space[0].n), p=pol)
-						action = jax.device_get(action)
+						# action = jax.device_get(action)
 						episode_q_vals += (float(q_values[int(action)]) / self._n_agents)
 						actions += [action]
-					actions = np.array(actions)
+					actions = jnp.array(actions)
 				if not self._agent_dqn.cnn_layer:
 					episode_history += [self.get_history_entry(obs, actions)]
 				next_obs, rewards, terminated, timeout, infos = env.step(actions)
@@ -453,6 +454,7 @@ class LegibleSingleMADQN(SingleModelMADQN):
 			rng_gen = np.random.default_rng(rng_seed)
 			
 			# Setup DQNs for training
+			logger.info('Initializing network')
 			obs, _ = env.reset()
 			if not self._agent_dqn.dqn_initialized:
 				if self._agent_dqn.cnn_layer:
@@ -498,7 +500,7 @@ class LegibleSingleMADQN(SingleModelMADQN):
 								pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
 								pol = pol / pol.sum()
 								action = rng_gen.choice(range(env.action_space[0].n), p=pol)
-							action = jax.device_get(action)
+							# action = jax.device_get(action)
 							episode_q_vals += (float(q_values[int(action)]) / self._n_agents)
 							actions += [action]
 						actions = np.array(actions)

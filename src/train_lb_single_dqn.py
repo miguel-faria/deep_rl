@@ -11,6 +11,7 @@ import json
 import math
 import logging
 import gc
+import wandb
 
 from dl_algos.single_model_madqn import SingleModelMADQN
 from dl_envs.lb_foraging.lb_foraging_coop import FoodCOOPLBForaging
@@ -34,7 +35,6 @@ def input_callback(env: FoodCOOPLBForaging, stop_flag: bool):
 				env.use_render = True
 			elif command == 'stop_render':
 				if env.use_render:
-					env.close_render()
 					env.use_render = False
 	
 	except KeyboardInterrupt as ki:
@@ -109,6 +109,7 @@ def main():
 						help='List with the info required to recover previously saved model and restart from same point: '
 							 '<model_dirname: str> <model_filename: str> <last_cycle: int> Use only in combination with --restart option')
 	parser.add_argument('--debug', dest='debug', action='store_true', help='Flag signalling debug mode for model training')
+	parser.add_argument('--fraction', dest='fraction', type=str, default='0.5', help='Fraction of JAX memory pre-compilation')
 	
 	# Environment parameters
 	parser.add_argument('--player-level', dest='player_level', type=int, required=True, help='Level of the agents collecting food')
@@ -162,11 +163,10 @@ def main():
 	use_render = args.use_render
 	n_foods_spawn = args.n_foods_spawn
 	
-	os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+	os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = args.fraction
 	if not use_gpu:
 		jax.config.update('jax_platform_name', 'cpu')
 	
-	# print(gamma, initial_eps, final_eps, eps_decay, eps_type, warmup, learn_rate, target_learn_rate)
 	field_dims = len(field_lengths)
 	if 2 >= field_dims > 0:
 		if field_dims == 1:
@@ -222,6 +222,8 @@ def main():
 	err_logger.addHandler(handler)
 	Path.mkdir(model_path, parents=True, exist_ok=True)
 	
+	logger.info(os.environ.items())
+	
 	logger.info('##############################')
 	logger.info('Starting LB Foraging DQN Train')
 	logger.info('##############################')
@@ -233,8 +235,22 @@ def main():
 	## Training Model ##
 	####################
 	try:
-		logger.info('Starting training for different food locations')
 		for loc in locs_train:
+			wandb.init(project='lb-foraging-optimal', entity='miguel-faria',
+					   config={
+						   "field": field_size,
+						   "agents": n_agents,
+						   "foods": n_foods,
+						   "online_learing_rate": learn_rate,
+						   "target_learning_rate": target_update_rate,
+						   "discount": gamma,
+						   "eps_decay": eps_type,
+						   "iterations": n_iterations
+					   },
+					   name=('%ssingle-l%dx%d-%df-t%dx%d-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1]) +
+							 now.strftime("%Y%m%d-%H%M%S")),
+					   sync_tensorboard=True)
+			logger.info('Starting training for different food locations')
 			logger.info('Training for location: %d, %d' % (loc[0], loc[1]))
 			logger.info('Environment setup')
 			env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs,
@@ -247,7 +263,7 @@ def main():
 				action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
 				agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space,
 											   env.observation_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
-											   tensorboard_details + ['%df-%dx%d' % (n_foods_spawn, loc[0], loc[1])])
+											   tensorboard_details + ['l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])])
 			else:
 				if isinstance(env.observation_space, MultiBinary):
 					obs_space = MultiBinary([*env.observation_space.shape[1:]])
@@ -255,7 +271,7 @@ def main():
 					obs_space = env.observation_space[0]
 				agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space,
 											   obs_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
-											   tensorboard_details + ['%df-%dx%d' % (n_foods_spawn, loc[0], loc[1])])
+											   tensorboard_details + ['l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])])
 			if restart_train:
 				start_cycle = int(restart_info[2])
 				logger.info('Load trained model')
@@ -390,7 +406,10 @@ def main():
 			food_idx = str(n_foods_spawn) + '-food'
 			performance_data[field_idx][food_idx] = train_acc
 			train_file.seek(0)
-			yaml.safe_dump(performance_data, train_file)
+			sorted_data = dict(
+				[[sorted_key, performance_data[sorted_key]] for sorted_key in
+				 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+			yaml.safe_dump(sorted_data, train_file)
 			
 	
 	except KeyboardInterrupt as ks:
@@ -401,8 +420,10 @@ def main():
 			food_idx = str(n_foods) + '-food'
 			performance_data[field_idx][food_idx] = train_acc
 			train_file.seek(0)
-			yaml.safe_dump(performance_data, train_file)
-		
+			sorted_data = dict(
+				[[sorted_key, performance_data[sorted_key]] for sorted_key in
+				 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+			yaml.safe_dump(sorted_data, train_file)
 	
 
 if __name__ == '__main__':

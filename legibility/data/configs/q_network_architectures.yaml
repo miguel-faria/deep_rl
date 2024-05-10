@@ -1,0 +1,39 @@
+v1:
+  n_layers: 2
+  layer_sizes: [256, 256]
+  n_cnn_layers: 1
+  cnn_size: [128]
+  cnn_kernel: [[3, 3]]
+  pool_window: [[2, 2]]
+
+v2:
+  n_layers: 2
+  layer_sizes: [256, 256]
+  n_cnn_layers: 2
+  cnn_size: [32, 64]
+  cnn_kernel: [[3, 3], [2, 2]]
+  pool_window: [[2, 2], [2, 2]]
+
+v3:
+  n_layers: 2
+  layer_sizes: [128, 128]
+  n_cnn_layers: 2
+  cnn_size: [32, 64]
+  cnn_kernel: [[3, 3], [2, 2]]
+  pool_window: [[2, 2], [2, 2]]
+
+v4:
+  n_layers: 3
+  layer_sizes: [256, 256, 256]
+  n_cnn_layers: 3
+  cnn_size: [32, 64, 64]
+  cnn_kernel: [[3, 3], [3, 3], [3, 3]]
+  pool_window: [[2, 2], [2, 2], [2, 2]]
+
+v5:
+  n_layers: 3
+  layer_sizes: [256, 256, 256]
+  n_cnn_layers: 3
+  cnn_size: [64, 128, 128]
+  cnn_kernel: [[3, 3], [3, 3], [3, 3]]
+  pool_window: [[2, 2], [2, 2], [2, 2]]

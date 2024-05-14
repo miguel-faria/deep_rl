@@ -1,6 +1,7 @@
 #!/bin/bash
 
 CUDA_VERSION=$(nvidia-smi | grep 'CUDA Version' | awk -F" " '{print $9}' | awk -F"." '{print $1}')
+SCRIPT_PATH="$( cd -- "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
 if [ "$1" = "conda" ]; then
 
@@ -15,8 +16,9 @@ if [ "$1" = "conda" ]; then
     fi
   fi
 
-  mamba create -y -n deep_rl_env python=3.10
+  mamba create -y -n deep_rl_env python=3.12
   mamba init
+  source "$HOME"/.bashrc
   mamba activate deep_rl_env
 
   mamba install -y -c conda-forge numpy scipy matplotlib pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv
@@ -29,15 +31,17 @@ if [ "$1" = "conda" ]; then
 
   {
     echo "alias activateDRL=\"conda activate deep_rl_env\""
-    echo "alias deepRL=\"conda activate deep_rl_env; cd \"\$HOME\"/Documents/Projects/deep_rl\""
+    echo "alias deepRL=\"conda activate deep_rl_env; cd \"\$SCRIPT_PATH\"\""
   } >> ~/.bash_aliases
 
   env_home="$HOME"/miniconda3/envs/deep_rl_env
+  mkdir -p "$env_home"/etc/conda/activate.d/
+  mkdir -p "$env_home"/etc/conda/deactivate.d/
   touch "$env_home"/etc/conda/activate.d/env_vars.sh
   touch "$env_home"/etc/conda/deactivate.d/env_vars.sh
   {
     echo "#!/bin/sh"
-    echo "EXTRA_PATH=\"\$HOME\"/Documents/Projects/deep_rl/src:"
+    echo "EXTRA_PATH=\"\$SCRIPT_PATH\"/legibility/src:"
     echo "OLD_PYTHONPATH=$PYTHONPATH"
     echo "PYTHONPATH=$EXTRA_PATH:$PYTHONPATH"
     echo "export PYTHONPATH"
@@ -67,11 +71,11 @@ else
 
   {
     echo "alias activateDRL=\"source \"\$HOME\"/python_envs/deep_rl_env/bin/activate\""
-    echo "alias deepRL=\"source \"\$HOME\"/python_envs/deep_rl_env/bin/activate; cd \"\$HOME\"/Documents/Projects/deep_rl\""
+    echo "alias deepRL=\"source \"\$HOME\"/python_envs/deep_rl_env/bin/activate; cd \"\$SCRIPT_PATH\"\""
   } >> ~/.bash_aliases
 
   {
-    echo "EXTRA_PATH=\"\$HOME\"/Documents/Projects/deep_rl/src:"
+    echo "EXTRA_PATH=\"\$SCRIPT_PATH\"/legibility/src:"
     echo "PYTHONPATH=$EXTRA_PATH:$PYTHONPATH"
     echo "export PYTHONPATH"
   } >> "$HOME"/python_envs/deep_rl_env/bin/activate

@@ -45,13 +45,12 @@ PRECOMP_FRAC = 0.3
 
 # Environment params
 MAX_PREYS = 4
-HUNTER_IDS = [('h%d' % (idx + 1)) for idx in range(N_AGENTS)]
 HUNTER_CLASSES = 1
 N_REQUIRED_HUNTER = 2
 FIELD_LENGTH = 10
 STEPS_EPISODE = 400
 WARMUP_STEPS = STEPS_EPISODE * 2
-USE_RENDER = True
+USE_RENDER = False
 USE_TARGETS = False
 TRAIN_TARGETS = ['p1']
 PREY_TYPE = 'idle'
@@ -65,11 +64,15 @@ parser.add_argument('--prey-type', dest='prey_type', type=str, required=False, c
 					help='Type of prey to be caught')
 parser.add_argument('--field', dest='field', type=int, required=False, default=FIELD_LENGTH,
 					help='Length of the field of the environment')
+parser.add_argument('--hunters', dest='n_hunters', type=int, required=False, default=N_AGENTS,
+					help='Number of hunters to spawn')
 
 input_args = parser.parse_args()
 
 for i in range(input_args.limits[0], input_args.limits[1] + 1):
 	n_preys = i
+	n_hunters = input_args.n_hunters
+	HUNTER_IDS = [('h%d' % (idx + 1)) for idx in range(n_hunters)]
 	PREY_IDS = [('p%d' % (idx + 1)) for idx in range(n_preys)]
 	prey_type = input_args.prey_type
 	field_length = input_args.field
@@ -77,7 +80,7 @@ for i in range(input_args.limits[0], input_args.limits[1] + 1):
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f "
 			"--hunter-ids %s --prey-ids %s --hunter-classes %d --prey-type %s --field-size %d --n-hunters-catch %d --steps-episode %d --catch-reward %f "
 			"--tensorboardDetails %s %d %d %s"
-			% (N_AGENTS, ARQUITECTURE, BUFFER, GAMMA,																												# DQN parameters
+			% (n_hunters, ARQUITECTURE, BUFFER, GAMMA,																												# DQN parameters
 			   N_ITERATIONS, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, CYCLE_EPS,					# Train parameters
 			   ' '.join(HUNTER_IDS), ' '.join(PREY_IDS), HUNTER_CLASSES, prey_type, field_length, N_REQUIRED_HUNTER, STEPS_EPISODE, input_args.catch_reward,		# Environment parameters
 			   TENSORBOARD_DATA[0], TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))

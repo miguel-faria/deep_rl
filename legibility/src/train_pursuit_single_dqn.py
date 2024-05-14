@@ -17,7 +17,7 @@ import gc
 from dl_algos.single_model_madqn import SingleModelMADQN
 from dl_algos.dqn import DQNetwork, EPS_TYPE
 from dl_envs.pursuit.pursuit_env import PursuitEnv, TargetPursuitEnv
-from dl_envs.pursuit.agents.agent import Agent, AgentType
+from memory_profiler import profile
 from pathlib import Path
 from itertools import permutations
 from typing import List, Tuple, Union
@@ -313,7 +313,7 @@ def main():
 	for idx in range(n_preys):
 		preys += [(prey_ids[idx], PREY_TYPES[prey_type])]
 	
-	os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+	os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = args.fraction
 	if not use_gpu:
 		jax.config.update('jax_platform_name', 'cpu')
 	

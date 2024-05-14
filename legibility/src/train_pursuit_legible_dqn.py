@@ -299,7 +299,7 @@ def main():
 	for idx in range(n_preys):
 		preys += [(prey_ids[idx], PREY_TYPES['random'])]
 	
-	os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+	os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = args.fraction
 	if not use_gpu:
 		jax.config.update('jax_platform_name', 'cpu')
 	

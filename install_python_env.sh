@@ -94,6 +94,7 @@ if [ "$env_type" = "conda" ]; then
   } >> ~/.bash_aliases
 
   env_home="$HOME"/miniconda3/envs/"$env_name"
+
   mkdir -p "$env_home"/etc/conda/activate.d/
   mkdir -p "$env_home"/etc/conda/deactivate.d/
   touch "$env_home"/etc/conda/activate.d/env_vars.sh

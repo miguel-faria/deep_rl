@@ -66,12 +66,16 @@ parser.add_argument('--field', dest='field', type=int, required=False, default=F
 					help='Length of the field of the environment')
 parser.add_argument('--hunters', dest='n_hunters', type=int, required=False, default=N_AGENTS,
 					help='Number of hunters to spawn')
+parser.add_argument('--iterations', dest='n_iterations', type=int, required=False, default=N_ITERATIONS,
+					help='Number of iterations per training cycle')
+
 
 input_args = parser.parse_args()
 
 for i in range(input_args.limits[0], input_args.limits[1] + 1):
 	n_preys = i
 	n_hunters = input_args.n_hunters
+	n_iterations = input_args.n_iterations
 	HUNTER_IDS = [('h%d' % (idx + 1)) for idx in range(n_hunters)]
 	PREY_IDS = [('p%d' % (idx + 1)) for idx in range(n_preys)]
 	prey_type = input_args.prey_type
@@ -81,7 +85,7 @@ for i in range(input_args.limits[0], input_args.limits[1] + 1):
 			"--hunter-ids %s --prey-ids %s --hunter-classes %d --prey-type %s --field-size %d --n-hunters-catch %d --steps-episode %d --catch-reward %f "
 			"--tensorboardDetails %s %d %d %s"
 			% (n_hunters, ARQUITECTURE, BUFFER, GAMMA,																												# DQN parameters
-			   N_ITERATIONS, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, CYCLE_EPS,					# Train parameters
+			   n_iterations, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, CYCLE_EPS,					# Train parameters
 			   ' '.join(HUNTER_IDS), ' '.join(PREY_IDS), HUNTER_CLASSES, prey_type, field_length, N_REQUIRED_HUNTER, STEPS_EPISODE, input_args.catch_reward,		# Environment parameters
 			   TENSORBOARD_DATA[0], TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +

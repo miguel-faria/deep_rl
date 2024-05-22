@@ -15,6 +15,7 @@ export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
 source "$HOME"/miniconda3/bin/activate deep_rl_env
 
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 python "$HOME"/Documents/Projects/deep_rl/scripts/run_train_lb_vdn_legible_dqn.py --field-len 8
 
 source "$HOME"/miniconda3/bin/deactivate

@@ -303,6 +303,7 @@ def main():
 					cycles_range = range(n_cycles)
 					logger.info('Starting train')
 				
+				cycle_warmup = warmup
 				for cycle in cycles_range:
 					logger.info('Cycle %d of %d' % (cycle+1, n_cycles))
 					if cycle == 0:
@@ -321,7 +322,6 @@ def main():
 					logger.info('Starting train')
 					logger.info('Cycle starting epsilon: %f' % cycle_init_eps)
 					cnn_shape = (0, ) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
-					cycle_warmup = warmup * (0.5 ** min(n_cycles, 1))
 					history = agent_madqn.train_dqn(env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps, final_eps,
 													eps_type, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
 													use_render, cycle, greedy_action=False, epoch_logging=args.ep_log)
@@ -329,6 +329,7 @@ def main():
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None
 					env.food_spawn = 0
+					cycle_warmup *= (0.5 ** min(n_cycles, 1))
 					
 					if debug:
 						logger.info('Saving cycle iteration history')

@@ -15,6 +15,7 @@ export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
 source "$HOME"/miniconda3/bin/activate deep_rl_env
 
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 python "$HOME"/Documents/Projects/deep_rl/scripts/run_train_pursuit_single_vdn_dqn.py --field 10 --limits 1 4 --prey-type idle --hunters 2
 
 source "$HOME"/miniconda3/bin/deactivate

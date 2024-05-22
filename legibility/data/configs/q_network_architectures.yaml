@@ -31,9 +31,17 @@ v4:
   pool_window: [[2, 2], [2, 2], [2, 2]]
 
 v5:
-  n_layers: 3
-  layer_sizes: [256, 256, 256]
+  n_layers: 2
+  layer_sizes: [512, 512]
   n_cnn_layers: 3
-  cnn_size: [64, 128, 128]
-  cnn_kernel: [[3, 3], [3, 3], [3, 3]]
+  cnn_size: [32, 64, 64]
+  cnn_kernel: [[8, 8], [4, 4], [3, 3]]
   pool_window: [[2, 2], [2, 2], [2, 2]]
+
+v6:
+  n_layers: 2
+  layer_sizes: [ 128, 84 ]
+  n_cnn_layers: 2
+  cnn_size: [ 32, 64 ]
+  cnn_kernel: [ [ 3, 3 ], [ 3, 3 ] ]
+  pool_window: [ [ 2, 2 ], [ 2, 2 ] ]

@@ -5,7 +5,7 @@
       <sourceFolder url="file://$MODULE_DIR$/legibility/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" />
     </content>
-    <orderEntry type="jdk" jdkName="WSL DRL: (/home/miguel/python_envs/drl_env/bin/python3.10)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="drl_env" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>

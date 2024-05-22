@@ -15,6 +15,7 @@ source $HOME/python_envs/deep_rl_env/bin/activate
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
 
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 python $HOME/Documents/Projects/deep_rl/scripts/run_train_lb_single_vdn_dqn.py --field-len 20
 
 deactivate

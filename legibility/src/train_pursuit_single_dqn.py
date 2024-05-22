@@ -7,7 +7,6 @@ import numpy as np
 import flax.linen as nn
 import gymnasium
 import jax
-import json
 import random
 import time
 import logging
@@ -72,6 +71,7 @@ def get_target_seqs(targets: List[str]) -> List[Tuple[str]]:
 		return None
 
 
+@profile
 def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float,
 					  tau: float, initial_eps: float, final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
 					  exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1,
@@ -105,7 +105,6 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 		episode_q_vals = 0
 		episode_start = epoch
 		episode_history = []
-		logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
 		while not done:
 			
 			# interact with environment
@@ -152,8 +151,6 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 				finished = np.ones(dqn_model.num_agents, dtype=np.int32)
 			else:
 				finished = np.zeros(dqn_model.num_agents, dtype=np.int32)
-			
-			logger.info(str(finished) + '\tTimestep: %d' % env.env_timestep)
 			
 			# store new samples
 			if dqn_model.use_vdn:
@@ -437,12 +434,6 @@ def main():
 										final_eps, eps_type, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
 										use_render, cycle)
 			
-			if debug:
-				logger.debug('Saving cycle iteration history')
-				json_path = model_path / 'all_preys_history_centralized.json'
-				with open(json_path, 'a') as json_file:
-					json_file.write(json.dumps({('cycle_%d' % (cycle + 1)): history}))
-			
 		logger.info('Saving final model')
 		dqn_model.save_model(('preys_%d' % n_preys), model_path, logger)
 		sys.stdout.flush()
@@ -467,7 +458,6 @@ def main():
 			obs, *_ = env.reset()
 			epoch = 0
 			agent_reward = [0] * n_hunters
-			# test_history = []
 			game_over = False
 			finished = False
 			timeout = False
@@ -491,7 +481,6 @@ def main():
 				next_obs, rewards, finished, timeout, infos = env.step(actions)
 				for i in range(n_hunters):
 					agent_reward[i] = rewards[i]
-				# test_history += [get_history_entry(env.make_array_obs(), actions, dqn_model.num_agents)]
 				obs = next_obs
 				
 				if finished or timeout:
@@ -507,13 +496,10 @@ def main():
 				logger.info('Accumulated reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0], agent_reward[1]))
 				logger.info('Average reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0] / epoch, agent_reward[1] / epoch))
 			if timeout:
-				# failed_history += [test_history]
 				logger.info('Test %d timed out' % (n_test + 1))
 		
 		env.close()
 		logger.info('Passed %d tests out of %d' % (tests_passed, N_TESTS))
-		# logger.info('Failed tests history:')
-		# logger.info(failed_history)
 		
 		if (tests_passed / N_TESTS) > train_acc:
 			logger.info('Updating best model for current loc')

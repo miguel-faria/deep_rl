@@ -187,6 +187,7 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_return", episode_rewards, it + start_record_it)
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
 				env.reset_init_pos()
 				obs, *_ = env.reset()
 				done = True

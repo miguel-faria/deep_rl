@@ -11,12 +11,18 @@
 #SBATCH --mem=4G
 date;hostname;pwd
 
+if [ -n "${SLURM_JOB_ID:-}" ] ; then
+  script_path=$(dirname "$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}' | head -n 1)")
+else
+  script_path="$( cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 ; pwd -P )"
+fi
+
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
 source "$HOME"/miniconda3/bin/activate deep_rl_env
 
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
-python "$HOME"/Documents/Projects/deep_rl/scripts/run_train_pursuit_single_vdn_dqn.py --field 10 --limits 1 4 --prey-type idle --hunters 2
+python "$script_path"/scripts/run_train_pursuit_single_vdn_dqn.py --field 10 --limits 1 4 --prey-type idle --hunters 2
 
 source "$HOME"/miniconda3/bin/deactivate
 date

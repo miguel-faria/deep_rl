@@ -101,7 +101,7 @@ if [ "$env_type" = "conda" ]; then
   touch "$env_home"/etc/conda/deactivate.d/env_vars.sh
   {
     echo "#!/bin/sh"
-    echo "EXTRA_PATH=""$script_path""/legibility/src"
+    echo "EXTRA_PATH=""$script_path""/legibility/src:""$script_path""/llms/src"
     echo "OLD_PYTHONPATH=\$PYTHONPATH"
     echo "PYTHONPATH=\$EXTRA_PATH:\$PYTHONPATH"
     echo "OLD_PATH=\$PATH"

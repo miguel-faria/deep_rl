@@ -47,7 +47,9 @@ def input_callback(env: FoodCOOPLBForaging, stop_flag: threading.Event):
 
 
 def number_food_combinations(max_foods: int, n_foods_spawn: int) -> int:
-	return max(1, int(math.factorial(max_foods) / (math.factorial(n_foods_spawn) * math.factorial(max_foods - n_foods_spawn)) * 0.75))
+	n_combinations = math.factorial(max_foods) / (math.factorial(n_foods_spawn) * math.factorial(max_foods - n_foods_spawn))
+	n_combinations = max(1,  int(n_combinations * 0.75))
+	return n_combinations
 
 
 def eps_cycle_schedule(cycle_nr: int, max_cycles: int, init_eps: float, final_eps: float, decay_rate: float) -> float:
@@ -87,7 +89,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 					  cnn_shape: Tuple[int], exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100,
 					  tensorboard_frequency: int = 1, cycle: int = 0, greedy_action: bool = True, sofmax_temp: float = 1.0, interactive: bool = False):
 		
-		np.random.seed(rng_seed)
+		# np.random.seed(rng_seed)
 		rng_gen = np.random.default_rng(rng_seed)
 		if interactive:
 			stop_thread = threading.Event()
@@ -116,15 +118,10 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			episode_rewards = 0
 			episode_q_vals = 0
 			episode_start = epoch
-			episode_history = []
 			logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
+			# decay exploration
+			eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
 			while not done:
-				
-				# decay exploration
-				if eps_type == 'epoch':
-					eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, epoch, max_timesteps)
-				else:
-					eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
 				
 				# interact with environment
 				if rng_gen.random() < eps:
@@ -153,7 +150,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 							online_params = dqn_model.optimal_models[dqn_model.goal].params
 						
 						if dqn_model.agent_dqn.cnn_layer:
-							q_values = dqn_model.agent_dqn.q_network.apply(online_params, obs[a_idx].reshape((1, *obs[a_idx].shape)))[0]
+							q_values = dqn_model.agent_dqn.q_network.apply(online_params, obs[a_idx].reshape((1, *cnn_shape)))[0]
 						else:
 							q_values = dqn_model.agent_dqn.q_network.apply(online_params, obs[a_idx])
 						
@@ -170,7 +167,6 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 				actions = np.array(actions)
 				
 				next_obs, rewards, terminated, timeout, infos = env.step(actions)
-				episode_history += [dqn_model.get_history_entry(obs, actions)]
 				if env.use_render:
 					env.render()
 				
@@ -185,8 +181,8 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 						goal_action_q = 0.0
 						for g_idx in range(n_goals):
 							if dqn_model.agent_dqn.cnn_layer:
-								obs_reshape = obs[a_idx].reshape((1, *obs[a_idx].shape))
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[live_goals[g_idx]].params, obs_reshape)[0]
+								cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
+								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[live_goals[g_idx]].params, cnn_obs)[0]
 							else:
 								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[live_goals[g_idx]].params, obs[a_idx])
 							if dqn_model.goal == live_goals[g_idx]:
@@ -251,13 +247,14 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 						dqn_model.agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
 						dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
 						dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+						dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it + start_record_it, it + start_record_it)
+						dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
 					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 					obs, *_ = env.reset()
 					if env.use_render:
 						env.render()
 					else:
 						env.close_render()
-					history += [episode_history]
 					done = True
 					episode_rewards = 0
 					episode_q_vals = 0
@@ -465,7 +462,7 @@ def main():
 	logger.info('##############################')
 	logger.info('Starting LB Foraging DQN Train')
 	logger.info('##############################')
-	n_cycles = min(int(number_food_combinations(n_foods - 1, n_foods_spawn - 1) / 2), max_cycles)
+	n_cycles = min(int(number_food_combinations(n_foods - 1, n_foods_spawn - 1)), max_cycles)
 	logger.info('Number of cycles: %d' % n_cycles)
 	
 	####################
@@ -513,7 +510,7 @@ def main():
 													 use_gpu, False, optim_dir, optim_models, goals, str(loc), dueling_dqn, use_ddqn, use_vdn,
 													 use_cnn, use_tensorboard, tensorboard_details + ['l%dx%d-%df-t%dx%d-legible' % (field_size[0], field_size[1],
 																																	 n_foods_spawn, loc[0], loc[1])],
-													 n_legible_agents=min(n_leg_agents, n_agents))
+													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties)
 				else:
 					agent_madqn = LegibleSingleMADQN(n_agents, n_actions, n_layers, nn.relu, layer_sizes, buffer_size, gamma, beta, agent_action_space,
 													 obs_space, use_gpu, False, optim_dir, optim_models, goals, str(loc), dueling_dqn, use_ddqn,
@@ -521,7 +518,7 @@ def main():
 																																			  field_size[1],
 																																			  n_foods_spawn,
 																																			  loc[0], loc[1])],
-													 n_legible_agents=min(n_leg_agents, n_agents))
+													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties)
 				
 				if restart_train:
 					start_cycle = int(restart_info[2])
@@ -534,6 +531,7 @@ def main():
 					cycles_range = range(n_cycles)
 					logger.info('Starting train')
 				
+				cycle_warmup = warmup
 				for cycle in cycles_range:
 					logger.info('Cycle %d of %d' % (cycle+1, n_cycles))
 					if cycle == 0:
@@ -552,12 +550,13 @@ def main():
 					logger.info('Cycle starting epsilon: %f' % cycle_init_eps)
 					cnn_shape = (0,) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
 					history = train_legible_dqn(env, agent_madqn, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
-												final_eps, eps_type, leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tensorboard_freq,
+												final_eps, eps_type, leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
 												cycle, greedy_action=False, sofmax_temp=temp, interactive=INTERACTIVE_SESSION)
 					
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None
 					env.food_spawn = 0
+					cycle_warmup *= (0.5 ** min(n_cycles, 1))
 					
 					if debug:
 						logger.info('Saving cycle iteration history')

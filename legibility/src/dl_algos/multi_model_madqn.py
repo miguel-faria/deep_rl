@@ -206,6 +206,7 @@ class MultiAgentDQN(object):
 							self._agent_dqns[a_id].summary_writer.add_scalar("charts/episodic_return", episode_rewards[a_idx], it + start_record_it)
 							self._agent_dqns[a_id].summary_writer.add_scalar("charts/episodic_length", epoch - episode_start, it + start_record_it)
 							self._agent_dqns[a_id].summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+							self._agent_dqns[a_id].summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
 							print("Agent %s episode over:\tReward: %f\tLength: %d" % (a_id, episode_rewards[a_idx], epoch - episode_start))
 	
 	@partial(jit, static_argnums=(0,))

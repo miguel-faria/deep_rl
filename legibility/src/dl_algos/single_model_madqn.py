@@ -215,7 +215,7 @@ class SingleModelMADQN(object):
 						# action = jax.device_get(action)
 						episode_q_vals += (float(q_values[int(action)]) / self._n_agents)
 						actions += [action]
-					actions = jnp.array(actions)
+					actions = np.array(actions)
 				if not self._agent_dqn.cnn_layer:
 					episode_history += [self.get_history_entry(obs, actions)]
 				next_obs, rewards, terminated, timeout, infos = env.step(actions)
@@ -267,6 +267,7 @@ class SingleModelMADQN(object):
 						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+						self._agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
 						if not epoch_logging:
 							self._agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), it + start_record_it)
 							self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
@@ -350,7 +351,7 @@ class LegibleSingleMADQN(SingleModelMADQN):
 		for goal_id in goal_ids:
 			idx = goal_ids.index(goal_id)
 			file_path = models_dir / optimal_filenames[idx]
-			obs_shape = (1, *observation_space.shape) if use_cnn else observation_space.shape
+			obs_shape = (0,) if not use_cnn else (*observation_space.shape[1:], observation_space.shape[0])
 			template = TrainState.create(apply_fn=self._agent_dqn.q_network.apply,
 										 params=self._agent_dqn.q_network.init(jax.random.PRNGKey(201), jnp.empty(obs_shape)),
 										 tx=optax.adam(learning_rate=0.0001))
@@ -739,6 +740,7 @@ class CentralizedMADQN(object):
 						self._madqn.summary_writer.add_scalar("charts/episodic_return", episode_rewards, it + start_record_it)
 						self._madqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
 						self._madqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+						self._agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
 					obs, *_ = env.reset()
 					done = True
 					history += [episode_history]
@@ -999,6 +1001,7 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 						self._agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
+						self._agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
 					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (episode_len, eps, episode_rewards))
 					envs_obs = np.array([env.reset()[0] for env in envs])
 					done = True

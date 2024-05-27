@@ -16,8 +16,8 @@ N_AGENTS = 2
 N_LEG_AGENTS = 1
 ARQUITECTURE = "v3"
 BUFFER = 10000
-GAMMA = 0.9
-BETA = 0.75
+GAMMA = 0.95
+BETA = 0.9
 TEMP = 1.0
 TENSORBOARD_DATA = [str(log_dir), 50, 25, '.log']
 USE_DUELING = True
@@ -25,11 +25,11 @@ USE_DDQN = True
 USE_CNN = True
 USE_VDN = True
 USE_TENSORBOARD = True
-LEG_REWARD = 'simple'
+LEG_REWARD = 'q_vals'
 
 # Train params
 MAX_CYCLES = 100
-N_ITERATIONS = 200
+N_ITERATIONS = 400
 BATCH_SIZE = 32
 TRAIN_FREQ = 1
 TARGET_FREQ = 10
@@ -38,7 +38,7 @@ ALPHA = 0.001
 TAU = 0.1
 INIT_EPS = 1.0
 FINAL_EPS = 0.05
-EPS_DECAY = 0.5	# for linear eps
+EPS_DECAY = 0.75	# for linear eps
 # EPS_DECAY = 0.08	# for log eps
 CYCLE_EPS = 0.991
 EPS_TYPE = "linear"
@@ -65,19 +65,29 @@ parser.add_argument('--limits', dest='limits', nargs=2, type=int, required=False
 					help='Minimum and maximum food spawns')
 parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH,
 					help='Length of the field')
+parser.add_argument('--episode-steps', dest='max_steps', type=int, required=False, default=STEPS_EPISODE)
+parser.add_argument('--iterations', dest='max_iterations', type=int, required=False, default=N_ITERATIONS)
 args = parser.parse_args()
 field_len = args.field_len
 limits = args.limits
+max_steps = args.max_steps
+iterations = args.max_iterations
 
 for i in range(limits[0], limits[1] + 1):
 	print('Launching training script for %d foods spawned' % i)
 	N_SPAWN_FOODS = i
+	if i == 1:
+		eps = 'log'
+		decay = 0.175
+	else:
+		eps = EPS_TYPE
+		decay = EPS_DECAY
 	args = (" --n-agents %d --architecture %s --buffer %d --gamma %f --beta %f --reward %s --iterations %d --max-cycles %d --batch %d --train-freq %d "
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f --legibility-temp %f "
 			"--n-players %d --player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --tensorboardDetails %s %d %d %s"
-			% (N_AGENTS, ARQUITECTURE, BUFFER, GAMMA, BETA, LEG_REWARD,	  																								# DQN parameters
-			   N_ITERATIONS, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, CYCLE_EPS, TEMP,	# Train parameters
-			   N_PLAYERS, PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, STEPS_EPISODE, N_SPAWN_FOODS,																	# Environment parameters
+			% (N_AGENTS, ARQUITECTURE, BUFFER, GAMMA, BETA, LEG_REWARD,	  																							# DQN parameters
+			   iterations, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, decay, eps, WARMUP_STEPS, CYCLE_EPS, TEMP,				# Train parameters
+			   N_PLAYERS, PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS,																		# Environment parameters
 			   TENSORBOARD_DATA[0], TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") + (" --vdn" if USE_VDN else "") +

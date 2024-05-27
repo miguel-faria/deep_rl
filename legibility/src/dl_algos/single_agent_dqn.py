@@ -144,6 +144,7 @@ class SingleAgentDQN(object):
 						self._agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
 						self._agent_dqn.tensorboard_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
 						self._agent_dqn.tensorboard_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
+						self._agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
 						print("Episode over:\tReward: %f\tLength: %d" % (episode_rewards, epoch - episode_start))
 		
 		return history

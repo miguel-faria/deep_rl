@@ -144,3 +144,5 @@ legibility/wandb/
 legibility/models/
 legibility/data/performances
 legibility/data/stills
+llms/wandb
+llms/src/wandb

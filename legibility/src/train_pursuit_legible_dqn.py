@@ -1,5 +1,5 @@
 #! /usr/bin/env python
-import itertools
+import wandb
 import os
 import sys
 import argparse
@@ -11,6 +11,7 @@ import json
 import random
 import time
 import logging
+import yaml
 
 from dl_algos.single_model_madqn import LegibleSingleMADQN
 from dl_algos.dqn import DQNetwork, EPS_TYPE
@@ -201,7 +202,7 @@ def main():
 	
 	# Multi-agent DQN params
 	parser.add_argument('--nagents', dest='n_agents', type=int, required=True, help='Number of agents in the environment')
-	parser.add_argument('--nlayers', dest='n_layers', type=int, required=True, help='Number of layers for the neural net in the DQN')
+	parser.add_argument('--architecture', dest='architecture', type=str, required=True, help='DQN architecture to use from the architectures yaml')
 	parser.add_argument('--buffer', dest='buffer_size', type=int, required=True, help='Size of the replay buffer in the DQN')
 	parser.add_argument('--gamma', dest='gamma', type=float, required=False, default=0.99, help='Discount factor for agent\'s future rewards')
 	parser.add_argument('--gpu', dest='use_gpu', action='store_true', help='Flag that signals the use of gpu for the training')
@@ -254,7 +255,7 @@ def main():
 	args = parser.parse_args()
 	# DQN args
 	n_agents = args.n_agents
-	n_layers = args.n_layers
+	architecture = args.architecture
 	buffer_size = args.buffer_size
 	gamma = args.gamma
 	use_gpu = args.use_gpu
@@ -289,6 +290,7 @@ def main():
 	use_render = args.use_render
 	require_catch = args.require_catch
 	hunter_class = args.hunter_class
+	tags = args.tags if args.tags is not None else ''
 	
 	hunters = []
 	preys = []
@@ -319,10 +321,22 @@ def main():
 	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
 	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
+	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 	log_filename = (('train_pursuit_single_dqn_%dx%d-field_%d-hunters_%d-preys' % (field_size[0], field_size[1], n_hunters, n_preys)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / 'pursuit_single_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-hunters' % n_hunters) /
 				  ('%d-preys' % n_preys) / now.strftime("%Y%m%d-%H%M%S"))
+	
+	with open(data_dir / 'configs' / 'q_network_architectures.yaml') as architecture_file:
+		arch_data = yaml.safe_load(architecture_file)
+		if architecture in arch_data.keys():
+			n_layers = arch_data[architecture]['n_layers']
+			layer_sizes = arch_data[architecture]['layer_sizes']
+			n_conv_layers = arch_data[architecture]['n_cnn_layers']
+			cnn_size = arch_data[architecture]['cnn_size']
+			cnn_kernel = [tuple(elem) for elem in arch_data[architecture]['cnn_kernel']]
+			pool_window = [tuple(elem) for elem in arch_data[architecture]['pool_window']]
+			cnn_properties = [n_conv_layers, cnn_size, cnn_kernel, pool_window]
 	
 	if len(logging.root.handlers) > 0:
 		for handler in logging.root.handlers:
@@ -341,6 +355,25 @@ def main():
 	#####################
 	## Training Models ##
 	#####################
+	
+	wandb.init(project='pursuit-legible', entity='miguel-faria',
+			   config={
+				   "field": "%dx%d" % (field_size[0], field_size[1]),
+				   "agents": n_agents,
+				   "preys": n_preys,
+				   "hunters": n_hunters,
+				   "online_learing_rate": learn_rate,
+				   "target_learning_rate": target_update_rate,
+				   "discount": gamma,
+				   "eps_decay": eps_type,
+				   "dqn_architecture": architecture,
+				   "iterations": n_iterations,
+				   "tags": tags
+			   },
+			   dir=log_dir / 'wandb',
+			   name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_preys, prey_type) +
+					 now.strftime("%Y%m%d-%H%M%S")),
+			   sync_tensorboard=True)
 	logger.info('##########################')
 	logger.info('Starting Pursuit DQN Train')
 	logger.info('##########################')

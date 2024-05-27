@@ -388,6 +388,7 @@ def main():
 					   "iterations": n_iterations,
 					   "tags": tags
 				   },
+				   dir=log_dir / 'wandb',
 				   name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_preys, prey_type) +
 						 now.strftime("%Y%m%d-%H%M%S")),
 				   sync_tensorboard=True)

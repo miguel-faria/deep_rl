@@ -142,7 +142,7 @@ cython_debug/
 legibility/logs/
 legibility/wandb/
 legibility/models/
-legibility/data/performances
-legibility/data/stills
-llms/wandb
-llms/src/wandb
+legibility/data/performances/
+legibility/data/stills/
+llms/wandb/
+llms/src/wandb/

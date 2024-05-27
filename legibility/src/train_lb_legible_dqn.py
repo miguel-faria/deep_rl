@@ -87,22 +87,19 @@ def get_live_obs_goals(env: FoodCOOPLBForaging) -> Tuple[List, List]:
 def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float,
 					  tau: float, initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger,
 					  cnn_shape: Tuple[int], exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100,
-					  tensorboard_frequency: int = 1, cycle: int = 0, greedy_action: bool = True, sofmax_temp: float = 1.0, interactive: bool = False):
+					  tensorboard_frequency: int = 1, cycle: int = 0, greedy_action: bool = True, sofmax_temp: float = 1.0):
 		
 		# np.random.seed(rng_seed)
 		rng_gen = np.random.default_rng(rng_seed)
-		if interactive:
-			stop_thread = threading.Event()
-			command_thread = threading.Thread(target=input_callback, args=(env, stop_thread))
-			command_thread.start()
 		
 		# Setup DQNs for training
-		obs, _ = env.reset()
+		obs, *_ = env.reset()
 		if not dqn_model.agent_dqn.dqn_initialized:
 			if dqn_model.agent_dqn.cnn_layer:
 				dqn_model.agent_dqn.init_network_states(rng_seed, obs[0].reshape((1, *cnn_shape)), optim_learn_rate)
 			else:
 				dqn_model.agent_dqn.init_network_states(rng_seed, obs[0], optim_learn_rate)
+		logger.info("Initial DQN params: ", dqn_model.agent_dqn.online_state.params)
 		
 		start_time = time.time()
 		epoch = 0
@@ -118,13 +115,15 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			episode_rewards = 0
 			episode_q_vals = 0
 			episode_start = epoch
+			avg_loss = []
 			logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
 			# decay exploration
 			eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
 			while not done:
 				
 				# interact with environment
-				if rng_gen.random() < eps:
+				explore = rng_gen.random() < eps
+				if explore:
 					random_actions = env.action_space.sample()
 					actions = random_actions[:dqn_model.n_leg_agents].tolist()
 					for a_idx in range(dqn_model.n_leg_agents, env.n_players):
@@ -133,7 +132,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 																		   obs[a_idx].reshape((1, *cnn_shape)))[0]
 						else:
 							q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_model.goal].params, obs[a_idx])
-						
+
 						if greedy_action:
 							action = q_values.argmax(axis=-1)
 						else:
@@ -160,10 +159,10 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 							pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
 							pol = pol / pol.sum()
 							action = rng_gen.choice(range(env.action_space[0].n), p=pol)
-						action = jax.device_get(action)
+						# action = jax.device_get(action)
 						episode_q_vals += (float(q_values[int(action)]) / dqn_model.num_agents)
 						actions += [action]
-				logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]) + '\n')
+				logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]) + ' Explored? %r' % explore + '\n')
 				actions = np.array(actions)
 				
 				next_obs, rewards, terminated, timeout, infos = env.step(actions)
@@ -172,7 +171,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 				
 				# Obtain the legible rewards
 				legible_rewards = np.zeros(dqn_model.n_leg_agents)
-				live_goals, _ = get_live_obs_goals(env)
+				live_goals = [str(food.position) for food in env.foods]
 				n_goals = env.food_spawn
 				if n_goals > 1:
 					for a_idx in range(dqn_model.n_leg_agents):
@@ -182,9 +181,9 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 						for g_idx in range(n_goals):
 							if dqn_model.agent_dqn.cnn_layer:
 								cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[live_goals[g_idx]].params, cnn_obs)[0]
+								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_model(live_goals[g_idx]).params, cnn_obs)[0]
 							else:
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[live_goals[g_idx]].params, obs[a_idx])
+								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_model(live_goals[g_idx]).params, obs[a_idx])
 							if dqn_model.goal == live_goals[g_idx]:
 								goal_action_q = q_vals[action]
 							act_q_vals[g_idx] = np.exp(dqn_model.beta * (q_vals[action] - q_vals.mean()) / sofmax_temp)
@@ -197,7 +196,6 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 							legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) + rewards[a_idx]
 						else:
 							legible_rewards[a_idx] = act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()
-						episode_rewards += (legible_rewards[a_idx] / dqn_model.n_leg_agents)
 				
 				else:
 					for a_idx in range(dqn_model.n_leg_agents):
@@ -209,7 +207,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 					# legible_rewards = legible_rewards / dqn_model.agent_dqn.gamma
 				else:
 					finished = np.zeros(dqn_model.num_agents)
-
+				
 				if dqn_model.agent_dqn.use_summary:
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/legible_reward", sum(legible_rewards) / dqn_model.n_leg_agents,
 																  epoch + start_record_epoch)
@@ -219,17 +217,18 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 				if dqn_model.use_vdn:
 					dqn_model.replay_buffer.add(obs, next_obs, actions, np.hstack((legible_rewards[:dqn_model.n_leg_agents], rewards[dqn_model.n_leg_agents:])),
 												finished[0], [infos])
+					episode_rewards += sum(legible_rewards) / dqn_model.n_leg_agents
 				else:
 					for a_idx in range(dqn_model.n_leg_agents):
 						dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], [infos])
+						episode_rewards += legible_rewards[a_idx] / dqn_model.n_leg_agents
 				obs = next_obs
 				
 				# update Q-network and target network
 				if epoch >= warmup:
 					if epoch % train_freq == 0:
 						loss = jax.device_get(dqn_model.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger, cnn_shape))
-						if dqn_model.write_tensorboard:
-							dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", loss, epoch)
+						avg_loss += [loss]
 					
 					if epoch % target_freq == 0:
 						dqn_model.agent_dqn.update_target_model(tau)
@@ -249,6 +248,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 						dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
 						dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it + start_record_it, it + start_record_it)
 						dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
+						dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), epoch)
 					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 					obs, *_ = env.reset()
 					if env.use_render:
@@ -259,11 +259,8 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 					episode_rewards = 0
 					episode_q_vals = 0
 					episode_start = epoch
-					episode_history = []
-		
+					avg_loss = []
 
-		if interactive:
-			stop_thread.set()
 		return history
 
 
@@ -470,8 +467,6 @@ def main():
 	####################
 	if len(locs_train) > 0:
 		try:
-			logger.info('Starting training for different food locations')
-			goals = [str(loc) for loc in food_locs]
 			wandb.init(project='lb-foraging-legible', entity='miguel-faria',
 					   config={
 						   "field": "%dx%d" % (field_size[0], field_size[1]),
@@ -485,12 +480,13 @@ def main():
 						   "iterations": n_iterations,
 						   "cycles": n_cycles,
 						   "beta": beta,
-					   		"tags": tags
 					   },
-					   dir=log_dir / 'wandb',
+					   dir=log_dir,
 					   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
 							 now.strftime("%Y%m%d-%H%M%S")),
 					   sync_tensorboard=True)
+			logger.info('Starting training for different food locations')
+			goals = [str(loc) for loc in food_locs]
 			for loc in locs_train:
 				logger.info('Training for location: %dx%d' % (loc[0], loc[1]))
 				logger.info('Environment setup')
@@ -541,8 +537,9 @@ def main():
 						cycle_init_eps = eps_cycle_schedule(cycle, n_cycles, initial_eps, final_eps, cycle_eps_decay)
 					env.spawn_players([player_level] * n_agents)
 					env.spawn_food(n_foods_spawn, food_level)
-					agent_madqn.replay_buffer.reset()
+					# agent_madqn.replay_buffer.reset()
 					logger.info('Cycle params:')
+					logger.info('Agents: ' + ', '.join(['%s @ (%d, %d) with level %d' % (player.player_id, *player.position, player.level) for player in env.players]))
 					logger.info('Number of food spawn:\t%d' % n_foods_spawn)
 					logger.info('Food locations: ' + ', '.join(['(%d, %d)' % pos for pos in ([loc] + env.food_spawn_pos if n_foods_spawn < n_foods else food_locs)]))
 					logger.info('Food objective: (%d, %d)' % env.obj_food)
@@ -552,7 +549,7 @@ def main():
 					cnn_shape = (0,) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
 					history = train_legible_dqn(env, agent_madqn, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
 												final_eps, eps_type, leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-												cycle, greedy_action=False, sofmax_temp=temp, interactive=INTERACTIVE_SESSION)
+												cycle, greedy_action=False, sofmax_temp=temp)
 					
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None

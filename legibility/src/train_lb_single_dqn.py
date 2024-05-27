@@ -262,14 +262,13 @@ def main():
 						   "dqn_architecture": architecture,
 						   "iterations": n_iterations,
 						   "cycles": n_cycles,
-					   		"tags": tags
 					   },
-					   dir=log_dir / 'wandb',
+					   dir=log_dir,
 					   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
 							 now.strftime("%Y%m%d-%H%M%S")),
 					   sync_tensorboard=True)
+			logger.info('Starting training for different food locations')
 			for loc in locs_train:
-				logger.info('Starting training for different food locations')
 				logger.info('Training for location: %d, %d' % (loc[0], loc[1]))
 				logger.info('Environment setup')
 				env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs,

@@ -114,14 +114,13 @@ class SingleModelMADQN(object):
 	#####################
 	### Class Methods ###
 	#####################
-	def mse_loss(self, params: flax.core.FrozenDict, observations: jnp.ndarray, actions: jnp.ndarray, next_q_value: jnp.ndarray,
-				 online_params: List[flax.core.FrozenDict] = None):
+	def mse_loss(self, params: flax.core.FrozenDict, observations: jnp.ndarray, actions: jnp.ndarray, next_q_value: jnp.ndarray):
 		q = jnp.zeros((next_q_value.shape[0]))
 		for idx in range(self._n_agents):
 			qa = self._agent_dqn.q_network.apply(params, observations[:, idx])
 			q += qa[np.arange(qa.shape[0]), actions[:, idx].squeeze()]
 		q = q.reshape(-1, 1)
-		return optax.l2_loss(q, next_q_value).mean(), q
+		return ((q - next_q_value) ** 2).mean(), q
 	
 	@partial(jit, static_argnums=(0,))
 	def compute_vdn_dqn_loss(self, q_state: TrainState, target_state_params: flax.core.FrozenDict, observations: jnp.ndarray, actions: jnp.ndarray,
@@ -354,7 +353,7 @@ class LegibleSingleMADQN(SingleModelMADQN):
 			obs_shape = (0,) if not use_cnn else (*observation_space.shape[1:], observation_space.shape[0])
 			template = TrainState.create(apply_fn=self._agent_dqn.q_network.apply,
 										 params=self._agent_dqn.q_network.init(jax.random.PRNGKey(201), jnp.empty(obs_shape)),
-										 tx=optax.adam(learning_rate=0.0001))
+										 tx=optax.adam(learning_rate=0.0))
 			with open(file_path, "rb") as f:
 				self._optimal_models[goal_id] = flax.serialization.from_bytes(template, f.read())
 	
@@ -387,84 +386,51 @@ class LegibleSingleMADQN(SingleModelMADQN):
 	#####################
 	### Class Methods ###
 	#####################
-	def mse_loss(self, params: flax.core.FrozenDict, observations: jnp.ndarray, actions: jnp.ndarray, next_q_value: jnp.ndarray,
-				 online_state_params: List[flax.core.FrozenDict] = None):
-		q = jnp.zeros((next_q_value.shape[0]))
+	def mse_loss(self, params: flax.core.FrozenDict, observations: jnp.ndarray, actions: jnp.ndarray, next_q_value: jnp.ndarray):
+		q = jnp.zeros(next_q_value.shape[0])
 		for idx in range(self._n_agents):
 			if idx < self._n_leg_agents:
 				qa = self._agent_dqn.q_network.apply(params, observations[:, idx])
 			else:
-				qa = self._agent_dqn.q_network.apply(online_state_params[idx], observations[:, idx])
-			q += qa[np.arange(qa.shape[0]), actions[:, idx].squeeze()]
-		q = q / self._n_agents
-		q = q.reshape(-1, 1)
-		return optax.l2_loss(q, next_q_value).mean(), q
+				qa = self._agent_dqn.q_network.apply(self._optimal_models[self._goal].params, observations[:, idx])
+			q += qa[jnp.arange(qa.shape[0]), actions[:, idx].squeeze()]
+		q = q.reshape(-1)
+		return ((q - next_q_value) ** 2).mean(), q
 	
 	@partial(jit, static_argnums=(0,))
-	def compute_vdn_dqn_loss(self, q_state: TrainState, online_state_params: List[flax.core.FrozenDict], target_state_params: List[flax.core.FrozenDict],
-							  observations: jnp.ndarray, actions: jnp.ndarray, next_observations: jnp.ndarray, rewards: jnp.ndarray, dones: jnp.ndarray):
+	def compute_vdn_dqn_loss(self, q_state: TrainState, target_state_params: flax.core.FrozenDict, observations: jnp.ndarray, actions: jnp.ndarray,
+							 next_observations: jnp.ndarray, rewards: jnp.ndarray, dones: jnp.ndarray):
 		n_obs = len(observations)
-		next_q_value = np.zeros(n_obs)
-		for idx in range(self._n_agents):
-			next_q_value += self._agent_dqn.compute_dqn_targets(dones, next_observations[:, idx], rewards[:, idx], target_state_params[idx])
-		next_q_value = next_q_value / self._n_agents
-		
-		(loss_value, q_pred), grads = jax.value_and_grad(self.mse_loss, has_aux=True)(q_state.params, observations, actions, next_q_value, online_state_params)
-		q_state = q_state.apply_gradients(grads=grads)
-		return loss_value, q_pred, q_state
-	
-	@partial(jit, static_argnums=(0,))
-	def compute_vdn_ddqn_loss(self, q_state: TrainState, online_state_params: List[flax.core.FrozenDict], target_state_params: List[flax.core.FrozenDict],
-							  observations: jnp.ndarray, actions: jnp.ndarray, next_observations: jnp.ndarray, rewards: jnp.ndarray, dones: jnp.ndarray):
-		n_obs = len(observations)
-		next_q_value = jnp.zeros((n_obs, 1))
+		next_q_value = jnp.zeros(n_obs, dtype=jnp.float32)
 		for idx in range(self._n_agents):
 			if idx < self._n_leg_agents:
-				next_qs = self._agent_dqn.compute_ddqn_targets(dones, next_observations[:, idx], rewards[:, idx, None], target_state_params[idx],
-															   online_state_params[idx])
+				next_q_value += self._agent_dqn.compute_dqn_targets(dones, next_observations[:, idx], rewards[:, idx], target_state_params)
 			else:
-				next_qs = self._agent_dqn.compute_dqn_targets(dones.ravel(), next_observations[:, idx], rewards[:, idx], target_state_params[idx]).reshape((-1, 1))
-			next_q_value += next_qs
-		next_q_value = next_q_value / self._n_agents
+				# next_q_value += self._agent_dqn.compute_dqn_targets(dones, next_observations[:, idx], rewards[:, idx],
+				# 													self._optimal_models[self._goal].params)
+				next_q_value += self._agent_dqn.q_network.apply(self._optimal_models[self._goal].params, next_observations[:, idx]).max(axis=1)
 		
-		(loss_value, q_pred), grads = jax.value_and_grad(self.mse_loss, has_aux=True)(q_state.params, observations, actions, next_q_value, online_state_params)
+		(loss_value, q_pred), grads = jax.value_and_grad(self.mse_loss, has_aux=True)(q_state.params, observations, actions, next_q_value)
 		q_state = q_state.apply_gradients(grads=grads)
 		return loss_value, q_pred, q_state
 	
-	def update_model(self, batch_size, epoch, start_time, tensorboard_frequency, logger: logging.Logger, cnn_shape: Tuple[int] = None):
-		data = self._replay_buffer.sample(batch_size)
-		observations = data.observations
-		next_observations = data.next_observations
-		actions = data.actions
-		rewards = data.rewards
-		dones = data.dones
-		# train_info = ('epoch: %d \t' % epoch)
-		
-		if self._use_vdn:
-			online_state_params = ([self._agent_dqn.online_state.params] * self._n_leg_agents +
-								   [self._optimal_models[self._goal].params] * (self.num_agents - self._n_leg_agents))
-			target_state_params = ([self._agent_dqn.target_params] * self._n_leg_agents +
-								   [self._optimal_models[self._goal].params] * (self.num_agents - self._n_leg_agents))
-			if self._agent_dqn.cnn_layer and cnn_shape is not None:
-				observations = observations.reshape((*observations.shape[:2], *cnn_shape))
-				next_observations = next_observations.reshape((*next_observations.shape[:2], *cnn_shape))
-			if self._use_ddqn:
-				loss, q_pred, self._agent_dqn.online_state = self.compute_vdn_ddqn_loss(self._agent_dqn.online_state, online_state_params, target_state_params,
-																						observations, actions, next_observations, rewards, dones)
+	@partial(jit, static_argnums=(0,))
+	def compute_vdn_ddqn_loss(self, q_state: TrainState, target_state_params: flax.core.FrozenDict, observations: jnp.ndarray, actions: jnp.ndarray,
+							  next_observations: jnp.ndarray, rewards: jnp.ndarray, dones: jnp.ndarray):
+		n_obs = len(observations)
+		next_q_value = jnp.zeros(n_obs, dtype=jnp.float32)
+		for idx in range(self._n_agents):
+			if idx < self._n_leg_agents:
+				next_q_value += self._agent_dqn.compute_ddqn_targets(dones, next_observations[:, idx], rewards[:, idx].reshape(-1, 1), target_state_params,
+																	 q_state.params).squeeze()
 			else:
-				loss, q_pred, self._agent_dqn.online_state = self.compute_vdn_dqn_loss(self._agent_dqn.online_state, online_state_params, target_state_params,
-																					   observations, actions, next_observations, rewards, dones)
-			loss = float(loss)
-		else:
-			if self._agent_dqn.cnn_layer and cnn_shape is not None:
-				observations = observations.reshape((len(observations), *cnn_shape))
-				next_observations = next_observations.reshape((len(next_observations), *cnn_shape))
-			loss = self._agent_dqn.update_online_model(observations, actions, next_observations, rewards, dones)
+				# next_q_value += self._agent_dqn.compute_dqn_targets(dones, next_observations[:, idx], rewards[:, idx],
+				# 													self._optimal_models[self._goal].params)
+				next_q_value += self._agent_dqn.q_network.apply(self._optimal_models[self._goal].params, next_observations[:, idx]).max(axis=1)
 		
-		# train_info += ('loss: %.7f\t' % loss)
-		# logger.debug('Train Info: ' + train_info)
-		return loss
-
+		(loss_value, q_pred), grads = jax.value_and_grad(self.mse_loss, has_aux=True)(q_state.params, observations, actions, next_q_value)
+		q_state = q_state.apply_gradients(grads=grads)
+		return loss_value, q_pred, q_state
 
 	def train_dqn(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float,
 				  final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99,

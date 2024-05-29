@@ -25,7 +25,7 @@ USE_DDQN = True
 USE_CNN = True
 USE_VDN = True
 USE_TENSORBOARD = True
-LEG_REWARD = 'simple'
+LEG_REWARD = 'q_vals'
 
 # Train params
 MAX_CYCLES = 100

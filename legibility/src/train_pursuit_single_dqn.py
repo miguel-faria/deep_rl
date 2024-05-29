@@ -94,6 +94,7 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 	start_record_epoch = cycle * max_timesteps * env.n_preys
 	epoch = start_record_epoch
 	eps = initial_eps
+	avg_loss = []
 	
 	for it in range(num_iterations):
 		if use_render and eps <= final_eps:
@@ -167,9 +168,10 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 				if epoch % train_freq == 0:
 					loss = jax.device_get(dqn_model.update_model(batch_size, epoch - start_record_epoch, start_time,
 																 tensorboard_frequency, logger, cnn_shape=cnn_shape))
-					if dqn_model.write_tensorboard:
-						dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", loss, epoch)
-						# dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
+					# if dqn_model.write_tensorboard:
+					# 	dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", loss, epoch)
+					# 	dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
+					avg_loss += [loss]
 				
 				if epoch % target_freq == 0:
 					dqn_model.agent_dqn.update_target_model(tau)
@@ -186,12 +188,15 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), epoch)
 				env.reset_init_pos()
 				obs, *_ = env.reset()
 				done = True
 				history += [episode_history]
 				episode_rewards = 0
 				episode_start = epoch
+				avg_loss = []
 					
 	return history
 

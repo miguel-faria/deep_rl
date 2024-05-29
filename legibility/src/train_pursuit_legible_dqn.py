@@ -56,8 +56,8 @@ def get_target_seqs(targets: List[str]) -> List[Tuple[str]]:
 
 def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: PursuitEnv, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float,
 							  tau: float, initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger,
-							  exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1,
-							  use_render: bool = False, cycle: int = 0, greedy_action: bool = True, sofmax_temp: float = 1.0) -> List:
+							  cnn_shape: Tuple[int], exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100,
+							  tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0, greedy_action: bool = True, sofmax_temp: float = 1.0) -> List:
 	rng_gen = np.random.default_rng(rng_seed)
 	
 	history = []
@@ -70,6 +70,7 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: PursuitEnv, nu
 	start_record_it = cycle * num_iterations
 	start_record_epoch = cycle * max_timesteps * env.n_preys
 	epoch = start_record_epoch
+	avg_loss = []
 	
 	for it in range(num_iterations):
 		if use_render:
@@ -121,31 +122,32 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: PursuitEnv, nu
 			legible_rewards = np.zeros(dqn_model.num_agents)
 			live_goals = env.prey_alive_ids
 			n_goals = len(env.prey_alive_ids)
-			for a_idx in range(dqn_model.num_agents):
-				act_q_vals = np.zeros(n_goals)
-				action = actions[a_idx]
-				goal_action_q = 0.0
-				for g_idx in range(n_goals):
-					if dqn_model.agent_dqn.cnn_layer:
-						obs_reshape = obs[a_idx].reshape((1, *obs[a_idx].shape))
-						q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[live_goals[g_idx]].params, obs_reshape)[0]
+			if n_goals > 1:
+				for a_idx in range(dqn_model.num_agents):
+					act_q_vals = np.zeros(n_goals)
+					action = actions[a_idx]
+					goal_action_q = 0.0
+					for g_idx in range(n_goals):
+						if dqn_model.agent_dqn.cnn_layer:
+							obs_reshape = obs[a_idx].reshape((1, *obs[a_idx].shape))
+							q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[live_goals[g_idx]].params, obs_reshape)[0]
+						else:
+							q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[live_goals[g_idx]].params, obs[a_idx])
+						if dqn_model.goal == live_goals[g_idx]:
+							goal_action_q = q_vals[action]
+						logger.info(np.exp(dqn_model.beta * (q_vals[action] - q_vals.max()) / sofmax_temp))
+						act_q_vals[g_idx] = np.exp(dqn_model.beta * (q_vals[action] - q_vals.max()) / sofmax_temp)
+					if reward_type == 'reward':
+						legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) * rewards[a_idx]
+					elif reward_type == 'q_vals':
+						legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) * goal_action_q
+					elif reward_type == 'info':
+						legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) + rewards[a_idx]
 					else:
-						q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[live_goals[g_idx]].params, obs[a_idx])
-					if dqn_model.goal == live_goals[g_idx]:
-						goal_action_q = q_vals[action]
-					logger.info(np.exp(dqn_model.beta * (q_vals[action] - q_vals.max()) / sofmax_temp))
-					act_q_vals[g_idx] = np.exp(dqn_model.beta * (q_vals[action] - q_vals.max()) / sofmax_temp)
-				# act_q_vals[g_idx] = np.exp(dqn_model.beta * q_vals[action])
-				# logger.info("Q-vals:\t" + str(act_q_vals / act_q_vals.sum()))
-				if reward_type == 'reward':
-					legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) * rewards[a_idx]
-				elif reward_type == 'q_vals':
-					legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) * goal_action_q
-				elif reward_type == 'info':
-					legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) + rewards[a_idx]
-				else:
-					legible_rewards[a_idx] = act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()
-				episode_rewards += (legible_rewards[a_idx] / dqn_model.num_agents)
+						legible_rewards[a_idx] = act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()
+			else:
+				for a_idx in range(dqn_model.n_leg_agents):
+					legible_rewards[a_idx] = rewards[a_idx]
 			
 			if terminated or (timeout and infos['preys_left'] > 0) or ('caught_target' in infos.keys() and infos['caught_target']):
 				finished = np.ones(dqn_model.num_agents)
@@ -156,21 +158,26 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: PursuitEnv, nu
 			logger.info(str(finished) + '\tTimestep: %d' % env.env_timestep)
 			
 			# store new samples
-			for a_idx in range(env.n_hunters):
-				dqn_model.agent_dqn.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], rewards[a_idx], finished[a_idx], [])
-				episode_rewards += (rewards[a_idx] / dqn_model.num_agents)
+			if dqn_model.use_vdn:
+				dqn_model.replay_buffer.add(obs, next_obs, actions,
+											np.hstack((legible_rewards[:dqn_model.n_leg_agents], rewards[dqn_model.n_leg_agents:env.n_hunters])),
+											finished[0], [infos])
+				episode_rewards += sum(legible_rewards) / dqn_model.n_leg_agents
+			else:
+				for a_idx in range(env.n_hunters):
+					dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], [])
+					episode_rewards += legible_rewards[a_idx] / dqn_model.n_leg_agents
+			
 			if dqn_model.agent_dqn.use_summary:
 				dqn_model.agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards[:env.n_hunters]) / env.n_hunters, epoch + start_record_epoch)
-			
-			if 'real_obs' in infos.keys() and infos['real_obs'] is not None:
-				obs = infos['real_obs']
-			else:
-				obs = next_obs
+			obs = next_obs
 			
 			# update Q-network and target network
 			if epoch >= warmup:
 				if epoch % train_freq == 0:
-					dqn_model.update_model(batch_size, epoch - start_record_epoch, start_time, tensorboard_frequency, logger)
+					loss = jax.device_get(dqn_model.update_model(batch_size, epoch - start_record_epoch, start_time,
+																 tensorboard_frequency, logger, cnn_shape=cnn_shape))
+					avg_loss += [loss]
 				
 				if epoch % target_freq == 0:
 					dqn_model.agent_dqn.update_target_model(tau)
@@ -186,12 +193,16 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: PursuitEnv, nu
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_return", episode_rewards, it + start_record_it)
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
 					dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), epoch)
 				env.reset_init_pos()
 				obs, *_ = env.reset()
 				done = True
 				history += [episode_history]
 				episode_rewards = 0
 				episode_start = epoch
+				avg_loss = []
 	
 	return history
 
@@ -384,7 +395,7 @@ def main():
 	env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids, require_catch, max_steps, use_layer_obs=True)
 	# env = PursuitEnv(hunters, preys, field_size, sight, require_catch, max_steps, use_layer_obs=True)
 	logger.info('Setup multi-agent DQN')
-	dqn_model = SingleModelMADQN(n_agents, env.action_space[0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, env.observation_space[0],
+	dqn_model = LegibleSingleMADQN(n_agents, env.action_space[0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, env.observation_space[0],
 								 use_gpu, dueling_dqn, use_ddqn, use_cnn, False, use_tensorboard,
 								 tensorboard_details + ['%dh-%dp-%dc' % (n_hunters, n_preys, require_catch)])
 	random.seed(RNG_SEED)

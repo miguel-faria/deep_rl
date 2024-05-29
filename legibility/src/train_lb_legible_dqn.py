@@ -186,7 +186,6 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 							if dqn_model.goal == live_goals[g_idx]:
 								goal_action_q = q_vals[action]
 							act_q_vals[g_idx] = np.exp(dqn_model.beta * (q_vals[action] - q_vals.mean()) / sofmax_temp)
-							# act_q_vals[g_idx] = np.exp(dqn_model.beta * q_vals[action])
 						if reward_type == 'reward':
 							legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) * max(rewards[a_idx], 1e-3)
 						elif reward_type == 'q_vals':

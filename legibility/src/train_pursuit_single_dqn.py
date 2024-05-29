@@ -16,7 +16,6 @@ import gc
 from dl_algos.single_model_madqn import SingleModelMADQN
 from dl_algos.dqn import DQNetwork, EPS_TYPE
 from dl_envs.pursuit.pursuit_env import PursuitEnv, TargetPursuitEnv
-from memory_profiler import profile
 from pathlib import Path
 from itertools import permutations
 from typing import List, Tuple, Union
@@ -71,7 +70,6 @@ def get_target_seqs(targets: List[str]) -> List[Tuple[str]]:
 		return None
 
 
-@profile
 def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float,
 					  tau: float, initial_eps: float, final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
 					  exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1,
@@ -373,172 +371,173 @@ def main():
 	#####################
 	## Training Models ##
 	#####################
-	try:
-		wandb.init(project='pursuit-optimal', entity='miguel-faria',
-				   config={
-					   "field": "%dx%d" % (field_size[0], field_size[1]),
-					   "agents": n_agents,
-					   "preys": n_preys,
-					   "hunters": n_hunters,
-					   "online_learing_rate": learn_rate,
-					   "target_learning_rate": target_update_rate,
-					   "discount": gamma,
-					   "eps_decay": eps_type,
-					   "dqn_architecture": architecture,
-					   "iterations": n_iterations,
-					   "tags": tags
-				   },
-				   dir=log_dir / 'wandb',
-				   name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_preys, prey_type) +
-						 now.strftime("%Y%m%d-%H%M%S")),
-				   sync_tensorboard=True)
-		logger.info('##########################')
-		logger.info('Starting Pursuit DQN Train')
-		logger.info('##########################')
-		n_cycles = n_preys * args.n_cycles
-		logger.info('Number of cycles: %d' % n_cycles)
-		logger.info('Number of iterations per cycle: %d' % n_iterations)
-		logger.info('Environment setup')
-		env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids[0], require_catch, max_steps, use_layer_obs=True, agent_centered=True,
-							   catch_reward=args.catch_reward)
-		# env = PursuitEnv(hunters, preys, field_size, sight, require_catch, max_steps, use_layer_obs=True)
-		logger.info('Setup multi-agent DQN')
-		if isinstance(env.observation_space, gymnasium.spaces.MultiBinary):
-			obs_space = gymnasium.spaces.MultiBinary([*env.observation_space.shape[1:]])
-		else:
-			obs_space = env.observation_space[0]
-		action_dim = env.action_space[0].n
-		agent_action_space = gymnasium.spaces.MultiDiscrete([action_dim] * env.n_hunters)
-		if use_vdn:
-			dqn_model = SingleModelMADQN(n_agents, action_dim, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space,
-										 env.observation_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
-										 tensorboard_details + ['%dh-%dp-%dc' % (n_hunters, n_preys, require_catch)], cnn_properties=cnn_properties)
-		else:
-			dqn_model = SingleModelMADQN(n_agents, action_dim, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space, obs_space,
-										 use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
-										 tensorboard_details + ['%dh-%dp-%dc' % (n_hunters, n_preys, require_catch)], cnn_properties=cnn_properties)
-		random.seed(RNG_SEED)
-		preys_list = [random.choice(prey_ids) for _ in range(n_cycles)]
-		logger.info('Starting training')
-		for cycle in range(n_cycles):
-			logger.info('Cycle %d of %d' % (cycle+1, n_cycles))
-			env.seed(RNG_SEED)
-			sys.stdout.flush()
-			if cycle == 0:
-				cycle_init_eps = initial_eps
+	if train_acc <= 0.9:
+		try:
+			wandb.init(project='pursuit-optimal', entity='miguel-faria',
+					   config={
+						   "field": "%dx%d" % (field_size[0], field_size[1]),
+						   "agents": n_agents,
+						   "preys": n_preys,
+						   "hunters": n_hunters,
+						   "online_learing_rate": learn_rate,
+						   "target_learning_rate": target_update_rate,
+						   "discount": gamma,
+						   "eps_decay": eps_type,
+						   "dqn_architecture": architecture,
+						   "iterations": n_iterations,
+						   "tags": tags
+					   },
+					   dir=log_dir / 'wandb',
+					   name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_preys, prey_type) +
+							 now.strftime("%Y%m%d-%H%M%S")),
+					   sync_tensorboard=True)
+			logger.info('##########################')
+			logger.info('Starting Pursuit DQN Train')
+			logger.info('##########################')
+			n_cycles = n_preys * args.n_cycles
+			logger.info('Number of cycles: %d' % n_cycles)
+			logger.info('Number of iterations per cycle: %d' % n_iterations)
+			logger.info('Environment setup')
+			env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids[0], require_catch, max_steps, use_layer_obs=True, agent_centered=True,
+								   catch_reward=args.catch_reward)
+			# env = PursuitEnv(hunters, preys, field_size, sight, require_catch, max_steps, use_layer_obs=True)
+			logger.info('Setup multi-agent DQN')
+			if isinstance(env.observation_space, gymnasium.spaces.MultiBinary):
+				obs_space = gymnasium.spaces.MultiBinary([*env.observation_space.shape[1:]])
 			else:
-				cycle_init_eps = eps_cycle_schedule('exp', cycle, n_cycles, initial_eps, final_eps, cycle_decay)
-			env.target = preys_list[cycle]
-			logger.info('Starting exploration: %d with decay of %f' % (cycle_init_eps, eps_decay))
-			cycle_warmup = warmup * 0.5 ** min(cycle, 1)
-			cnn_shape = (0,) if not dqn_model.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
-			history = train_pursuit_dqn(dqn_model, env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
-										final_eps, eps_type, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-										use_render, cycle)
-			
-		logger.info('Saving final model')
-		dqn_model.save_model(('preys_%d' % n_preys), model_path, logger)
-		sys.stdout.flush()
-	
-		####################
-		## Testing Model ##
-		####################
-		env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids[0], require_catch, max_steps, use_layer_obs=True)
-		env.seed(TEST_RNG_SEED)
-		np.random.seed(TEST_RNG_SEED)
-		random.seed(TEST_RNG_SEED)
-		# failed_history = []
-		tests_passed = 0
-		testing_prey_lists = [random.choice(prey_ids) for _ in range(N_TESTS)]
-		for n_test in range(N_TESTS):
-			env.reset_init_pos()
-			obs, *_ = env.reset()
-			logger.info('Test number %d' % (n_test + 1))
-			logger.info('Prey locations: ' + ', '.join(['(%d, %d)' % env.agents[prey_id].pos for prey_id in env.prey_alive_ids]))
-			logger.info('Agent positions: ' + ', '.join(['(%d, %d)' % env.agents[hunter_id].pos for hunter_id in env.hunter_ids]))
-			logger.info('Testing sequence: ' + ', '.join(testing_prey_lists[n_test]))
-			obs, *_ = env.reset()
-			epoch = 0
-			agent_reward = [0] * n_hunters
-			game_over = False
-			finished = False
-			timeout = False
-			env.target = testing_prey_lists[n_test]
-			cnn_shape = (0,) if not dqn_model.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
-			while not game_over:
-				
-				actions = []
-				for h_idx in range(n_hunters):
-					if dqn_model.agent_dqn.cnn_layer:
-						q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.agent_dqn.online_state.params,
-																	   obs[h_idx].reshape((1, *cnn_shape)))[0]
-					else:
-						q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.agent_dqn.online_state.params, obs[h_idx])
-					action = q_values.argmax(axis=-1)
-					action = jax.device_get(action)
-					actions += [action]
-				for prey_id in env.prey_alive_ids:
-					actions += [env.agents[prey_id].act(env)]
-				actions = np.array(actions)
-				next_obs, rewards, finished, timeout, infos = env.step(actions)
-				for i in range(n_hunters):
-					agent_reward[i] = rewards[i]
-				obs = next_obs
-				
-				if finished or timeout:
-					game_over = True
-				
+				obs_space = env.observation_space[0]
+			action_dim = env.action_space[0].n
+			agent_action_space = gymnasium.spaces.MultiDiscrete([action_dim] * env.n_hunters)
+			if use_vdn:
+				dqn_model = SingleModelMADQN(n_agents, action_dim, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space,
+											 env.observation_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
+											 tensorboard_details + ['%dh-%dp-%dc' % (n_hunters, n_preys, require_catch)], cnn_properties=cnn_properties)
+			else:
+				dqn_model = SingleModelMADQN(n_agents, action_dim, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space, obs_space,
+											 use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
+											 tensorboard_details + ['%dh-%dp-%dc' % (n_hunters, n_preys, require_catch)], cnn_properties=cnn_properties)
+			random.seed(RNG_SEED)
+			preys_list = [random.choice(prey_ids) for _ in range(n_cycles)]
+			logger.info('Starting training')
+			for cycle in range(n_cycles):
+				logger.info('Cycle %d of %d' % (cycle+1, n_cycles))
+				env.seed(RNG_SEED)
 				sys.stdout.flush()
-				epoch += 1
+				if cycle == 0:
+					cycle_init_eps = initial_eps
+				else:
+					cycle_init_eps = eps_cycle_schedule('exp', cycle, n_cycles, initial_eps, final_eps, cycle_decay)
+				env.target = preys_list[cycle]
+				logger.info('Starting exploration: %d with decay of %f' % (cycle_init_eps, eps_decay))
+				cycle_warmup = warmup * 0.5 ** min(cycle, 1)
+				cnn_shape = (0,) if not dqn_model.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
+				history = train_pursuit_dqn(dqn_model, env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
+											final_eps, eps_type, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
+											use_render, cycle)
+				
+			logger.info('Saving final model')
+			dqn_model.save_model(('preys_%d' % n_preys), model_path, logger)
+			sys.stdout.flush()
+		
+			####################
+			## Testing Model ##
+			####################
+			env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids[0], require_catch, max_steps, use_layer_obs=True)
+			env.seed(TEST_RNG_SEED)
+			np.random.seed(TEST_RNG_SEED)
+			random.seed(TEST_RNG_SEED)
+			# failed_history = []
+			tests_passed = 0
+			testing_prey_lists = [random.choice(prey_ids) for _ in range(N_TESTS)]
+			for n_test in range(N_TESTS):
+				env.reset_init_pos()
+				obs, *_ = env.reset()
+				logger.info('Test number %d' % (n_test + 1))
+				logger.info('Prey locations: ' + ', '.join(['(%d, %d)' % env.agents[prey_id].pos for prey_id in env.prey_alive_ids]))
+				logger.info('Agent positions: ' + ', '.join(['(%d, %d)' % env.agents[hunter_id].pos for hunter_id in env.hunter_ids]))
+				logger.info('Testing sequence: ' + ', '.join(testing_prey_lists[n_test]))
+				obs, *_ = env.reset()
+				epoch = 0
+				agent_reward = [0] * n_hunters
+				game_over = False
+				finished = False
+				timeout = False
+				env.target = testing_prey_lists[n_test]
+				cnn_shape = (0,) if not dqn_model.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
+				while not game_over:
+					
+					actions = []
+					for h_idx in range(n_hunters):
+						if dqn_model.agent_dqn.cnn_layer:
+							q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.agent_dqn.online_state.params,
+																		   obs[h_idx].reshape((1, *cnn_shape)))[0]
+						else:
+							q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.agent_dqn.online_state.params, obs[h_idx])
+						action = q_values.argmax(axis=-1)
+						action = jax.device_get(action)
+						actions += [action]
+					for prey_id in env.prey_alive_ids:
+						actions += [env.agents[prey_id].act(env)]
+					actions = np.array(actions)
+					next_obs, rewards, finished, timeout, infos = env.step(actions)
+					for i in range(n_hunters):
+						agent_reward[i] = rewards[i]
+					obs = next_obs
+					
+					if finished or timeout:
+						game_over = True
+					
+					sys.stdout.flush()
+					epoch += 1
+				
+				if finished:
+					tests_passed += 1
+					logger.info('Test %d finished in success' % (n_test + 1))
+					logger.info('Number of epochs: %d' % epoch)
+					logger.info('Accumulated reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0], agent_reward[1]))
+					logger.info('Average reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0] / epoch, agent_reward[1] / epoch))
+				if timeout:
+					logger.info('Test %d timed out' % (n_test + 1))
 			
-			if finished:
-				tests_passed += 1
-				logger.info('Test %d finished in success' % (n_test + 1))
-				logger.info('Number of epochs: %d' % epoch)
-				logger.info('Accumulated reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0], agent_reward[1]))
-				logger.info('Average reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0] / epoch, agent_reward[1] / epoch))
-			if timeout:
-				logger.info('Test %d timed out' % (n_test + 1))
-		
-		env.close()
-		logger.info('Passed %d tests out of %d' % (tests_passed, N_TESTS))
-		
-		if (tests_passed / N_TESTS) > train_acc:
-			logger.info('Updating best model for current loc')
-			Path.mkdir(model_path.parent.absolute() / 'best', parents=True, exist_ok=True)
-			dqn_model.save_model('all_preys', model_path.parent.absolute() / 'best', logger)
-			train_acc = tests_passed / N_TESTS
-		
-		gc.collect()
-		wandb.finish()
-		with open(data_dir / 'performances' / 'pursuit' / ('train_performances%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
-				  mode='r+', encoding='utf-8') as train_file:
-			performance_data = yaml.safe_load(train_file)
-			field_idx = str(field_size[0]) + 'x' + str(field_size[1])
-			hunter_idx = str(n_hunters) + '-hunters'
-			prey_idx = str(n_preys) + '-preys'
-			performance_data[field_idx][hunter_idx][prey_idx] = train_acc
-			train_file.seek(0)
-			sorted_data = dict(
-				[[sorted_key, performance_data[sorted_key]] for sorted_key in
-				 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
-			yaml.safe_dump(sorted_data, train_file)
-		
-	except KeyboardInterrupt as ks:
-		logger.info('Caught keyboard interrupt, cleaning up and closing.')
-		wandb.finish()
-		with open(data_dir / 'performances' / 'pursuit' / ('train_performances%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
-				  mode='r+', encoding='utf-8') as train_file:
-			performance_data = yaml.safe_load(train_file)
-			field_idx = str(field_size[0]) + 'x' + str(field_size[1])
-			hunter_idx = str(n_hunters) + '-hunters'
-			prey_idx = str(n_preys) + '-preys'
-			performance_data[field_idx][hunter_idx][prey_idx] = train_acc
-			train_file.seek(0)
-			sorted_data = dict(
-				[[sorted_key, performance_data[sorted_key]] for sorted_key in
-				 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
-			yaml.safe_dump(sorted_data, train_file)
+			env.close()
+			logger.info('Passed %d tests out of %d' % (tests_passed, N_TESTS))
+			
+			if (tests_passed / N_TESTS) > train_acc:
+				logger.info('Updating best model for current loc')
+				Path.mkdir(model_path.parent.absolute() / 'best', parents=True, exist_ok=True)
+				dqn_model.save_model('all_preys', model_path.parent.absolute() / 'best', logger)
+				train_acc = tests_passed / N_TESTS
+			
+			gc.collect()
+			wandb.finish()
+			with open(data_dir / 'performances' / 'pursuit' / ('train_performances%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
+					  mode='r+', encoding='utf-8') as train_file:
+				performance_data = yaml.safe_load(train_file)
+				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
+				hunter_idx = str(n_hunters) + '-hunters'
+				prey_idx = str(n_preys) + '-preys'
+				performance_data[field_idx][hunter_idx][prey_idx] = train_acc
+				train_file.seek(0)
+				sorted_data = dict(
+					[[sorted_key, performance_data[sorted_key]] for sorted_key in
+					 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+				yaml.safe_dump(sorted_data, train_file)
+			
+		except KeyboardInterrupt as ks:
+			logger.info('Caught keyboard interrupt, cleaning up and closing.')
+			wandb.finish()
+			with open(data_dir / 'performances' / 'pursuit' / ('train_performances%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
+					  mode='r+', encoding='utf-8') as train_file:
+				performance_data = yaml.safe_load(train_file)
+				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
+				hunter_idx = str(n_hunters) + '-hunters'
+				prey_idx = str(n_preys) + '-preys'
+				performance_data[field_idx][hunter_idx][prey_idx] = train_acc
+				train_file.seek(0)
+				sorted_data = dict(
+					[[sorted_key, performance_data[sorted_key]] for sorted_key in
+					 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+				yaml.safe_dump(sorted_data, train_file)
 
 
 if __name__ == '__main__':

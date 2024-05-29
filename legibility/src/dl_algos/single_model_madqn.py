@@ -335,7 +335,7 @@ class LegibleSingleMADQN(SingleModelMADQN):
 	
 	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float,
 				 beta: float, action_space: Space, observation_space: Space, use_gpu: bool, handle_timeout: bool, models_dir: Path,
-				 optimal_filenames: List[str], goal_ids: List[str], goal: str, dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False,
+				 model_names: Dict[str, str], goal: str, dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False,
 				 use_cnn: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None, n_legible_agents: int = 1,
 				 cnn_properties: List = None):
 		
@@ -343,13 +343,12 @@ class LegibleSingleMADQN(SingleModelMADQN):
 						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, use_tensorboard, tensorboard_data, cnn_properties)
 		
 		self._n_leg_agents = n_legible_agents
-		self._goal_ids = goal_ids.copy()
+		self._goal_ids = list(model_names.keys())
 		self._goal = goal
 		self._beta = beta
 		self._optimal_models = {}
-		for goal_id in goal_ids:
-			idx = goal_ids.index(goal_id)
-			file_path = models_dir / optimal_filenames[idx]
+		for goal_id in model_names.keys():
+			file_path = models_dir / model_names[goal_id]
 			obs_shape = (0,) if not use_cnn else (*observation_space.shape[1:], observation_space.shape[0])
 			template = TrainState.create(apply_fn=self._agent_dqn.q_network.apply,
 										 params=self._agent_dqn.q_network.init(jax.random.PRNGKey(201), jnp.empty(obs_shape)),

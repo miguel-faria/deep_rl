@@ -99,7 +99,6 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 				dqn_model.agent_dqn.init_network_states(rng_seed, obs[0].reshape((1, *cnn_shape)), optim_learn_rate)
 			else:
 				dqn_model.agent_dqn.init_network_states(rng_seed, obs[0], optim_learn_rate)
-		logger.info("Initial DQN params: ", dqn_model.agent_dqn.online_state.params)
 		
 		start_time = time.time()
 		epoch = 0
@@ -132,7 +131,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 																		   obs[a_idx].reshape((1, *cnn_shape)))[0]
 						else:
 							q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_model.goal].params, obs[a_idx])
-
+						logger.info("Explore q_values: " + str(q_values))
 						if greedy_action:
 							action = q_values.argmax(axis=-1)
 						else:
@@ -246,7 +245,8 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 						dqn_model.agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
 						dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
 						dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it + start_record_it, it + start_record_it)
+						dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
+						dqn_model.agent_dqn.summary_writer.add_scalar("charts/cycle", cycle, it + start_record_it)
 						dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
 						dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), epoch)
 					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
@@ -409,7 +409,6 @@ def main():
 				  ('%d-agents' % n_players) / ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / now.strftime("%Y%m%d-%H%M%S"))
 	optim_dir = (models_dir / ('lb_coop_single%s_dqn' % ('_vdn' if optim_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
 				 ('%d-agents' % n_players) /  ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / 'best')
-	optim_models = [fname.name for fname in optim_dir.iterdir()]
 	
 	with open(data_dir / 'performances' / 'lb_foraging' / ('train_legible%s_performances_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
 			  mode='r+', encoding='utf-8') as train_file:
@@ -461,6 +460,15 @@ def main():
 	logger.info('##############################')
 	n_cycles = min(int(number_food_combinations(n_foods - 1, n_foods_spawn - 1)), max_cycles)
 	logger.info('Number of cycles: %d' % n_cycles)
+	optim_models = {}
+	model_names = [fname.name for fname in optim_dir.iterdir()]
+	for loc in food_locs:
+		goal = ''
+		for name in model_names:
+			if name.find("%sx%s" % (loc[0], loc[1])) != -1:
+				goal = name
+				break
+		optim_models[str(loc)] = goal
 	
 	####################
 	## Training Model ##
@@ -471,11 +479,13 @@ def main():
 					   config={
 						   "field": "%dx%d" % (field_size[0], field_size[1]),
 						   "agents": n_agents,
+						   "legible_agents": n_leg_agents,
 						   "foods": n_foods,
 						   "online_learing_rate": learn_rate,
 						   "target_learning_rate": target_update_rate,
 						   "discount": gamma,
 						   "eps_decay": eps_type,
+						   "cycle_decay": cycle_eps_decay,
 						   "dqn_architecture": architecture,
 						   "iterations": n_iterations,
 						   "cycles": n_cycles,
@@ -486,7 +496,6 @@ def main():
 							 now.strftime("%Y%m%d-%H%M%S")),
 					   sync_tensorboard=True)
 			logger.info('Starting training for different food locations')
-			goals = [str(loc) for loc in food_locs]
 			for loc in locs_train:
 				logger.info('Training for location: %dx%d' % (loc[0], loc[1]))
 				logger.info('Environment setup')
@@ -504,13 +513,13 @@ def main():
 				if use_vdn:
 					action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
 					agent_madqn = LegibleSingleMADQN(n_agents, n_actions, n_layers, nn.relu, layer_sizes, buffer_size, gamma, beta, action_space, env.observation_space,
-													 use_gpu, False, optim_dir, optim_models, goals, str(loc), dueling_dqn, use_ddqn, use_vdn,
+													 use_gpu, False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn, use_vdn,
 													 use_cnn, use_tensorboard, tensorboard_details + ['l%dx%d-%df-t%dx%d-legible' % (field_size[0], field_size[1],
 																																	 n_foods_spawn, loc[0], loc[1])],
 													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties)
 				else:
 					agent_madqn = LegibleSingleMADQN(n_agents, n_actions, n_layers, nn.relu, layer_sizes, buffer_size, gamma, beta, agent_action_space,
-													 obs_space, use_gpu, False, optim_dir, optim_models, goals, str(loc), dueling_dqn, use_ddqn,
+													 obs_space, use_gpu, False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn,
 													 use_vdn, use_cnn, use_tensorboard, tensorboard_details + ['l%dx%d-%df-t%dx%d-legible' % (field_size[0],
 																																			  field_size[1],
 																																			  n_foods_spawn,

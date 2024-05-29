@@ -267,10 +267,10 @@ class DQNetwork(object):
     def create_checkpoint(self, model_dir: Path, epoch: int = 0) -> None:
         save_checkpoint(ckpt_dir=model_dir, target=self._online_state, step=epoch)
     
-    def load_checkpoint(self, ckpt_file: Path, logger: logging.Logger, epoch: int = -1) -> None:
+    def load_checkpoint(self, ckpt_file: Path, logger: logging.Logger, obs_shape: tuple, epoch: int = -1) -> None:
         template = TrainState.create(apply_fn=self._q_network.apply,
-                                     params=self._q_network.init(jax.random.PRNGKey(201), jnp.empty((1, 7))),
-                                     tx=optax.adam(learning_rate=0.0001))
+                                     params=self._q_network.init(jax.random.PRNGKey(201), jnp.empty(obs_shape, dtype=jnp.float32)),
+                                     tx=optax.adam(learning_rate=0.0))
         if epoch < 0:
             if pathlib.Path.is_file(ckpt_file):
                 self._online_state = restore_checkpoint(ckpt_dir=ckpt_file, target=template)
@@ -291,8 +291,8 @@ class DQNetwork(object):
     def load_model(self, filename: str, model_dir: Path, logger: logging.Logger, obs_shape: tuple) -> None:
         file_path = model_dir / (filename + '.model')
         template = TrainState.create(apply_fn=self._q_network.apply,
-                                     params=self._q_network.init(jax.random.PRNGKey(201), jnp.ones(obs_shape)),
-                                     tx=optax.adam(learning_rate=0.0001))
+                                     params=self._q_network.init(jax.random.PRNGKey(201), jnp.empty(obs_shape, dtype=jnp.float32)),
+                                     tx=optax.adam(learning_rate=0.0))
         with open(file_path, "rb") as f:
             self._online_state = flax.serialization.from_bytes(template, f.read())
         logger.info("Loaded model state from file: " + str(file_path))

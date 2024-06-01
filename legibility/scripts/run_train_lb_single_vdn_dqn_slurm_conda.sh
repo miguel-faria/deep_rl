@@ -23,7 +23,7 @@ export PATH="/opt/cuda/bin:$PATH"
 source "$HOME"/miniconda3/bin/activate deep_rl_env
 
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
-if [ "$HOST" = "artemis" ] || [ "$HOST" = "poseidon" ] ; then
+if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   python "$script_path"/scripts/run_train_lb_single_vdn_dqn.py --field-len 8 --logs /mnt/scratch-artemis/miguelfaria/logs/lb-foraging
 else
   python "$script_path"/scripts/run_train_lb_single_vdn_dqn.py --field-len 8

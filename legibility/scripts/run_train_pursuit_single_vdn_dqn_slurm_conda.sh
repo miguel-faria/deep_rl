@@ -10,6 +10,7 @@
 #SBATCH --time=336:00:00
 #SBATCH --mem=4G
 date;hostname;pwd
+HOST=$(hostname)
 
 if [ -n "${SLURM_JOB_ID:-}" ] ; then
   script_path=$(dirname "$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}' | head -n 1)")
@@ -22,7 +23,12 @@ export PATH="/opt/cuda/bin:$PATH"
 source "$HOME"/miniconda3/bin/activate deep_rl_env
 
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
-python "$script_path"/scripts/run_train_pursuit_single_vdn_dqn.py --field 10 --limits 1 4 --prey-type idle --hunters 2
+
+if [ "$HOST" = "artemis" ] || [ "$HOST" = "poseidon" ] ; then
+  python "$script_path"/scripts/run_train_pursuit_single_vdn_dqn.py --field 10 --limits 1 4 --prey-type idle --hunters 2 --logs /mnt/scratch-artemis/miguelfaria/logs/pursuit
+else
+  python "$script_path"/scripts/run_train_pursuit_single_vdn_dqn.py --field 10 --limits 1 4 --prey-type idle --hunters 2
+fi
 
 source "$HOME"/miniconda3/bin/deactivate
 date

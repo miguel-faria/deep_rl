@@ -263,7 +263,7 @@ def main():
 						   "iterations": n_iterations,
 						   "cycles": n_cycles,
 					   },
-					   dir=log_dir,
+					   dir=tensorboard_details[0],
 					   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
 							 now.strftime("%Y%m%d-%H%M%S")),
 					   sync_tensorboard=True)

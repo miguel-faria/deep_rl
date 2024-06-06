@@ -320,6 +320,8 @@ def main():
 	parser.add_argument('--fraction', dest='fraction', type=str, default='0.5', help='Fraction of JAX memory pre-compilation')
 	parser.add_argument('--train-tags', dest='tags', type=str, nargs='+', required=False, default=None,
 						help='List of tags for grouping in weights and biases, empty by default signaling not to train under a specific set of tags')
+	parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
+						help='Directory to store trained models and load optimal models, if left blank stored in default location')
 	
 	# Environment parameters
 	parser.add_argument('--n-players', dest='n_players', type=int, required=True, help='Number of players in the foraging environment')
@@ -400,7 +402,7 @@ def main():
 	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
 	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
-	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
+	models_dir = args.models_dir if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
 	log_filename = (('train_lb_coop_legible%s_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (('_vdn' if use_vdn else ''), field_size[0], field_size[1],
 																								   n_players, n_foods_spawn, food_level)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
@@ -671,7 +673,7 @@ def main():
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 				food_idx = str(n_foods_spawn) + '-food'
-				performance_data[field_idx][food_idx] = train_acc
+				performance_data[field_idx][food_idx] = float(train_acc)
 				train_file.seek(0)
 				sorted_data = dict(
 					[[sorted_key, performance_data[sorted_key]] for sorted_key in
@@ -686,7 +688,7 @@ def main():
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 				food_idx = str(n_foods) + '-food'
-				performance_data[field_idx][food_idx] = train_acc
+				performance_data[field_idx][food_idx] = float(train_acc)
 				train_file.seek(0)
 				sorted_data = dict(
 					[[sorted_key, performance_data[sorted_key]] for sorted_key in

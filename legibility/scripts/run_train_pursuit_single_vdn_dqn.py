@@ -69,9 +69,11 @@ parser.add_argument('--hunters', dest='n_hunters', type=int, required=False, def
 parser.add_argument('--iterations', dest='n_iterations', type=int, required=False, default=N_ITERATIONS,
 					help='Number of iterations per training cycle')
 parser.add_argument('--logs', dest='logs', type=str, required=False, default=TENSORBOARD_DATA[0])
+parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
 
 
 input_args = parser.parse_args()
+models_dir = input_args.models_dir
 
 for i in range(input_args.limits[0], input_args.limits[1] + 1):
 	n_preys = i
@@ -92,7 +94,8 @@ for i in range(input_args.limits[0], input_args.limits[1] + 1):
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") + (" --vdn" if USE_VDN else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
-			 (" --debug" if DEBUG else "") + ((" --train-targets %s" % " ".join(TRAIN_TARGETS)) if USE_TARGETS else "") + (" --fraction %f" % PRECOMP_FRAC))
+			 (" --debug" if DEBUG else "") + ((" --train-targets %s" % " ".join(TRAIN_TARGETS)) if USE_TARGETS else "") + (" --fraction %f" % PRECOMP_FRAC) +
+			 (" --models-dir %s" % models_dir if models_dir != '' else ""))
 	commamd = "python " + str(src_dir / 'train_pursuit_single_dqn.py') + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)

@@ -9,6 +9,8 @@
 #SBATCH --gres=shard:10
 #SBATCH --time=336:00:00
 #SBATCH --mem=4G
+#SBATCH --output="job-%x-%j.out"
+
 date;hostname;pwd
 HOST=$(hostname)
 
@@ -24,9 +26,9 @@ source "$HOME"/miniconda3/bin/activate deep_rl_env
 
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  python "$script_path"/scripts/run_train_lb_single_vdn_dqn.py --field-len 8 --logs /mnt/scratch-artemis/miguelfaria/logs/lb-foraging
+  python "$script_path"/run_train_lb_vdn_single_dqn.py --field-len 8 --logs /mnt/scratch-artemis/miguelfaria/logs/lb-foraging
 else
-  python "$script_path"/scripts/run_train_lb_single_vdn_dqn.py --field-len 8
+  python "$script_path"/run_train_lb_vdn_single_dqn.py --field-len 8
 fi
 
 source "$HOME"/miniconda3/bin/deactivate

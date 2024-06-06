@@ -7,7 +7,7 @@ import flax.linen as nn
 import jax.numpy as jnp
 import wandb
 
-from models.ddpg import DDPG
+from algos.ddpg import DDPG
 from utilities.buffers import ReplayBuffer
 from datetime import datetime
 from pathlib import Path

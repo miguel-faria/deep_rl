@@ -9,6 +9,8 @@
 #SBATCH --gres=shard:10
 #SBATCH --time=336:00:00
 #SBATCH --mem-per-cpu=4000
+#SBATCH --output="job-%x-%j.out"
+
 date;hostname;pwd
 HOST=$(hostname)
 

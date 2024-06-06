@@ -44,8 +44,12 @@ def number_food_combinations(max_foods: int, n_foods_spawn: int) -> int:
 	return max(1, int(math.factorial(max_foods) / (math.factorial(n_foods_spawn) * math.factorial(max_foods - n_foods_spawn)) * 0.75))
 
 
-def eps_cycle_schedule(cycle_nr: int, max_cycles: int, init_eps: float, final_eps: float, decay_rate: float) -> float:
-	return max(init_eps - decay_rate ** ((max_cycles - 1) / cycle_nr), final_eps)
+def eps_cycle_schedule(cycle_nr: int, max_cycles: int, init_eps: float, final_eps: float, decay_rate: float, sched_type: str = 'log') -> float:
+	if sched_type == 'linear':
+		return max(((final_eps - init_eps) / max_cycles) * cycle_nr / decay_rate + init_eps, final_eps)
+	else:
+		return max(init_eps - decay_rate ** ((max_cycles - 1) / cycle_nr), final_eps)
+	
 
 
 def cycle_foods_spawn(max_foods_spawn: int, cycle: int, rng_gen: np.random.Generator) -> int:
@@ -99,6 +103,8 @@ def main():
 	parser.add_argument('--cycle-eps-decay', dest='cycle_eps_decay', type=float, required=False, default=0.95, help='Decay rate for the exploration update')
 	parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, default='log', choices=['linear', 'exp', 'log', 'epoch'],
 						help='Type of exploration rate update to use: linear, exponential (exp), logarithmic (log), epoch based (epoch)')
+	parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False, default='log', choices=['linear', 'log'],
+						help='Type of cycle eps update to use: linear, logarithmic (log)')
 	parser.add_argument('--warmup-steps', dest='warmup', type=int, required=False, default=10000, help='Number of epochs to pass before training starts')
 	parser.add_argument('--tensorboard-freq', dest='tensorboard_freq', type=int, required=False, default=1,
 						help='Number of epochs between each log in tensorboard. Use only in combination with --tensorboard option')
@@ -112,6 +118,7 @@ def main():
 	parser.add_argument('--epoch-logging', dest='ep_log', action='store_true', help='')
 	parser.add_argument('--train-tags', dest='tags', type=str, nargs='+', required=False, default=None,
 						help='List of tags for grouping in weights and biases, empty by default signaling not to train under a specific set of tags')
+	parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
 	
 	# Environment parameters
 	parser.add_argument('--player-level', dest='player_level', type=int, required=True, help='Level of the agents collecting food')
@@ -184,7 +191,7 @@ def main():
 	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
 	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
-	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
+	models_dir = args.models_dir if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
 	log_filename = (('train_lb_coop_single_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents,
 																								 n_foods_spawn, food_level)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
@@ -309,7 +316,7 @@ def main():
 					if cycle == 0:
 						cycle_init_eps = initial_eps
 					else:
-						cycle_init_eps = eps_cycle_schedule(cycle, n_cycles, initial_eps, final_eps, cycle_eps_decay)
+						cycle_init_eps = eps_cycle_schedule(cycle, n_cycles, initial_eps, final_eps, cycle_eps_decay, args.cycle_type)
 					env.spawn_players([player_level] * n_agents)
 					env.spawn_food(n_foods_spawn, food_level)
 					# agent_madqn.replay_buffer.reset()

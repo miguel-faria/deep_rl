@@ -173,6 +173,7 @@ class SingleModelMADQN(object):
 		start_record_it = cycle * num_iterations
 		start_record_epoch = cycle * max_timesteps
 		history = []
+		avg_episode_len = []
 		
 		for it in range(num_iterations):
 			if use_render:
@@ -259,14 +260,17 @@ class SingleModelMADQN(object):
 				
 				# Check if iteration is over
 				if terminated or timeout:
+					episode_len = epoch - episode_start
+					avg_episode_len += [episode_len]
 					if self._write_tensorboard:
-						episode_len = epoch - episode_start
 						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
+						self._agent_dqn.summary_writer.add_scalar("charts/avg_episode_length", np.mean(avg_episode_len), it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
+						self._agent_dqn.summary_writer.add_scalar("charts/cycle", cycle, it + start_record_it)
 						if not epoch_logging:
 							self._agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), it + start_record_it)
 							self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)

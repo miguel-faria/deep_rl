@@ -253,6 +253,8 @@ def main():
 	parser.add_argument('--debug', dest='debug', action='store_true', help='Flag signalling debug mode for model training')
 	parser.add_argument('--train-targets', dest='train_targets', type=str, nargs='+', required=False, default=None,
 						help='List with the prey ids to train to catch')
+	parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
+						help='Directory to store trained models and load optimal models, if left blank stored in default location')
 	
 	# Environment parameters
 	parser.add_argument('--hunter-ids', dest='hunter_ids', type=str, nargs='+', required=True, help='List with the hunter ids in the environment')
@@ -331,7 +333,7 @@ def main():
 	
 	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
-	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
+	models_dir = args.models_dir if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
 	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 	log_filename = (('train_pursuit_single_dqn_%dx%d-field_%d-hunters_%d-preys' % (field_size[0], field_size[1], n_hunters, n_preys)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))

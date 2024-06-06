@@ -251,6 +251,7 @@ def main():
 	parser.add_argument('--epoch-logging', dest='ep_log', action='store_true', help='')
 	parser.add_argument('--train-tags', dest='tags', type=str, nargs='+', required=False, default=None,
 						help='List of tags for grouping in weights and biases, empty by default signaling not to train under a specific set of tags')
+	parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
 	
 	# Environment parameters
 	parser.add_argument('--hunter-ids', dest='hunter_ids', type=str, nargs='+', required=True, help='List with the hunter ids in the environment')
@@ -333,7 +334,7 @@ def main():
 
 	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
-	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
+	models_dir = args.models_dir if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
 	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 	log_filename = (('train_pursuit_single%s_dqn_%dx%d-field_%d-hunters_%d-preys' %
 					 ('_vdn' if use_vdn else '', field_size[0], field_size[1], n_hunters, n_preys)) +

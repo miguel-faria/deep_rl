@@ -402,7 +402,7 @@ def main():
 	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
 	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
-	models_dir = args.models_dir if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
+	models_dir = Path(args.models_dir) / 'models' if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
 	log_filename = (('train_lb_coop_legible%s_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (('_vdn' if use_vdn else ''), field_size[0], field_size[1],
 																								   n_players, n_foods_spawn, food_level)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))

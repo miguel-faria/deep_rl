@@ -333,7 +333,7 @@ def main():
 	
 	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
-	models_dir = args.models_dir if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
+	models_dir = Path(args.models_dir) / 'models' if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
 	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 	log_filename = (('train_pursuit_single_dqn_%dx%d-field_%d-hunters_%d-preys' % (field_size[0], field_size[1], n_hunters, n_preys)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))

@@ -43,6 +43,7 @@ EPS_DECAY = 0.175	# for log eps
 # CYCLE_EPS = 0.925
 CYCLE_EPS = 0.99
 EPS_TYPE = "log"
+CYCLE_TYPE = "log"
 USE_GPU = True
 RESTART = False
 DEBUG = False
@@ -69,6 +70,8 @@ parser.add_argument('--field-len', dest='field_len', type=int, required=False, d
 parser.add_argument('--episode-steps', dest='max_steps', type=int, required=False, default=STEPS_EPISODE)
 parser.add_argument('--iterations', dest='max_iterations', type=int, required=False, default=N_ITERATIONS)
 parser.add_argument('--logs', dest='logs', type=str, required=False, default=TENSORBOARD_DATA[0])
+parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False, default=CYCLE_TYPE)
+parser.add_argument('--cycle-eps', dest='cycle_eps', type=float, required=False, default=CYCLE_EPS)
 parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
 					help='Directory to store trained models and load optimal models, if left blank stored in default location')
 
@@ -79,6 +82,8 @@ max_steps = input_args.max_steps
 iterations = input_args.max_iterations
 logs = input_args.logs
 models_dir = input_args.models_dir
+cycle_type = input_args.cycle_type
+cycle_eps = input_args.cycle_eps
 
 for i in range(limits[0], limits[1] + 1):
 	print('Launching training script for %d foods spawned' % i)
@@ -93,14 +98,14 @@ for i in range(limits[0], limits[1] + 1):
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f --legibility-temp %f "
 			"--n-players %d --player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --tensorboardDetails %s %d %d %s"
 			% (N_AGENTS, ARQUITECTURE, BUFFER, GAMMA, BETA, LEG_REWARD,  																				# DQN parameters
-			   iterations, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, decay, eps, WARMUP_STEPS, CYCLE_EPS, TEMP, # Train parameters
+			   iterations, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, decay, eps, WARMUP_STEPS, cycle_eps, TEMP, # Train parameters
 			   N_PLAYERS, PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS,  														# Environment parameters
 			   logs, TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") + (" --vdn" if USE_VDN else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
 			 (" --debug" if DEBUG else "") + (" --use-opt-vdn" if OPT_VDN else "") + (" --n-leg-agents %d" % N_LEG_AGENTS) + (" --fraction %f" % PRECOMP_FRAC) +
-			 (" --models-dir %s" % models_dir if models_dir != '' else ""))
+			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --cycle-eps-type %s" % cycle_type))
 	commamd = "python " + str(src_dir / 'train_lb_legible_dqn.py') + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)

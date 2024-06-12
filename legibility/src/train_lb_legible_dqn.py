@@ -52,8 +52,11 @@ def number_food_combinations(max_foods: int, n_foods_spawn: int) -> int:
 	return n_combinations
 
 
-def eps_cycle_schedule(cycle_nr: int, max_cycles: int, init_eps: float, final_eps: float, decay_rate: float) -> float:
-	return max(init_eps - decay_rate ** ((max_cycles - 1) / cycle_nr), final_eps)
+def eps_cycle_schedule(cycle_nr: int, max_cycles: int, init_eps: float, final_eps: float, decay_rate: float, eps_type: str) -> float:
+	if eps_type == 'linear':
+		return max(((final_eps - init_eps) / max_cycles) * cycle_nr / decay_rate + init_eps, final_eps)
+	else:
+		return max(init_eps - decay_rate ** ((max_cycles - 1) / cycle_nr), final_eps)
 
 
 def cycle_foods_spawn(max_foods_spawn: int, cycle: int, rng_gen: np.random.Generator) -> int:
@@ -306,6 +309,8 @@ def main():
 						help='Decay rate for the exploration update')
 	parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, default='log', choices=['linear', 'exp', 'log', 'epoch'],
 						help='Type of exploration rate update to use: linear, exponential (exp), logarithmic (log), epoch based (epoch)')
+	parser.add_argument('--cycle-eps-type', dest='cycle_eps_type', type=str, required=False, default='log', choices=['linear', 'log'],
+						help='Type of update for each cycle starting exploration rate: linear, logarithmic (log)')
 	parser.add_argument('--warmup-steps', dest='warmup', type=int, required=False, default=10000,
 						help='Number of epochs to pass before training starts')
 	parser.add_argument('--tensorboard-freq', dest='tensorboard_freq', type=int, required=False, default=1,
@@ -363,6 +368,7 @@ def main():
 	eps_decay = args.eps_decay
 	cycle_eps_decay = args.cycle_eps_decay
 	eps_type = args.eps_type
+	cycle_eps_type = args.cycle_eps_type
 	warmup = args.warmup
 	tensorboard_freq = args.tensorboard_freq
 	restart_train = args.restart_train
@@ -544,7 +550,7 @@ def main():
 					if cycle == 0:
 						cycle_init_eps = initial_eps
 					else:
-						cycle_init_eps = eps_cycle_schedule(cycle, n_cycles, initial_eps, final_eps, cycle_eps_decay)
+						cycle_init_eps = eps_cycle_schedule(cycle, n_cycles, initial_eps, final_eps, cycle_eps_decay, cycle_eps_type)
 					env.spawn_players([player_level] * n_agents)
 					env.spawn_food(n_foods_spawn, food_level)
 					# agent_madqn.replay_buffer.reset()

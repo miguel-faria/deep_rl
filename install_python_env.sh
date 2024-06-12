@@ -77,13 +77,13 @@ if [ "$env_type" = "conda" ]; then
   mamba install -y -c conda-forge numpy scipy matplotlib pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv
   mamba install -y -c conda-forge stable-baselines3 tensorboard wandb gymnasium pygame
   mamba install -y -c conda-forge optax flax
-  pip3 install --upgrade "$jax_version" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-  pip3 install gym pyglet
+  python3 -m pip install --upgrade "$jax_version" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+  python3 -m pip install gym pyglet
   # pip3 install --upgrade nvidia-cudnn-cu11 nvidia-cufft-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvcc-cu11 nvidia-cuda-runtime-cu11
 
   if [ "$use_llms" -eq 1 ]; then
       mamba install -y -c conda-forge transformers datasets evaluate accelerate
-      pip3 install vllm
+      python3 -m pip install vllm
   fi
 
   mamba deactivate
@@ -132,15 +132,15 @@ else
   python3 -m venv "$HOME"/python_envs/"$env_name"
   source "$HOME/python_envs/$env_name/bin/activate"
 
-  pip3 install --upgrade pip
-  pip3 install numpy scipy matplotlib ipython jupyter pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv-python gym pyglet
-  pip3 install --upgrade "jax[cuda""$cuda_version""_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-  pip3 install optax flax
-  pip3 install stable-baselines3 tensorboard wandb gymnasium pygame
+  python3 -m pip install --upgrade pip
+  python3 -m pip install numpy scipy matplotlib ipython jupyter pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv-python gym pyglet
+  python3 -m pip install --upgrade "jax[cuda""$cuda_version""_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+  python3 -m pip install optax flax
+  python3 -m pip install stable-baselines3 tensorboard wandb gymnasium pygame
 #  pip3 install --upgrade nvidia-cudnn-cu11 nvidia-cufft-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvcc-cu11 nvidia-cuda-runtime-cu11
 
   if [ "$use_llms" -eq 1 ]; then
-      pip3 install transformers datasets evaluate accelerate vllm
+      python3 -m pip install transformers datasets evaluate accelerate vllm
   fi
 
   deactivate

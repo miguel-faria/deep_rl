@@ -65,6 +65,7 @@ parser.add_argument('--episode-steps', dest='max_steps', type=int, required=Fals
 parser.add_argument('--iterations', dest='max_iterations', type=int, required=False, default=N_ITERATIONS)
 parser.add_argument('--logs', dest='logs', type=str, required=False, default=TENSORBOARD_DATA[0])
 parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False, default=CYCLE_TYPE)
+parser.add_argument('--cycle-eps', dest='cycle_eps', type=float, required=False, default=CYCLE_EPS)
 parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
 
 input_args = parser.parse_args()
@@ -74,6 +75,8 @@ max_steps = input_args.max_steps
 iterations = input_args.max_iterations
 logs = input_args.logs
 models_dir = input_args.models_dir
+cycle_type = input_args.cycle_type
+cycle_eps = input_args.cycle_eps
 
 for i in range(limits[0], limits[1] + 1):
 	print('Launching training script for %d foods spawned' % i)
@@ -82,13 +85,13 @@ for i in range(limits[0], limits[1] + 1):
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f "
 			"--player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --tensorboardDetails %s %d %d %s"
 			% (N_AGENTS, ARQUITECTURE, BUFFER, GAMMA,																											# DQN parameters
-			   iterations, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, CYCLE_EPS,		# Train parameters
+			   iterations, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, cycle_eps,		# Train parameters
 			   PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS,																			# Environment parameters
 			   logs, TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
-			 (" --debug" if DEBUG else "") + (" --vdn" if USE_VDN else "") + (" --fraction %f" % PRECOMP_FRAC) + (" --cycle-type %s" % input_args.cycle_type) +
+			 (" --debug" if DEBUG else "") + (" --vdn" if USE_VDN else "") + (" --fraction %f" % PRECOMP_FRAC) + (" --cycle-type %s" % cycle_type) +
 			 (" --models-dir %s" % models_dir if models_dir != '' else ""))
 	commamd = "python " + str(src_dir / 'train_lb_single_dqn.py') + args
 	if not USE_SHELL:

@@ -90,180 +90,180 @@ def get_live_obs_goals(env: FoodCOOPLBForaging) -> Tuple[List, List]:
 def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float,
 					  tau: float, initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger,
 					  cnn_shape: Tuple[int], exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100,
-					  tensorboard_frequency: int = 1, cycle: int = 0, greedy_action: bool = True, sofmax_temp: float = 1.0):
+					  tensorboard_frequency: int = 1, cycle: int = 0, greedy_action: bool = True, sofmax_temp: float = 1.0, previous_model_path: str = ''):
 		
-		# np.random.seed(rng_seed)
-		rng_gen = np.random.default_rng(rng_seed)
-		
-		# Setup DQNs for training
-		obs, *_ = env.reset()
-		if not dqn_model.agent_dqn.dqn_initialized:
-			if dqn_model.agent_dqn.cnn_layer:
-				dqn_model.agent_dqn.init_network_states(rng_seed, obs[0].reshape((1, *cnn_shape)), optim_learn_rate)
+	# np.random.seed(rng_seed)
+	rng_gen = np.random.default_rng(rng_seed)
+	
+	# Setup DQNs for training
+	obs, *_ = env.reset()
+	if not dqn_model.agent_dqn.dqn_initialized:
+		if dqn_model.agent_dqn.cnn_layer:
+			dqn_model.agent_dqn.init_network_states(rng_seed, obs[0].reshape((1, *cnn_shape)), optim_learn_rate, previous_model_path)
+		else:
+			dqn_model.agent_dqn.init_network_states(rng_seed, obs[0], optim_learn_rate, previous_model_path)
+	
+	start_time = time.time()
+	epoch = 0
+	sys.stdout.flush()
+	start_record_it = cycle * num_iterations
+	start_record_epoch = cycle * max_timesteps
+	history = []
+	
+	for it in range(num_iterations):
+		if env.use_render:
+			env.render()
+		done = False
+		episode_rewards = 0
+		episode_q_vals = 0
+		episode_start = epoch
+		avg_loss = []
+		logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
+		logger.info(env.get_env_log())
+		# decay exploration
+		eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
+		while not done:
+			
+			# interact with environment
+			explore = rng_gen.random() < eps
+			if explore:
+				random_actions = env.action_space.sample()
+				actions = random_actions[:dqn_model.n_leg_agents].tolist()
+				for a_idx in range(dqn_model.n_leg_agents, env.n_players):
+					if dqn_model.agent_dqn.cnn_layer:
+						q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_model.goal].params,
+																	   obs[a_idx].reshape((1, *cnn_shape)))[0]
+					else:
+						q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_model.goal].params, obs[a_idx])
+					if greedy_action:
+						action = q_values.argmax(axis=-1)
+					else:
+						pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
+						pol = pol / pol.sum()
+						action = rng_gen.choice(range(env.action_space[0].n), p=pol)
+					actions.append(action)
 			else:
-				dqn_model.agent_dqn.init_network_states(rng_seed, obs[0], optim_learn_rate)
-		
-		start_time = time.time()
-		epoch = 0
-		sys.stdout.flush()
-		start_record_it = cycle * num_iterations
-		start_record_epoch = cycle * max_timesteps
-		history = []
-		
-		for it in range(num_iterations):
+				actions = []
+				for a_idx in range(env.n_players):
+					if a_idx < dqn_model.n_leg_agents:
+						online_params = dqn_model.agent_dqn.online_state.params
+					else:
+						online_params = dqn_model.optimal_models[dqn_model.goal].params
+					
+					if dqn_model.agent_dqn.cnn_layer:
+						q_values = dqn_model.agent_dqn.q_network.apply(online_params, obs[a_idx].reshape((1, *cnn_shape)))[0]
+					else:
+						q_values = dqn_model.agent_dqn.q_network.apply(online_params, obs[a_idx])
+					
+					if greedy_action:
+						action = q_values.argmax(axis=-1)
+					else:
+						pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
+						pol = pol / pol.sum()
+						action = rng_gen.choice(range(env.action_space[0].n), p=pol)
+					# action = jax.device_get(action)
+					episode_q_vals += (float(q_values[int(action)]) / dqn_model.num_agents)
+					actions += [action]
+			logger.debug(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]) + ' Explored? %r' % explore + '\n')
+			actions = np.array(actions)
+			
+			next_obs, rewards, terminated, timeout, infos = env.step(actions)
 			if env.use_render:
 				env.render()
-			done = False
-			episode_rewards = 0
-			episode_q_vals = 0
-			episode_start = epoch
-			avg_loss = []
-			logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
-			# decay exploration
-			eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
-			while not done:
-				
-				# interact with environment
-				explore = rng_gen.random() < eps
-				if explore:
-					random_actions = env.action_space.sample()
-					actions = random_actions[:dqn_model.n_leg_agents].tolist()
-					for a_idx in range(dqn_model.n_leg_agents, env.n_players):
+			
+			# Obtain the legible rewards
+			legible_rewards = np.zeros(dqn_model.n_leg_agents)
+			live_goals = [str(food.position) for food in env.foods]
+			n_goals = env.food_spawn
+			if n_goals > 1:
+				for a_idx in range(dqn_model.n_leg_agents):
+					act_q_vals = np.zeros(n_goals)
+					action = actions[a_idx]
+					goal_action_q = 0.0
+					for g_idx in range(n_goals):
 						if dqn_model.agent_dqn.cnn_layer:
-							q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_model.goal].params,
-																		   obs[a_idx].reshape((1, *cnn_shape)))[0]
+							cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
+							q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_model(live_goals[g_idx]).params, cnn_obs)[0]
 						else:
-							q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_model.goal].params, obs[a_idx])
-						logger.info("Explore q_values: " + str(q_values))
-						if greedy_action:
-							action = q_values.argmax(axis=-1)
-						else:
-							pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
-							pol = pol / pol.sum()
-							action = rng_gen.choice(range(env.action_space[0].n), p=pol)
-						actions.append(action)
-				else:
-					actions = []
-					for a_idx in range(env.n_players):
-						if a_idx < dqn_model.n_leg_agents:
-							online_params = dqn_model.agent_dqn.online_state.params
-						else:
-							online_params = dqn_model.optimal_models[dqn_model.goal].params
-						
-						if dqn_model.agent_dqn.cnn_layer:
-							q_values = dqn_model.agent_dqn.q_network.apply(online_params, obs[a_idx].reshape((1, *cnn_shape)))[0]
-						else:
-							q_values = dqn_model.agent_dqn.q_network.apply(online_params, obs[a_idx])
-						
-						if greedy_action:
-							action = q_values.argmax(axis=-1)
-						else:
-							pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
-							pol = pol / pol.sum()
-							action = rng_gen.choice(range(env.action_space[0].n), p=pol)
-						# action = jax.device_get(action)
-						episode_q_vals += (float(q_values[int(action)]) / dqn_model.num_agents)
-						actions += [action]
-				logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]) + ' Explored? %r' % explore + '\n')
-				actions = np.array(actions)
+							q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_model(live_goals[g_idx]).params, obs[a_idx])
+						if dqn_model.goal == live_goals[g_idx]:
+							goal_action_q = q_vals[action]
+						act_q_vals[g_idx] = np.exp(dqn_model.beta * (q_vals[action] - q_vals.mean()) / sofmax_temp)
+					if reward_type == 'reward':
+						legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) * max(rewards[a_idx], 1e-3)
+					elif reward_type == 'q_vals':
+						legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) * goal_action_q
+					elif reward_type == 'info':
+						legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) + rewards[a_idx]
+					else:
+						legible_rewards[a_idx] = act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()
+			
+			else:
+				for a_idx in range(dqn_model.n_leg_agents):
+					legible_rewards[a_idx] = rewards[a_idx]
+			
+			if terminated:
+				finished = np.ones(dqn_model.num_agents)
+				legible_rewards = legible_rewards / (1 - dqn_model.agent_dqn.gamma)
+				# legible_rewards = legible_rewards / dqn_model.agent_dqn.gamma
+			else:
+				finished = np.zeros(dqn_model.num_agents)
+			
+			if dqn_model.agent_dqn.use_summary:
+				dqn_model.agent_dqn.summary_writer.add_scalar("charts/legible_reward", sum(legible_rewards) / dqn_model.n_leg_agents,
+															  epoch + start_record_epoch)
+				dqn_model.agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards[:dqn_model.n_leg_agents]) / dqn_model.n_leg_agents,
+															  epoch + start_record_epoch)
+			# store new samples
+			if dqn_model.use_vdn:
+				dqn_model.replay_buffer.add(obs, next_obs, actions, np.hstack((legible_rewards[:dqn_model.n_leg_agents], rewards[dqn_model.n_leg_agents:])),
+											finished[0], [infos])
+				episode_rewards += sum(legible_rewards) / dqn_model.n_leg_agents
+			else:
+				for a_idx in range(dqn_model.n_leg_agents):
+					dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], [infos])
+					episode_rewards += legible_rewards[a_idx] / dqn_model.n_leg_agents
+			obs = next_obs
+			
+			# update Q-network and target network
+			if epoch >= warmup:
+				if epoch % train_freq == 0:
+					loss = jax.device_get(dqn_model.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger, cnn_shape))
+					avg_loss += [loss]
 				
-				next_obs, rewards, terminated, timeout, infos = env.step(actions)
+				if epoch % target_freq == 0:
+					dqn_model.agent_dqn.update_target_model(tau)
+			
+			epoch += 1
+			sys.stdout.flush()
+			
+			# Check if iteration is over
+			if terminated or timeout:
+				if dqn_model.write_tensorboard:
+					episode_len = epoch - episode_start
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episode_q_vals", episode_q_vals, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/cycle", cycle, it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
+					dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), epoch)
+				logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
+				obs, *_ = env.reset()
 				if env.use_render:
 					env.render()
-				
-				# Obtain the legible rewards
-				legible_rewards = np.zeros(dqn_model.n_leg_agents)
-				live_goals = [str(food.position) for food in env.foods]
-				n_goals = env.food_spawn
-				if n_goals > 1:
-					for a_idx in range(dqn_model.n_leg_agents):
-						act_q_vals = np.zeros(n_goals)
-						action = actions[a_idx]
-						goal_action_q = 0.0
-						for g_idx in range(n_goals):
-							if dqn_model.agent_dqn.cnn_layer:
-								cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_model(live_goals[g_idx]).params, cnn_obs)[0]
-							else:
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_model(live_goals[g_idx]).params, obs[a_idx])
-							if dqn_model.goal == live_goals[g_idx]:
-								goal_action_q = q_vals[action]
-							act_q_vals[g_idx] = np.exp(dqn_model.beta * (q_vals[action] - q_vals.mean()) / sofmax_temp)
-						if reward_type == 'reward':
-							legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) * max(rewards[a_idx], 1e-3)
-						elif reward_type == 'q_vals':
-							legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) * goal_action_q
-						elif reward_type == 'info':
-							legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()) + rewards[a_idx]
-						else:
-							legible_rewards[a_idx] = act_q_vals[live_goals.index(dqn_model.goal)] / act_q_vals.sum()
-				
 				else:
-					for a_idx in range(dqn_model.n_leg_agents):
-						legible_rewards[a_idx] = rewards[a_idx]
-				
-				if terminated:
-					finished = np.ones(dqn_model.num_agents)
-					legible_rewards = legible_rewards / (1 - dqn_model.agent_dqn.gamma)
-					# legible_rewards = legible_rewards / dqn_model.agent_dqn.gamma
-				else:
-					finished = np.zeros(dqn_model.num_agents)
-				
-				if dqn_model.agent_dqn.use_summary:
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/legible_reward", sum(legible_rewards) / dqn_model.n_leg_agents,
-																  epoch + start_record_epoch)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards[:dqn_model.n_leg_agents]) / dqn_model.n_leg_agents,
-																  epoch + start_record_epoch)
-				# store new samples
-				if dqn_model.use_vdn:
-					dqn_model.replay_buffer.add(obs, next_obs, actions, np.hstack((legible_rewards[:dqn_model.n_leg_agents], rewards[dqn_model.n_leg_agents:])),
-												finished[0], [infos])
-					episode_rewards += sum(legible_rewards) / dqn_model.n_leg_agents
-				else:
-					for a_idx in range(dqn_model.n_leg_agents):
-						dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], [infos])
-						episode_rewards += legible_rewards[a_idx] / dqn_model.n_leg_agents
-				obs = next_obs
-				
-				# update Q-network and target network
-				if epoch >= warmup:
-					if epoch % train_freq == 0:
-						loss = jax.device_get(dqn_model.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger, cnn_shape))
-						avg_loss += [loss]
-					
-					if epoch % target_freq == 0:
-						dqn_model.agent_dqn.update_target_model(tau)
-				
-				epoch += 1
-				sys.stdout.flush()
-				
-				# Check if iteration is over
-				if terminated or timeout:
-					if dqn_model.write_tensorboard:
-						episode_len = epoch - episode_start
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/episode_q_vals", episode_q_vals, it + start_record_it)
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, it + start_record_it)
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/cycle", cycle, it + start_record_it)
-						dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
-						dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), epoch)
-					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
-					obs, *_ = env.reset()
-					if env.use_render:
-						env.render()
-					else:
-						env.close_render()
-					done = True
-					episode_rewards = 0
-					episode_q_vals = 0
-					episode_start = epoch
-					avg_loss = []
+					env.close_render()
+				done = True
+				episode_rewards = 0
+				episode_q_vals = 0
+				episode_start = epoch
+				avg_loss = []
 
-		return history
+	return history
 
 
 # noinspection DuplicatedCode
@@ -327,6 +327,11 @@ def main():
 						help='List of tags for grouping in weights and biases, empty by default signaling not to train under a specific set of tags')
 	parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
 						help='Directory to store trained models and load optimal models, if left blank stored in default location')
+	parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
+						help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
+	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
+	parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
+						help='Flag that signals training using model trained with one less food item spawned (when using to train with only 1 item, defaults to false).')
 	
 	# Environment parameters
 	parser.add_argument('--n-players', dest='n_players', type=int, required=True, help='Number of players in the foraging environment')
@@ -377,6 +382,7 @@ def main():
 	temp = args.temp
 	optim_vdn = args.opt_vdn
 	tags = args.tags if args.tags is not None else ''
+	use_lower_model = args.use_lower_model
 	
 	# LB-Foraging environment args
 	n_players = args.n_players
@@ -406,9 +412,10 @@ def main():
 		return
 
 	now = datetime.now()
-	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
-	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
-	models_dir = Path(args.models_dir) / 'models' if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
+	home_dir = Path(__file__).parent.absolute().parent.absolute()
+	log_dir = Path(args.logs_dir) / 'logs' if args.logs_dir != '' else home_dir / 'logs'
+	data_dir = Path(args.data_dir) / 'data' if args.data_dir != '' else home_dir / 'data'
+	models_dir = Path(args.models_dir) / 'models' if args.models_dir != '' else home_dir / 'models'
 	log_filename = (('train_lb_coop_legible%s_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (('_vdn' if use_vdn else ''), field_size[0], field_size[1],
 																								   n_players, n_foods_spawn, food_level)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
@@ -544,6 +551,15 @@ def main():
 					cycles_range = range(n_cycles)
 					logger.info('Starting train')
 				
+				if use_lower_model:
+					prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (n_foods_spawn - 1, food_level)) / 'best'
+					if (prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
+						small_model_pth = str(prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
+					else:
+						small_model_pth = ''
+				else:
+					small_model_pth = ''
+				
 				cycle_warmup = warmup
 				for cycle in cycles_range:
 					logger.info('Cycle %d of %d' % (cycle+1, n_cycles))
@@ -565,7 +581,7 @@ def main():
 					cnn_shape = (0,) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
 					history = train_legible_dqn(env, agent_madqn, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
 												final_eps, eps_type, leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-												cycle, greedy_action=False, sofmax_temp=temp)
+												cycle, greedy_action=False, sofmax_temp=temp, previous_model_path=small_model_pth)
 					
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None

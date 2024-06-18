@@ -170,16 +170,22 @@ class DQNetwork(object):
     #############################
     ##       CLASS UTILS       ##
     #############################
-
-    def init_network_states(self, rng_seed: int, obs: np.ndarray, optim_learn_rate: float):
+    def init_network_states(self, rng_seed: int, obs: np.ndarray, optim_learn_rate: float, file_path: Union[str, Path] = ''):
         key = jax.random.PRNGKey(rng_seed)
         key, q_key = jax.random.split(key, 2)
         if self._online_state is None:
-            self._online_state = TrainState.create(
-                apply_fn=self._q_network.apply,
-                params=self._q_network.init(q_key, obs),
-                tx=optax.adam(learning_rate=optim_learn_rate),
-            )
+            if file_path == '':
+                self._online_state = TrainState.create(
+                    apply_fn=self._q_network.apply,
+                    params=self._q_network.init(q_key, obs),
+                    tx=optax.adam(learning_rate=optim_learn_rate),
+                )
+            else:
+                template = TrainState.create(apply_fn=self._q_network.apply,
+                                             params=self._q_network.init(q_key, obs),
+                                             tx=optax.adam(learning_rate=optim_learn_rate))
+                with open(file_path, "rb") as f:
+                    self._online_state = flax.serialization.from_bytes(template, f.read())
         if self._target_state_params is None:
             self._target_state_params = self._q_network.init(q_key, obs)
             update_target_state_params = optax.incremental_update(self._online_state.params, self._target_state_params, 1.0)

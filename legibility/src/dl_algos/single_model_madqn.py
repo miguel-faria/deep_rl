@@ -152,20 +152,14 @@ class SingleModelMADQN(object):
 	def train_dqn(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float,
 				  final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99,
 				  warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0,
-				  greedy_action: bool = True, epoch_logging: bool = False):
+				  greedy_action: bool = True, epoch_logging: bool = False, previous_model_path: str = ''):
 		
 		rng_gen = np.random.default_rng(rng_seed)
 		# self._replay_buffer.reseed(rng_seed)
 		
 		# Setup DQNs for training
 		obs, *_ = env.reset()
-		if not self._agent_dqn.dqn_initialized:
-			logger.info('Initializing network')
-			if self._agent_dqn.cnn_layer:
-				cnn_obs = obs[0].reshape((1, *cnn_shape))
-				self._agent_dqn.init_network_states(rng_seed, cnn_obs, optim_learn_rate)
-			else:
-				self._agent_dqn.init_network_states(rng_seed, obs[0], optim_learn_rate)
+		self.initialize_network(cnn_shape, logger, obs, optim_learn_rate, rng_seed, previous_model_path)
 		
 		start_time = time.time()
 		epoch = 0
@@ -283,6 +277,15 @@ class SingleModelMADQN(object):
 		
 		avg_loss = None
 		return history
+	
+	def initialize_network(self, cnn_shape: Tuple, logger: logging.Logger, obs: np.ndarray, optim_learn_rate: float, rng_seed: int, previous_model_path: str = ''):
+		if not self._agent_dqn.dqn_initialized:
+			logger.info('Initializing network')
+			if self._agent_dqn.cnn_layer:
+				cnn_obs = obs[0].reshape((1, *cnn_shape))
+				self._agent_dqn.init_network_states(rng_seed, cnn_obs, optim_learn_rate, previous_model_path)
+			else:
+				self._agent_dqn.init_network_states(rng_seed, obs[0], optim_learn_rate, previous_model_path)
 	
 	def update_model(self, batch_size, epoch, start_time, tensorboard_frequency, logger: logging.Logger, cnn_shape: Tuple[int] = None):
 		data = self._replay_buffer.sample(batch_size)
@@ -438,138 +441,134 @@ class LegibleSingleMADQN(SingleModelMADQN):
 	def train_dqn(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float,
 				  final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99,
 				  warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0,
-				  greedy_action: bool = True, epoch_logging: bool = False):
+				  greedy_action: bool = True, epoch_logging: bool = False, previous_model_path: str = ''):
 			
-			np.random.seed(rng_seed)
-			rng_gen = np.random.default_rng(rng_seed)
-			
-			# Setup DQNs for training
-			logger.info('Initializing network')
-			obs, _ = env.reset()
-			if not self._agent_dqn.dqn_initialized:
-				if self._agent_dqn.cnn_layer:
-					self._agent_dqn.init_network_states(rng_seed, obs[0].reshape((1, *obs[0].shape)), optim_learn_rate)
+		np.random.seed(rng_seed)
+		rng_gen = np.random.default_rng(rng_seed)
+		
+		# Setup DQNs for training
+		logger.info('Initializing network')
+		obs, _ = env.reset()
+		self.initialize_network(cnn_shape, logger, obs, optim_learn_rate, rng_seed, previous_model_path)
+		
+		start_time = time.time()
+		epoch = 0
+		sys.stdout.flush()
+		start_record_it = cycle * num_iterations
+		start_record_epoch = cycle * max_timesteps
+		history = []
+		
+		for it in range(num_iterations):
+			if use_render:
+				env.render()
+			done = False
+			episode_rewards = 0
+			episode_q_vals = 0
+			episode_start = epoch
+			avg_loss = []
+			episode_history = []
+			logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
+			while not done:
+				
+				# interact with environment
+				if eps_type == 'epoch':
+					eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, epoch, max_timesteps)
 				else:
-					self._agent_dqn.init_network_states(rng_seed, obs[0], optim_learn_rate)
-			
-			start_time = time.time()
-			epoch = 0
-			sys.stdout.flush()
-			start_record_it = cycle * num_iterations
-			start_record_epoch = cycle * max_timesteps
-			history = []
-			
-			for it in range(num_iterations):
+					eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
+				if rng_gen.random() < eps:
+					actions = np.array(env.action_space.sample())
+				else:
+					actions = []
+					for a_idx in range(self._n_agents):
+						if self._agent_dqn.cnn_layer:
+							q_values = self._agent_dqn.q_network.apply(self._agent_dqn.online_state.params, obs[a_idx].reshape((1, *obs[a_idx].shape)))[0]
+						else:
+							q_values = self._agent_dqn.q_network.apply(self._agent_dqn.online_state.params, obs[a_idx])
+						if greedy_action:
+							action = q_values.argmax(axis=-1)
+						else:
+							pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
+							pol = pol / pol.sum()
+							action = rng_gen.choice(range(env.action_space[0].n), p=pol)
+						# action = jax.device_get(action)
+						episode_q_vals += (float(q_values[int(action)]) / self._n_agents)
+						actions += [action]
+					actions = np.array(actions)
+				next_obs, rewards, terminated, timeout, infos = env.step(actions)
+				episode_history += [self.get_history_entry(obs, actions)]
 				if use_render:
 					env.render()
-				done = False
-				episode_rewards = 0
-				episode_q_vals = 0
-				episode_start = epoch
-				avg_loss = []
-				episode_history = []
-				logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
-				while not done:
-					
-					# interact with environment
-					if eps_type == 'epoch':
-						eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, epoch, max_timesteps)
-					else:
-						eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
-					if rng_gen.random() < eps:
-						actions = np.array(env.action_space.sample())
-					else:
-						actions = []
-						for a_idx in range(self._n_agents):
-							if self._agent_dqn.cnn_layer:
-								q_values = self._agent_dqn.q_network.apply(self._agent_dqn.online_state.params, obs[a_idx].reshape((1, *obs[a_idx].shape)))[0]
-							else:
-								q_values = self._agent_dqn.q_network.apply(self._agent_dqn.online_state.params, obs[a_idx])
-							if greedy_action:
-								action = q_values.argmax(axis=-1)
-							else:
-								pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
-								pol = pol / pol.sum()
-								action = rng_gen.choice(range(env.action_space[0].n), p=pol)
-							# action = jax.device_get(action)
-							episode_q_vals += (float(q_values[int(action)]) / self._n_agents)
-							actions += [action]
-						actions = np.array(actions)
-					next_obs, rewards, terminated, timeout, infos = env.step(actions)
-					episode_history += [self.get_history_entry(obs, actions)]
-					if use_render:
-						env.render()
-					
-					# Obtain the legible rewards
-					legible_rewards = np.zeros(self._n_agents)
-					n_goals = len(self._optimal_models)
+				
+				# Obtain the legible rewards
+				legible_rewards = np.zeros(self._n_agents)
+				n_goals = len(self._optimal_models)
+				for a_idx in range(self._n_agents):
+					act_q_vals = np.zeros(n_goals)
+					action = actions[a_idx]
+					for g_idx in range(n_goals):
+						if self._agent_dqn.cnn_layer:
+							obs_reshape = obs[a_idx].reshape((1, *obs[a_idx].shape))
+							q_vals = self._agent_dqn.q_network.apply(self._optimal_models[self._goal_ids[g_idx]].params, obs_reshape)[0]
+						else:
+							q_vals = self._agent_dqn.q_network.apply(self._optimal_models[self._goal_ids[g_idx]].params, obs[a_idx])
+						act_q_vals[g_idx] = np.exp(self._beta * (q_vals[action] - q_vals.max()))
+					legible_rewards[a_idx] = act_q_vals[self._goal_ids.index(self._goal)] / act_q_vals.sum()
+					episode_rewards += (legible_rewards[a_idx] / self._n_agents)
+				
+				if terminated:
+					finished = np.ones(self._n_agents)
+					legible_rewards = legible_rewards / (1 - self.agent_dqn.gamma)
+				else:
+					finished = np.zeros(self._n_agents)
+				
+				if self._write_tensorboard and epoch_logging:
+					self._agent_dqn.summary_writer.add_scalar("charts/legible_reward", sum(legible_rewards) / self._n_agents, epoch + start_record_epoch)
+					self._agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards) / self._n_agents, epoch + start_record_epoch)
+				
+				# store new samples
+				if self._use_vdn:
+					self.replay_buffer.add(obs, next_obs, actions, legible_rewards, finished[0], infos)
+				else:
 					for a_idx in range(self._n_agents):
-						act_q_vals = np.zeros(n_goals)
-						action = actions[a_idx]
-						for g_idx in range(n_goals):
-							if self._agent_dqn.cnn_layer:
-								obs_reshape = obs[a_idx].reshape((1, *obs[a_idx].shape))
-								q_vals = self._agent_dqn.q_network.apply(self._optimal_models[self._goal_ids[g_idx]].params, obs_reshape)[0]
-							else:
-								q_vals = self._agent_dqn.q_network.apply(self._optimal_models[self._goal_ids[g_idx]].params, obs[a_idx])
-							act_q_vals[g_idx] = np.exp(self._beta * (q_vals[action] - q_vals.max()))
-						legible_rewards[a_idx] = act_q_vals[self._goal_ids.index(self._goal)] / act_q_vals.sum()
-						episode_rewards += (legible_rewards[a_idx] / self._n_agents)
+						self.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], infos)
+				obs = next_obs
+				
+				# update Q-network and target network
+				if epoch >= warmup:
+					if epoch % train_freq == 0:
+						loss = self.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger)
+						if self._write_tensorboard and epoch_logging:
+							self._agent_dqn.summary_writer.add_scalar("losses/td_loss", loss, epoch)
+							self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
+						else:
+							avg_loss += [loss]
 					
-					if terminated:
-						finished = np.ones(self._n_agents)
-						legible_rewards = legible_rewards / (1 - self.agent_dqn.gamma)
-					else:
-						finished = np.zeros(self._n_agents)
-					
-					if self._write_tensorboard and epoch_logging:
-						self._agent_dqn.summary_writer.add_scalar("charts/legible_reward", sum(legible_rewards) / self._n_agents, epoch + start_record_epoch)
-						self._agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards) / self._n_agents, epoch + start_record_epoch)
-					
-					# store new samples
-					if self._use_vdn:
-						self.replay_buffer.add(obs, next_obs, actions, legible_rewards, finished[0], infos)
-					else:
-						for a_idx in range(self._n_agents):
-							self.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], infos)
-					obs = next_obs
-					
-					# update Q-network and target network
-					if epoch >= warmup:
-						if epoch % train_freq == 0:
-							loss = self.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger)
-							if self._write_tensorboard and epoch_logging:
-								self._agent_dqn.summary_writer.add_scalar("losses/td_loss", loss, epoch)
-								self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
-							else:
-								avg_loss += [loss]
-						
-						if epoch % target_freq == 0:
-							self._agent_dqn.update_target_model(tau)
-					
-					epoch += 1
-					sys.stdout.flush()
-					
-					# Check if iteration is over
-					if terminated or timeout:
-						if self._write_tensorboard:
-							episode_len = epoch - episode_start
-							self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, epoch + start_record_epoch)
-							self._agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
-							self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
-							self._agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
-							self._agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
-							if not epoch_logging:
-								self._agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), it + start_record_it)
-								self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(episode_len / (time.time() - start_time)), it + start_record_it)
-						logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
-						obs, *_ = env.reset()
-						done = True
-						history += [episode_history]
-						episode_rewards = 0
-						episode_start = epoch
-			
-			return history
+					if epoch % target_freq == 0:
+						self._agent_dqn.update_target_model(tau)
+				
+				epoch += 1
+				sys.stdout.flush()
+				
+				# Check if iteration is over
+				if terminated or timeout:
+					if self._write_tensorboard:
+						episode_len = epoch - episode_start
+						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, epoch + start_record_epoch)
+						self._agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
+						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
+						self._agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
+						self._agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+						if not epoch_logging:
+							self._agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), it + start_record_it)
+							self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(episode_len / (time.time() - start_time)), it + start_record_it)
+					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
+					obs, *_ = env.reset()
+					done = True
+					history += [episode_history]
+					episode_rewards = 0
+					episode_start = epoch
+		
+		return history
 
 
 # noinspection PyTypeChecker,DuplicatedCode,PyUnresolvedReferences

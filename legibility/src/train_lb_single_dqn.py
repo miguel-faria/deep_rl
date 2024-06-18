@@ -119,6 +119,11 @@ def main():
 	parser.add_argument('--train-tags', dest='tags', type=str, nargs='+', required=False, default=None,
 						help='List of tags for grouping in weights and biases, empty by default signaling not to train under a specific set of tags')
 	parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
+	parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
+						help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
+	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
+	parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
+						help='Flag that signals training using model trained with one less food item spawned (when using to train with only 1 item, defaults to false).')
 	
 	# Environment parameters
 	parser.add_argument('--player-level', dest='player_level', type=int, required=True, help='Level of the agents collecting food')
@@ -162,6 +167,7 @@ def main():
 	restart_info = args.restart_info
 	debug = args.debug
 	tags = args.tags if args.tags is not None else ''
+	use_lower_model = args.use_lower_model
 	
 	# LB-Foraging environment args
 	player_level = args.player_level
@@ -189,9 +195,10 @@ def main():
 		return
 
 	now = datetime.now()
-	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
-	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
-	models_dir = Path(args.models_dir) / 'models' if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
+	home_dir = Path(__file__).parent.absolute().parent.absolute()
+	log_dir = Path(args.logs_dir) / 'logs' if args.logs_dir != '' else home_dir / 'logs'
+	data_dir = Path(args.data_dir) / 'data' if args.data_dir != '' else home_dir / 'data'
+	models_dir = Path(args.models_dir) / 'models' if args.models_dir != '' else home_dir / 'models'
 	log_filename = (('train_lb_coop_single_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents,
 																								 n_foods_spawn, food_level)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
@@ -310,6 +317,15 @@ def main():
 					cycles_range = range(n_cycles)
 					logger.info('Starting train')
 				
+				if use_lower_model:
+					prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (n_foods_spawn - 1, food_level)) / 'best'
+					if (prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
+						small_model_pth = str(prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
+					else:
+						small_model_pth = ''
+				else:
+					small_model_pth = ''
+				
 				cycle_warmup = warmup
 				for cycle in cycles_range:
 					logger.info('Cycle %d of %d' % (cycle+1, n_cycles))
@@ -331,11 +347,12 @@ def main():
 					cnn_shape = (0, ) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
 					history = agent_madqn.train_dqn(env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps, final_eps,
 													eps_type, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-													use_render, cycle, greedy_action=False, epoch_logging=args.ep_log)
+													use_render, cycle, greedy_action=False, epoch_logging=args.ep_log, previous_model_path=small_model_pth)
 					
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None
 					env.food_spawn = 0
+					env.set_objective(loc)
 					cycle_warmup *= (0.5 ** min(n_cycles, 1))
 					
 					if debug:

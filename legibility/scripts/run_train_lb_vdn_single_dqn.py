@@ -67,6 +67,11 @@ parser.add_argument('--logs', dest='logs', type=str, required=False, default=TEN
 parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False, default=CYCLE_TYPE)
 parser.add_argument('--cycle-eps', dest='cycle_eps', type=float, required=False, default=CYCLE_EPS)
 parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
+parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
+parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
+					help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
+parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
+					help='Flag that signals training using model trained with one less food item spawned (when using to train with only 1 item, defaults to false).')
 
 input_args = parser.parse_args()
 field_len = input_args.field_len
@@ -75,8 +80,11 @@ max_steps = input_args.max_steps
 iterations = input_args.max_iterations
 logs = input_args.logs
 models_dir = input_args.models_dir
+data_dir = input_args.data_dir
+logs_dir = input_args.logs_dir
 cycle_type = input_args.cycle_type
 cycle_eps = input_args.cycle_eps
+use_lower_model = input_args.use_lower_model
 
 for i in range(limits[0], limits[1] + 1):
 	print('Launching training script for %d foods spawned' % i)
@@ -92,7 +100,8 @@ for i in range(limits[0], limits[1] + 1):
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
 			 (" --debug" if DEBUG else "") + (" --vdn" if USE_VDN else "") + (" --fraction %f" % PRECOMP_FRAC) + (" --cycle-type %s" % cycle_type) +
-			 (" --models-dir %s" % models_dir if models_dir != '' else ""))
+			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --data-dir %s" % data_dir if data_dir != '' else "")  +
+			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else ""))
 	commamd = "python " + str(src_dir / 'train_lb_single_dqn.py') + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)

@@ -26,9 +26,9 @@ source "$HOME"/miniconda3/bin/activate deep_rl_env
 
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 8 --iterations 600 --limits 1 4 --logs /mnt/scratch-artemis/miguelfaria/logs/lb-foraging
+  python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 8 --iterations 600 --limits 1 4 --logs /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl --data-dir /mnt/data-artemis/miguelfaria/deep_rl
 else
-  python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 8 --iterations 600 --limits 1 4
+  python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 8 --iterations 600 --limits 2 2 --use-lower-model
 fi
 
 source "$HOME"/miniconda3/bin/deactivate

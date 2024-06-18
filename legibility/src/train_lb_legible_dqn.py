@@ -551,7 +551,7 @@ def main():
 					cycles_range = range(n_cycles)
 					logger.info('Starting train')
 				
-				if use_lower_model:
+				if use_lower_model and n_foods_spawn > 1:
 					prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (n_foods_spawn - 1, food_level)) / 'best'
 					if (prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
 						small_model_pth = str(prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))

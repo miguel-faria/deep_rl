@@ -71,9 +71,9 @@ class DQNetwork(object):
             if cnn_layer:
                 if cnn_properties is None:
                     n_conv_layers = 1
-                    cnn_size = 128
-                    cnn_kernel = (3, 3)
-                    pool_window = (2, 2)
+                    cnn_size = [128]
+                    cnn_kernel = [(3, 3)]
+                    pool_window = [(2, 2)]
                 else:
                     n_conv_layers = cnn_properties[0]
                     cnn_size = cnn_properties[1]

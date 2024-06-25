@@ -78,12 +78,13 @@ if [ "$env_type" = "conda" ]; then
   mamba install -y -c conda-forge stable-baselines3 tensorboard wandb gymnasium pygame
   mamba install -y -c conda-forge optax flax
   python3 -m pip install --upgrade "$jax_version" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-  python3 -m pip install gym pyglet
+  python3 -m pip install gym pyglet==1.5.29
   # pip3 install --upgrade nvidia-cudnn-cu11 nvidia-cufft-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvcc-cu11 nvidia-cuda-runtime-cu11
 
   if [ "$use_llms" -eq 1 ]; then
-      mamba install -y -c conda-forge transformers datasets evaluate accelerate
-      python3 -m pip install vllm
+      mamba install -y -c huggingface transformers datasets
+      mamba install -y -c conda-forge evaluate accelerate
+      python3 -m pip install sentencepiece vllm
   fi
 
   mamba deactivate

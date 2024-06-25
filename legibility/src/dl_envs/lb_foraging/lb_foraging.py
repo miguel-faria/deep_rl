@@ -711,6 +711,7 @@ class LBForagingEnv(Env):
 				self._rendering_initialized = True
 			except Exception as e:
 				print('Caught exception %s when trying to import Viewer class.' % str(e.args))
+				return None
 
 		return self._render.render(self, return_rgb_array=(self.render_mode == 'rgb_array'))
 	
@@ -718,6 +719,7 @@ class LBForagingEnv(Env):
 		if self._render is not None:
 			self._render.close()
 			self._render = None
+			self._rendering_initialized = False
 	
 	def close(self):
 		super().close()

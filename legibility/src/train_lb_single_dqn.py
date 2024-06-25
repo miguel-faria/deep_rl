@@ -124,6 +124,10 @@ def main():
 	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 	parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
 						help='Flag that signals training using model trained with one less food item spawned (when using to train with only 1 item, defaults to false).')
+	parser.add_argument('--buffer-smart-add', dest='buffer_smart_add', action='store_true',
+						help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
+	parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=False, default='uniform', choices=['uniform', 'weighted'],
+						help='Method of deciding how to add new experience samples when replay buffer is full')
 	
 	# Environment parameters
 	parser.add_argument('--player-level', dest='player_level', type=int, required=True, help='Level of the agents collecting food')
@@ -266,16 +270,19 @@ def main():
 		try:
 			wandb.init(project='lb-foraging-optimal', entity='miguel-faria',
 					   config={
-						   "field": "%dx%d" % (field_size[0], field_size[1]),
-						   "agents": n_agents,
-						   "foods": n_foods,
-						   "online_learing_rate": learn_rate,
-						   "target_learning_rate": target_update_rate,
-						   "discount": gamma,
-						   "eps_decay": eps_type,
-						   "dqn_architecture": architecture,
-						   "iterations": n_iterations,
-						   "cycles": n_cycles,
+							   "field": "%dx%d" % (field_size[0], field_size[1]),
+							   "agents": n_agents,
+							   "foods": n_foods,
+							   "online_learing_rate": learn_rate,
+							   "target_learning_rate": target_update_rate,
+							   "discount": gamma,
+							   "eps_decay": eps_type,
+							   "eps_rate": eps_decay,
+							   "cycle_decay": args.cycle_type,
+							   "cycle_rate": cycle_eps_decay,
+							   "dqn_architecture": architecture,
+							   "iterations": n_iterations,
+							   "cycles": n_cycles,
 					   },
 					   dir=tensorboard_details[0],
 					   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
@@ -300,12 +307,12 @@ def main():
 					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space,
 												   env.observation_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
 												   tensorboard_details + ['l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])],
-												   cnn_properties=cnn_properties)
+												   cnn_properties=cnn_properties, buffer_data=(args.buffer_smart_add, args.buffer_method))
 				else:
 					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space,
 												   obs_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
 												   tensorboard_details + ['l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])],
-												   cnn_properties=cnn_properties)
+												   cnn_properties=cnn_properties, buffer_data=(args.buffer_smart_add, args.buffer_method))
 				if restart_train:
 					start_cycle = int(restart_info[2])
 					logger.info('Load trained model')
@@ -317,13 +324,16 @@ def main():
 					cycles_range = range(n_cycles)
 					logger.info('Starting train')
 				
-				if use_lower_model:
-					prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (n_foods_spawn - 1, food_level)) / 'best'
+				if use_lower_model and n_foods_spawn > 1:
+					prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (max(n_foods_spawn - 1, 1), food_level)) / 'best'
 					if (prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
+						logger.info('Using model trained with %d foods spawned as a baseline' % (n_foods_spawn - 1))
 						small_model_pth = str(prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
 					else:
+						logger.info('Training model from scratch')
 						small_model_pth = ''
 				else:
+					logger.info('Training model from scratch')
 					small_model_pth = ''
 				
 				cycle_warmup = warmup
@@ -484,4 +494,3 @@ def main():
 
 if __name__ == '__main__':
 	main()
-	

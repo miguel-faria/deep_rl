@@ -30,10 +30,10 @@ class SingleModelMADQN(object):
 	_use_vdn: bool
 	_use_ddqn: bool
 	
-	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float,
-				 action_space: Space, observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False,
-				 use_cnn: bool = False, handle_timeout: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None,
-				 cnn_properties: List = None, n_envs: int = 1):
+	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float, action_space: Space,
+				 observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False, use_cnn: bool = False,
+				 handle_timeout: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None, cnn_properties: List = None, n_envs: int = 1,
+				 buffer_data: tuple = (False, '')):
 		
 		"""
 		Initialize a multi-agent scenario DQN with a single DQN model
@@ -82,11 +82,11 @@ class SingleModelMADQN(object):
 		self._agent_dqn = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, use_tensorboard,
 									board_data, cnn_properties)
 		if use_vdn:
-			self._replay_buffer = ReplayBuffer(buffer_size, observation_space, action_space, "cuda" if use_gpu else "cpu",
-											   handle_timeout_termination=handle_timeout, n_agents=num_agents, n_envs=n_envs)
+			self._replay_buffer = ReplayBuffer(buffer_size, observation_space, action_space, "cuda" if use_gpu else "cpu", handle_timeout_termination=handle_timeout,
+											   n_agents=num_agents, n_envs=n_envs, smart_add=buffer_data[0], add_method=buffer_data[1])
 		else:
-			self._replay_buffer = ReplayBuffer(buffer_size * num_agents, observation_space, action_space, "cuda" if use_gpu else "cpu",
-											   handle_timeout_termination=handle_timeout, n_envs=n_envs)
+			self._replay_buffer = ReplayBuffer(buffer_size * num_agents, observation_space, action_space, "cuda" if use_gpu else "cpu", handle_timeout_termination=handle_timeout,
+											   n_envs=n_envs, smart_add=buffer_data[0], add_method=buffer_data[1])
 		
 	########################
 	### Class Properties ###
@@ -242,7 +242,7 @@ class SingleModelMADQN(object):
 						loss = jax.device_get(self.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger, cnn_shape))
 						if self._write_tensorboard and epoch_logging:
 							self._agent_dqn.summary_writer.add_scalar("losses/td_loss", loss, epoch)
-							self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
+							# self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
 						else:
 							avg_loss += [loss]
 					
@@ -258,17 +258,17 @@ class SingleModelMADQN(object):
 					avg_episode_len += [episode_len]
 					if self._write_tensorboard:
 						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
+						# self._agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/avg_episode_length", np.mean(avg_episode_len), it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+						# self._agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
 						self._agent_dqn.summary_writer.add_scalar("charts/cycle", cycle, it + start_record_it)
 						if not epoch_logging:
 							self._agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), it + start_record_it)
-							self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
-					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
+							# self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
+					logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 					obs, *_ = env.reset()
 					done = True
 					history += [episode_history]
@@ -340,14 +340,13 @@ class LegibleSingleMADQN(SingleModelMADQN):
 	_goal: str
 	_beta: float
 	
-	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float,
-				 beta: float, action_space: Space, observation_space: Space, use_gpu: bool, handle_timeout: bool, models_dir: Path,
-				 model_names: Dict[str, str], goal: str, dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False,
-				 use_cnn: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None, n_legible_agents: int = 1,
-				 cnn_properties: List = None):
+	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float, beta: float,
+				 action_space: Space, observation_space: Space, use_gpu: bool, handle_timeout: bool, models_dir: Path, model_names: Dict[str, str], goal: str,
+				 dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False, use_cnn: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None,
+				 n_legible_agents: int = 1, cnn_properties: List = None, buffer_data: tuple = (False, '')):
 		
 		super().__init__(num_agents, action_dim, num_layers, act_function, layer_sizes, buffer_size, gamma, action_space, observation_space, use_gpu,
-						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, use_tensorboard, tensorboard_data, cnn_properties)
+						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, use_tensorboard, tensorboard_data, cnn_properties, buffer_data=buffer_data)
 		
 		self._n_leg_agents = n_legible_agents
 		self._goal_ids = list(model_names.keys())

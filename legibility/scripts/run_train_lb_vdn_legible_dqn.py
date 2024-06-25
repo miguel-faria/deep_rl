@@ -18,7 +18,7 @@ ARQUITECTURE = "v3"
 BUFFER = 10000
 GAMMA = 0.95
 BETA = 0.9
-TEMP = 1.0
+TEMP = 0.1
 TENSORBOARD_DATA = [str(log_dir), 50, 25, '.log']
 USE_DUELING = True
 USE_DDQN = True
@@ -41,9 +41,9 @@ FINAL_EPS = 0.05
 # EPS_DECAY = 0.7	# for linear eps
 EPS_DECAY = 0.175	# for log eps
 # CYCLE_EPS = 0.925
-CYCLE_EPS = 0.99
+CYCLE_EPS = 0.3
 EPS_TYPE = "log"
-CYCLE_TYPE = "log"
+CYCLE_TYPE = "linear"
 USE_GPU = True
 RESTART = False
 DEBUG = False
@@ -79,6 +79,10 @@ parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
 					help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
 parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
 					help='Flag that signals training using model trained with one less food item spawned (when using to train with only 1 item, defaults to false).')
+parser.add_argument('--buffer-smart-add', dest='buffer_smart_add', action='store_true',
+					help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
+parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=False, default='uniform', choices=['uniform', 'weighted'],
+					help='Method of deciding how to add new experience samples when replay buffer is full')
 
 input_args = parser.parse_args()
 field_len = input_args.field_len
@@ -92,6 +96,8 @@ logs_dir = input_args.logs_dir
 cycle_type = input_args.cycle_type
 cycle_eps = input_args.cycle_eps
 use_lower_model = input_args.use_lower_model
+smart_add = input_args.buffer_smart_add
+add_method = input_args.buffer_method
 
 for i in range(limits[0], limits[1] + 1):
 	print('Launching training script for %d foods spawned' % i)
@@ -114,7 +120,8 @@ for i in range(limits[0], limits[1] + 1):
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
 			 (" --debug" if DEBUG else "") + (" --use-opt-vdn" if OPT_VDN else "") + (" --n-leg-agents %d" % N_LEG_AGENTS) + (" --fraction %f" % PRECOMP_FRAC) +
 			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --cycle-eps-type %s" % cycle_type)  + (" --data-dir %s" % data_dir if data_dir != '' else "") +
-			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else ""))
+			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") + (" --buffer-smart-add" if smart_add else "") +
+			 (" --buffer-method %s" % add_method))
 	commamd = "python " + str(src_dir / 'train_lb_legible_dqn.py') + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)

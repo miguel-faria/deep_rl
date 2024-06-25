@@ -177,8 +177,8 @@ class ReplayBuffer(GeneralBuffer):
         https://github.com/DLR-RM/stable-baselines3/issues/284
     """
 
-    def __init__(self, buffer_size: int, observation_space: spaces.Space, action_space: spaces.Space, device: Union[jax.Device, str] = "auto",
-                 n_envs: int = 1, n_agents: int = 1, rng_seed: int = 1234567890, optimize_memory_usage: bool = False, handle_timeout_termination: bool = True):
+    def __init__(self, buffer_size: int, observation_space: spaces.Space, action_space: spaces.Space, device: Union[jax.Device, str] = "auto", n_envs: int = 1, n_agents: int = 1,
+                 rng_seed: int = 1234567890, optimize_memory_usage: bool = False, handle_timeout_termination: bool = True, smart_add: bool = False, add_method: str = 'uniform'):
         super().__init__(buffer_size, observation_space, action_space, device, n_envs=n_envs, n_agents=n_agents,rng_seed=rng_seed)
         # Adjust buffer size
         self.buffer_size = max(buffer_size // n_envs, 1)
@@ -193,7 +193,10 @@ class ReplayBuffer(GeneralBuffer):
                 "ReplayBuffer does not support optimize_memory_usage = True "
                 "and handle_timeout_termination = True simultaneously."
             )
+        self.smart_add = smart_add
+        self.add_method = add_method
         self.optimize_memory_usage = optimize_memory_usage
+        self.samples_order = None
         self.observations = np.zeros((self.buffer_size, self.n_envs, *obs_shape), dtype=observation_space.dtype)
 
         if optimize_memory_usage:
@@ -229,30 +232,51 @@ class ReplayBuffer(GeneralBuffer):
 
     def add(self, obs: np.ndarray, next_obs: np.ndarray, action: Union[np.ndarray, int], reward: Union[np.ndarray, float], done: Union[np.ndarray, bool],
             infos: List[Dict[str, Any]]) -> None:
+        if self.smart_add:
+            if self.pos >= self.buffer_size:
+                if self.add_method == 'weighted':
+                    if self.samples_order is None:
+                        self.samples_order = jnp.arange(self.buffer_size).tolist()
+                    probs = self.buffer_size - jnp.arange(self.buffer_size)
+                    probs = probs / probs.sum()
+                    _, subkey = jax.random.split(self.rng_key)
+                    pop_pos = jax.random.choice(subkey, jnp.arange(self.buffer_size), p=probs)
+                    self.samples_order.pop(pop_pos)
+                    pos = self.buffer_size - 1
+                else:
+                    _, subkey = jax.random.split(self.rng_key)
+                    pos = jax.random.randint(subkey, minval=0, maxval=self.buffer_size, shape=())
+                self.add_sample(pos, obs, next_obs, action, reward, done, infos)
+            else:
+                self.add_sample(self.pos, obs, next_obs, action, reward, done, infos)
+                self.pos += 1
+            
+        else:
+            self.add_sample(self.pos, obs, next_obs, action, reward, done, infos)
+            self.pos += 1
+            if self.pos == self.buffer_size:
+                self.full = True
+                self.pos = 0
+
+    def add_sample(self, pos: int, obs: np.ndarray, next_obs: np.ndarray, action: np.ndarray, reward: np.ndarray, done: np.ndarray, infos: List[Dict[str, Any]]):
         if isinstance(self.observation_space, spaces.Discrete):
             obs = obs.reshape((self.n_envs, *self.obs_shape))
             next_obs = next_obs.reshape((self.n_envs, *self.obs_shape))
 
         action = action.reshape((self.n_envs, self.action_dim))
-
-        self.observations[self.pos] = np.array(obs).copy()
-
+        self.observations[pos] = np.array(obs).copy()
+        
         if self.optimize_memory_usage:
-            self.observations[(self.pos + 1) % self.buffer_size] = np.array(next_obs).copy()
+            self.observations[(pos + 1) % self.buffer_size] = np.array(next_obs).copy()
         else:
-            self.next_observations[self.pos] = np.array(next_obs).copy()
-
-        self.actions[self.pos] = np.array(action).copy()
-        self.rewards[self.pos] = np.array(reward).copy()
-        self.dones[self.pos] = np.array(done).copy()
-
+            self.next_observations[pos] = np.array(next_obs).copy()
+        
+        self.actions[pos] = np.array(action).copy()
+        self.rewards[pos] = np.array(reward).copy()
+        self.dones[pos] = np.array(done).copy()
+        
         if self.handle_timeout_termination:
-            self.timeouts[self.pos] = np.array([info.get("timeout", False) for info in infos])
-
-        self.pos += 1
-        if self.pos == self.buffer_size:
-            self.full = True
-            self.pos = 0
+            self.timeouts[pos] = np.array([info.get("timeout", False) for info in infos])
 
     def sample(self, batch_size: int, env: Optional[VecNormalize] = None, all_envs: bool = False) -> ReplaySample:
         """

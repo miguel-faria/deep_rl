@@ -109,6 +109,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 	start_record_it = cycle * num_iterations
 	start_record_epoch = cycle * max_timesteps
 	history = []
+	avg_episode_len = []
 	
 	for it in range(num_iterations):
 		if env.use_render:
@@ -239,19 +240,22 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			
 			# Check if iteration is over
 			if terminated or timeout:
+				episode_len = epoch - episode_start
+				avg_episode_len += [episode_len]
 				if dqn_model.write_tensorboard:
-					episode_len = epoch - episode_start
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episode_q_vals", episode_q_vals, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/cycle", cycle, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), epoch)
-				logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
+					dqn = dqn_model.agent_dqn
+					dqn.summary_writer.add_scalar("charts/avg_episode_length", np.mean(avg_episode_len), it + start_record_it)
+					dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
+					# dqn.summary_writer.add_scalar("charts/episode_q_vals", episode_q_vals, it + start_record_it)
+					dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, it + start_record_it)
+					# dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
+					dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
+					dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
+					dqn.summary_writer.add_scalar("charts/cycle", cycle, it + start_record_it)
+					dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), epoch)
+					# dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+					# dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
+				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 				obs, *_ = env.reset()
 				if env.use_render:
 					env.render()
@@ -332,6 +336,10 @@ def main():
 	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 	parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
 						help='Flag that signals training using model trained with one less food item spawned (when using to train with only 1 item, defaults to false).')
+	parser.add_argument('--buffer-smart-add', dest='buffer_smart_add', action='store_true',
+						help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
+	parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=False, default='uniform', choices=['uniform', 'weighted'],
+						help='Method of deciding how to add new experience samples when replay buffer is full')
 	
 	# Environment parameters
 	parser.add_argument('--n-players', dest='n_players', type=int, required=True, help='Number of players in the foraging environment')
@@ -530,15 +538,15 @@ def main():
 													 use_gpu, False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn, use_vdn,
 													 use_cnn, use_tensorboard, tensorboard_details + ['l%dx%d-%df-t%dx%d-legible' % (field_size[0], field_size[1],
 																																	 n_foods_spawn, loc[0], loc[1])],
-													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties)
+													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties,
+													 buffer_data=(args.buffer_smart_add, args.buffer_method))
 				else:
 					agent_madqn = LegibleSingleMADQN(n_agents, n_actions, n_layers, nn.relu, layer_sizes, buffer_size, gamma, beta, agent_action_space,
 													 obs_space, use_gpu, False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn,
-													 use_vdn, use_cnn, use_tensorboard, tensorboard_details + ['l%dx%d-%df-t%dx%d-legible' % (field_size[0],
-																																			  field_size[1],
-																																			  n_foods_spawn,
-																																			  loc[0], loc[1])],
-													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties)
+													 use_vdn, use_cnn, use_tensorboard, tensorboard_details + ['l%dx%d-%df-t%dx%d-legible' % (field_size[0], field_size[1],
+																																			  n_foods_spawn, loc[0], loc[1])],
+													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties,
+													 buffer_data=(args.buffer_smart_add, args.buffer_method))
 				
 				if restart_train:
 					start_cycle = int(restart_info[2])
@@ -552,12 +560,15 @@ def main():
 					logger.info('Starting train')
 				
 				if use_lower_model and n_foods_spawn > 1:
-					prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (n_foods_spawn - 1, food_level)) / 'best'
+					prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (max(n_foods_spawn - 1, 1), food_level)) / 'best'
 					if (prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
+						logger.info('Using model trained with %d foods spawned as a baseline' % (n_foods_spawn - 1))
 						small_model_pth = str(prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
 					else:
+						logger.info('Training model from scratch')
 						small_model_pth = ''
 				else:
+					logger.info('Training model from scratch')
 					small_model_pth = ''
 				
 				cycle_warmup = warmup
@@ -695,7 +706,7 @@ def main():
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 				food_idx = str(n_foods_spawn) + '-food'
-				performance_data[field_idx][food_idx] = float(train_acc)
+				performance_data[field_idx][food_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(
 					[[sorted_key, performance_data[sorted_key]] for sorted_key in
@@ -710,7 +721,7 @@ def main():
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 				food_idx = str(n_foods) + '-food'
-				performance_data[field_idx][food_idx] = float(train_acc)
+				performance_data[field_idx][food_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(
 					[[sorted_key, performance_data[sorted_key]] for sorted_key in
@@ -720,4 +731,3 @@ def main():
 
 if __name__ == '__main__':
 	main()
-	

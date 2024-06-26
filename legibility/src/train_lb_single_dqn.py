@@ -268,26 +268,26 @@ def main():
 	####################
 	if len(locs_train) > 0:
 		try:
-			wandb.init(project='lb-foraging-optimal', entity='miguel-faria',
-					   config={
-							   "field": "%dx%d" % (field_size[0], field_size[1]),
-							   "agents": n_agents,
-							   "foods": n_foods,
-							   "online_learing_rate": learn_rate,
-							   "target_learning_rate": target_update_rate,
-							   "discount": gamma,
-							   "eps_decay": eps_type,
-							   "eps_rate": eps_decay,
-							   "cycle_decay": args.cycle_type,
-							   "cycle_rate": cycle_eps_decay,
-							   "dqn_architecture": architecture,
-							   "iterations": n_iterations,
-							   "cycles": n_cycles,
-					   },
-					   dir=tensorboard_details[0],
-					   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
-							 now.strftime("%Y%m%d-%H%M%S")),
-					   sync_tensorboard=True)
+			wandb_run = wandb.init(project='lb-foraging-optimal', entity='miguel-faria',
+								   config={
+										   "field": "%dx%d" % (field_size[0], field_size[1]),
+										   "agents": n_agents,
+										   "foods": n_foods,
+										   "online_learing_rate": learn_rate,
+										   "target_learning_rate": target_update_rate,
+										   "discount": gamma,
+										   "eps_decay": eps_type,
+										   "eps_rate": eps_decay,
+										   "cycle_decay": args.cycle_type,
+										   "cycle_rate": cycle_eps_decay,
+										   "dqn_architecture": architecture,
+										   "iterations": n_iterations,
+										   "cycles": n_cycles,
+								   },
+								   dir=tensorboard_details[0],
+								   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
+										 now.strftime("%Y%m%d-%H%M%S")),
+								   sync_tensorboard=True)
 			logger.info('Starting training for different food locations')
 			for loc in locs_train:
 				logger.info('Training for location: %d, %d' % (loc[0], loc[1]))
@@ -306,12 +306,12 @@ def main():
 					action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
 					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space,
 												   env.observation_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
-												   tensorboard_details + ['l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])],
+												   wandb_run, 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1]),
 												   cnn_properties=cnn_properties, buffer_data=(args.buffer_smart_add, args.buffer_method))
 				else:
 					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space,
 												   obs_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
-												   tensorboard_details + ['l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])],
+												   wandb_run, 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1]),
 												   cnn_properties=cnn_properties, buffer_data=(args.buffer_smart_add, args.buffer_method))
 				if restart_train:
 					start_cycle = int(restart_info[2])

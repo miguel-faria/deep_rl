@@ -19,6 +19,7 @@ from typing import List, Dict, Callable, Set
 from datetime import datetime
 from functools import partial
 from jax import jit
+from wandb import run
 
 
 COEF = 1.0
@@ -30,13 +31,12 @@ class MultiAgentDQN(object):
 	_agent_ids: List[str]
 	_agent_dqns: Dict[str, DQNetwork]
 	_replay_buffer: ReplayBuffer
-	_write_tensorboard: bool
 	_use_vdn: bool
 	_use_ddqn: bool
 	
 	def __init__(self, num_agents: int, agent_ids: List[str], action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int],
 				 buffer_size: int, gamma: float, action_space: Space, observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False,
-				 use_vdn: bool = False, use_cnn: bool = False, handle_timeout: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None,
+				 use_vdn: bool = False, use_cnn: bool = False, handle_timeout: bool = False, use_tracker: bool = False, tracker: run = None, tracker_panel: str = '',
 				 cnn_properties: List[int] = None):
 		
 		"""
@@ -72,21 +72,14 @@ class MultiAgentDQN(object):
 		
 		self._num_agents = num_agents
 		self._agent_ids = agent_ids
-		self._write_tensorboard = use_tensorboard
 		self._use_vdn = use_vdn
 		self._use_ddqn = use_ddqn
 		self._agent_dqns = {}
 		self._replay_buffer = ReplayBuffer(buffer_size, observation_space, action_space, "cuda" if use_gpu else "cpu",
 										   handle_timeout_termination=handle_timeout, n_agents=num_agents)
 		for agent_id in agent_ids:
-			now = datetime.now()
-			if tensorboard_data is not None:
-				board_data = [tensorboard_data[0] + '/' + agent_id + '_' + now.strftime("%Y%m%d-%H%M%S"), tensorboard_data[1], tensorboard_data[2],
-							  tensorboard_data[3], agent_id]
-			else:
-				board_data = tensorboard_data
-			self._agent_dqns[agent_id] = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, use_tensorboard,
-										board_data, cnn_properties)
+			self._agent_dqns[agent_id] = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, use_tracker, tracker,
+												   tracker_panel + '_' + agent_id, cnn_properties)
 	
 	########################
 	### Class Properties ###
@@ -102,10 +95,6 @@ class MultiAgentDQN(object):
 	@property
 	def agent_dqns(self) -> Dict[str, DQNetwork]:
 		return self._agent_dqns
-	
-	@property
-	def write_tensorboard(self) -> bool:
-		return self._write_tensorboard
 	
 	@property
 	def replay_buffer(self) -> ReplayBuffer:
@@ -164,8 +153,9 @@ class MultiAgentDQN(object):
 						q_values = agent_dqn.q_network.apply(agent_dqn.online_state.params, obs[a_idx])
 						action = q_values.argmax(axis=-1)
 						action = jax.device_get(action)
-						if self._agent_dqns[a_id].use_summary and epoch % tensorboard_frequency == 0:
-							self._agent_dqns[a_id].summary_writer.add_scalar("charts/episodic_q_vals", float(q_values[int(action)]), epoch + start_record_epoch)
+						if self._agent_dqns[a_id].use_tracker and epoch % tensorboard_frequency == 0:
+							self._agent_dqns[a_id].performance_tracker.log({self._agent_dqns[a_id].tracker_panel + "-charts/episodic_q_vals": float(q_values[int(action)])},
+																		   step=(epoch + start_record_epoch))
 						actions += [action]
 					actions = np.array(actions)
 				next_obs, rewards, terminated, timeout, infos = env.step(actions)
@@ -186,8 +176,8 @@ class MultiAgentDQN(object):
 				for a_idx in range(self._num_agents):
 					a_id = self._agent_ids[a_idx]
 					episode_rewards[a_idx] += rewards[a_idx]
-					if self._agent_dqns[a_id].use_summary:
-						self._agent_dqns[a_id].summary_writer.add_scalar("charts/reward", rewards[a_idx], epoch + start_record_epoch)
+					if self._agent_dqns[a_id].use_tracker:
+						self._agent_dqns[a_id].performance_tracker.log({self._agent_dqns[a_id].tracker_panel + "-charts/reward": rewards[a_idx]}, step=(epoch + start_record_epoch))
 				obs = next_obs
 				
 				# update Q-network and target network
@@ -200,14 +190,16 @@ class MultiAgentDQN(object):
 				if terminated or timeout:
 					done = True
 					obs, *_ = env.reset()
-					if self._write_tensorboard:
-						for a_idx in range(self._num_agents):
+					for a_idx in range(self._num_agents):
+						if self._agent_dqns[a_idx].use_tracker:
 							a_id = self._agent_ids[a_idx]
-							self._agent_dqns[a_id].summary_writer.add_scalar("charts/episodic_return", episode_rewards[a_idx], it + start_record_it)
-							self._agent_dqns[a_id].summary_writer.add_scalar("charts/episodic_length", epoch - episode_start, it + start_record_it)
-							self._agent_dqns[a_id].summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
-							self._agent_dqns[a_id].summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
-							print("Agent %s episode over:\tReward: %f\tLength: %d" % (a_id, episode_rewards[a_idx], epoch - episode_start))
+							self._agent_dqns[a_id].performance_tracker.log({
+									"charts/episodic_return": episode_rewards[a_idx],
+									"charts/episodic_length": epoch - episode_start,
+									"charts/epsilon": eps,
+									"charts/iteration": it},
+									step=(it + start_record_it))
+						print("Agent %s episode over:\tReward: %f\tLength: %d" % (self._agent_ids[a_idx], episode_rewards[a_idx], epoch - episode_start))
 	
 	@partial(jit, static_argnums=(0,))
 	def compute_vdn_dqn_loss(self, q_state: List[TrainState], target_state_params: List[flax.core.FrozenDict], observations: jnp.ndarray, actions: jnp.ndarray,
@@ -273,10 +265,10 @@ class MultiAgentDQN(object):
 						agent_dqn.online_state = q_states[a_idx]
 						
 						#  update tensorboard
-						if agent_dqn.use_summary and epoch % tensorboard_frequency == 0:
-							agent_dqn.tensorboard_writer.add_scalar("losses/td_loss", jax.device_get(loss), epoch)
-							agent_dqn.tensorboard_writer.add_scalar("losses/avg_q_values", jax.device_get(q_pred).mean(), epoch)
-							agent_dqn.tensorboard_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
+						if agent_dqn.use_tracker and epoch % tensorboard_frequency == 0:
+							agent_dqn.performance_tracker.add_scalar("losses/td_loss", jax.device_get(loss), epoch)
+							agent_dqn.performance_tracker.add_scalar("losses/avg_q_values", jax.device_get(q_pred).mean(), epoch)
+							agent_dqn.performance_tracker.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
 					
 				else:
 					losses = []

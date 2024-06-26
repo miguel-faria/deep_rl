@@ -12,12 +12,12 @@ import logging
 from dl_algos.q_networks import QNetwork, DuelingQNetwork, CNNQNetwork, CNNDuelingQNetwork, MultiObsCNNDuelingQNetwork
 from flax.training.checkpoints import save_checkpoint, restore_checkpoint
 from flax.training.train_state import TrainState
-from torch.utils.tensorboard import SummaryWriter
 from typing import Callable, List, Union
 from pathlib import Path
 from termcolor import colored
 from functools import partial
 from jax import jit
+from wandb import run
 
 EPS_TYPE = {'linear': 1, 'exp': 2, 'log': 3, 'epoch': 4}
 
@@ -26,15 +26,16 @@ class DQNetwork(object):
     _q_network: nn.Module
     _online_state: TrainState
     _target_state_params: flax.core.FrozenDict
-    _tensorboard_writer: SummaryWriter
+    _perform_tracker: run
+    _tracker_panel: str
     _gamma: float
     _use_ddqn: bool
     _cnn_layer: bool
     
     def __init__(self, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], gamma: float, dueling_dqn: bool = False,
-                 use_ddqn: bool = False, cnn_layer: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None,
-                 cnn_properties: List = None, ma_obs: bool = False, n_obs: int = 1):
-    
+                 use_ddqn: bool = False, cnn_layer: bool = False, use_tracker: bool = False, tracker: run = None, tracker_panel: str = '', cnn_properties: List = None,
+                 ma_obs: bool = False, n_obs: int = 1):
+        
         """
         Initializes a DQN
         
@@ -46,9 +47,8 @@ class DQNetwork(object):
         :param dueling_dqn:         flag denoting the use of a dueling architecture
         :param use_ddqn:            flag denoting the use of a double dqn variant
         :param cnn_layer:           flag denoting the use of a convolutional layer as the entry layer
-        :param use_tensorboard:     flag that notes usage of a tensorboard summary writer (default: False)
-        :param tensorboard_data:    list of the form [log_dir: str, queue_size: int, flush_interval: int, filename_suffix: str] with summary data for
-        the summary writer (default is None)
+        :param use_tracker:         flag that notes usage of a performance tracker (wandb) (default: False)
+        :param tracker:             wandb tracker to track model performance
         :param cnn_properties:      list of the properties for the convolutional layer (layer size, kernel size, pooling window size)
         
         """
@@ -95,21 +95,16 @@ class DQNetwork(object):
                     self._q_network = QNetwork(action_dim=action_dim, num_layers=num_layers, activation_function=act_function, layer_sizes=layer_sizes.copy())
             
         self._gamma = gamma
-        self._use_tensorboard = use_tensorboard
+        self._use_tracker = use_tracker
         self._target_state_params = None
         self._online_state = None
         self._use_ddqn = use_ddqn
         self._cnn_layer = cnn_layer
         self._q_network.apply = jax.jit(self._q_network.apply)
         self._dqn_initialized = False
-        if use_tensorboard:
-            summary_log = tensorboard_data[0]
-            queue_size = int(tensorboard_data[1])
-            flush_time = int(tensorboard_data[2])
-            file_suffix = tensorboard_data[3]
-            comment = tensorboard_data[4]
-            self._tensorboard_writer = SummaryWriter(log_dir=summary_log, comment=comment, max_queue=queue_size, flush_secs=flush_time,
-                                                     filename_suffix=file_suffix)
+        if use_tracker:
+            self._perform_tracker = tracker
+            self._tracker_panel = tracker_panel
 
     #############################
     ##    GETTERS & SETTERS    ##
@@ -128,20 +123,20 @@ class DQNetwork(object):
         return self._target_state_params
     
     @property
-    def summary_writer(self) -> SummaryWriter:
-        return self._tensorboard_writer
-    
-    @property
     def gamma(self) -> float:
         return self._gamma
     
     @property
-    def use_summary(self) -> bool:
-        return self._use_tensorboard
+    def use_tracker(self) -> bool:
+        return self._use_tracker
     
     @property
-    def tensorboard_writer(self) -> SummaryWriter:
-        return self._tensorboard_writer
+    def performance_tracker(self) -> run:
+        return self._perform_tracker
+    
+    @property
+    def tracker_panel(self) -> str:
+        return self._tracker_panel
     
     @property
     def cnn_layer(self) -> bool:

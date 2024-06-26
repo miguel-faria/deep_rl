@@ -18,6 +18,7 @@ from typing import List, Dict, Callable, Tuple
 from datetime import datetime
 from functools import partial
 from jax import jit
+from wandb import run
 
 
 # noinspection DuplicatedCode,PyTypeChecker
@@ -26,31 +27,29 @@ class SingleModelMADQN(object):
 	_n_agents: int
 	_agent_dqn: DQNetwork
 	_replay_buffer: ReplayBuffer
-	_write_tensorboard: bool
 	_use_vdn: bool
 	_use_ddqn: bool
 	
 	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float, action_space: Space,
 				 observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False, use_cnn: bool = False,
-				 handle_timeout: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None, cnn_properties: List = None, n_envs: int = 1,
+				 handle_timeout: bool = False, use_tracker: bool = False, tracker: run = None, tracker_panel: str = '', cnn_properties: List = None, n_envs: int = 1,
 				 buffer_data: tuple = (False, '')):
 		
 		"""
 		Initialize a multi-agent scenario DQN with a single DQN model
 
-		:param num_agents: number of agents in the environment
-		:param action_dim: number of actions of the agent, the DQN is agnostic to the semantic of each action
-        :param num_layers: number of layers for the q_network
-        :param act_function: activation function for the q_network
-        :param layer_sizes: number of neurons in each layer (list must have equal number of entries as the number of layers)
-        :param buffer_size: buffer size for the replay buffer
-        :param gamma: reward discount factor
-        :param observation_space: gym space for the agent observations
-        :param use_gpu: flag that controls use of cpu or gpu
-        :param handle_timeout: flag that controls handle timeout termination (due to timelimit) separately and treat the task as infinite horizon task.
-        :param use_tensorboard: flag that notes usage of a tensorboard summary writer (default: False)
-        :param tensorboard_data: list of the form [log_dir: str, queue_size: int, flush_interval: int, filename_suffix: str] with summary data for
-        the summary writer (default is None)
+		:param num_agents: 			number of agents in the environment
+		:param action_dim: 			number of actions of the agent, the DQN is agnostic to the semantic of each action
+        :param num_layers: 			number of layers for the q_network
+        :param act_function: 		activation function for the q_network
+        :param layer_sizes: 		number of neurons in each layer (list must have equal number of entries as the number of layers)
+        :param buffer_size: 		buffer size for the replay buffer
+        :param gamma: 				reward discount factor
+        :param observation_space: 	gym space for the agent observations
+        :param use_gpu: 			flag that controls use of cpu or gpu
+        :param handle_timeout: 		flag that controls handle timeout termination (due to timelimit) separately and treat the task as infinite horizon task.
+        :param use_tracker:         flag that notes usage of a performance tracker (wandb) (default: False)
+        :param tracker:             wandb tracker to track model performance
 
         :type num_agents: int
         :type action_dim: int
@@ -59,7 +58,7 @@ class SingleModelMADQN(object):
         :type layer_sizes: list[int]
         :type use_gpu: bool
         :type handle_timeout: bool
-        :type use_tensorboard: bool
+        :type use_tracker: bool
         :type gamma: float
         :type act_function: callable
         :type observation_space: gym.Space
@@ -67,20 +66,9 @@ class SingleModelMADQN(object):
 		"""
 		
 		self._n_agents = num_agents
-		self._write_tensorboard = use_tensorboard
 		self._use_vdn = use_vdn
 		self._use_ddqn = use_ddqn
-		now = datetime.now()
-		if use_tensorboard and tensorboard_data is not None:
-			log_name = (tensorboard_data[0] + '/single_model_' + ('vdn_' if use_vdn else '') + now.strftime("%Y%m%d-%H%M%S"))
-			if len(tensorboard_data) == 4:
-				board_data = [log_name, tensorboard_data[1], tensorboard_data[2], tensorboard_data[3], 'central_train']
-			else:
-				board_data = [log_name + '_' + tensorboard_data[4], tensorboard_data[1], tensorboard_data[2], tensorboard_data[3], 'central_train']
-		else:
-			board_data = tensorboard_data
-		self._agent_dqn = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, use_tensorboard,
-									board_data, cnn_properties)
+		self._agent_dqn = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, use_tracker, tracker, tracker_panel, cnn_properties)
 		if use_vdn:
 			self._replay_buffer = ReplayBuffer(buffer_size, observation_space, action_space, "cuda" if use_gpu else "cpu", handle_timeout_termination=handle_timeout,
 											   n_agents=num_agents, n_envs=n_envs, smart_add=buffer_data[0], add_method=buffer_data[1])
@@ -98,10 +86,6 @@ class SingleModelMADQN(object):
 	@property
 	def agent_dqn(self) -> DQNetwork:
 		return self._agent_dqn
-	
-	@property
-	def write_tensorboard(self) -> bool:
-		return self._write_tensorboard
 	
 	@property
 	def replay_buffer(self) -> ReplayBuffer:
@@ -232,17 +216,16 @@ class SingleModelMADQN(object):
 					for a_idx in range(self._n_agents):
 						self.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], rewards[a_idx], finished[a_idx], infos)
 						episode_rewards += (rewards[a_idx] / self._n_agents)
-				if self._write_tensorboard and epoch_logging:
-					self._agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards) / self._n_agents, epoch + start_record_epoch)
+				if self._agent_dqn.use_tracker and epoch_logging:
+					self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/reward": sum(rewards)}, step=(epoch + start_record_epoch))
 				obs = next_obs
 				
 				# update Q-network and target network
 				if epoch >= warmup:
 					if epoch % train_freq == 0:
 						loss = jax.device_get(self.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger, cnn_shape))
-						if self._write_tensorboard and epoch_logging:
-							self._agent_dqn.summary_writer.add_scalar("losses/td_loss", loss, epoch)
-							# self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
+						if self._agent_dqn.use_tracker and epoch_logging:
+							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-losses/td_loss": loss}, step=epoch)
 						else:
 							avg_loss += [loss]
 					
@@ -256,18 +239,18 @@ class SingleModelMADQN(object):
 				if terminated or timeout:
 					episode_len = epoch - episode_start
 					avg_episode_len += [episode_len]
-					if self._write_tensorboard:
-						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, it + start_record_it)
-						# self._agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/avg_episode_length", np.mean(avg_episode_len), it + start_record_it)
-						# self._agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/cycle", cycle, it + start_record_it)
+					if self._agent_dqn.use_tracker:
+						self._agent_dqn.performance_tracker.log({
+								self._agent_dqn.tracker_panel + "-charts/mean_episode_q_vals": episode_q_vals / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/mean_episode_return": episode_rewards / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/episodic_length": episode_len,
+								self._agent_dqn.tracker_panel + "-charts/avg_episode_length": np.mean(avg_episode_len),
+								self._agent_dqn.tracker_panel + "-charts/iteration": it,
+								self._agent_dqn.tracker_panel + "-charts/cycle": cycle, },
+								step=(it + start_record_it))
 						if not epoch_logging:
-							self._agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), it + start_record_it)
-							# self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
+							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
+																	step=(it + start_record_it))
 					logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 					obs, *_ = env.reset()
 					done = True
@@ -294,7 +277,6 @@ class SingleModelMADQN(object):
 		actions = data.actions
 		rewards = data.rewards
 		dones = data.dones
-		# train_info = ('epoch: %d \t' % epoch)
 		
 		if self._use_vdn:
 			if self._agent_dqn.cnn_layer and cnn_shape is not None:
@@ -314,8 +296,6 @@ class SingleModelMADQN(object):
 				next_observations = next_observations.reshape((len(next_observations), *cnn_shape))
 			loss = self._agent_dqn.update_online_model(observations, actions, next_observations, rewards, dones)
 		
-		# train_info += ('loss: %.7f\t' % loss)
-		# logger.debug('Train Info: ' + train_info)
 		return loss
 	
 	def save_model(self, filename: str, model_dir: Path, logger: logging.Logger) -> None:
@@ -342,11 +322,11 @@ class LegibleSingleMADQN(SingleModelMADQN):
 	
 	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float, beta: float,
 				 action_space: Space, observation_space: Space, use_gpu: bool, handle_timeout: bool, models_dir: Path, model_names: Dict[str, str], goal: str,
-				 dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False, use_cnn: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None,
-				 n_legible_agents: int = 1, cnn_properties: List = None, buffer_data: tuple = (False, '')):
+				 dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False, use_cnn: bool = False, use_tracker: bool = False, tracker: run = None,
+				 tracker_panel: str = '', n_legible_agents: int = 1, cnn_properties: List = None, buffer_data: tuple = (False, '')):
 		
 		super().__init__(num_agents, action_dim, num_layers, act_function, layer_sizes, buffer_size, gamma, action_space, observation_space, use_gpu,
-						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, use_tensorboard, tensorboard_data, cnn_properties, buffer_data=buffer_data)
+						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, use_tracker, tracker, tracker_panel, cnn_properties, buffer_data=buffer_data)
 		
 		self._n_leg_agents = n_legible_agents
 		self._goal_ids = list(model_names.keys())
@@ -456,6 +436,7 @@ class LegibleSingleMADQN(SingleModelMADQN):
 		start_record_it = cycle * num_iterations
 		start_record_epoch = cycle * max_timesteps
 		history = []
+		avg_episode_len = []
 		
 		for it in range(num_iterations):
 			if use_render:
@@ -520,9 +501,11 @@ class LegibleSingleMADQN(SingleModelMADQN):
 				else:
 					finished = np.zeros(self._n_agents)
 				
-				if self._write_tensorboard and epoch_logging:
-					self._agent_dqn.summary_writer.add_scalar("charts/legible_reward", sum(legible_rewards) / self._n_agents, epoch + start_record_epoch)
-					self._agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards) / self._n_agents, epoch + start_record_epoch)
+				if self._agent_dqn.use_tracker and epoch_logging:
+					self._agent_dqn.performance_tracker.log({
+							self._agent_dqn.tracker_panel + "-charts/reward": sum(rewards),
+							self._agent_dqn.tracker_panel + "-charts/legible_reward": sum(legible_rewards) / self._n_agents},
+							step=(epoch + start_record_epoch))
 				
 				# store new samples
 				if self._use_vdn:
@@ -536,9 +519,8 @@ class LegibleSingleMADQN(SingleModelMADQN):
 				if epoch >= warmup:
 					if epoch % train_freq == 0:
 						loss = self.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger)
-						if self._write_tensorboard and epoch_logging:
-							self._agent_dqn.summary_writer.add_scalar("losses/td_loss", loss, epoch)
-							self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
+						if self._agent_dqn.use_tracker and epoch_logging:
+							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-losses/td_loss": loss}, step=epoch)
 						else:
 							avg_loss += [loss]
 					
@@ -550,16 +532,20 @@ class LegibleSingleMADQN(SingleModelMADQN):
 				
 				# Check if iteration is over
 				if terminated or timeout:
-					if self._write_tensorboard:
-						episode_len = epoch - episode_start
-						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, epoch + start_record_epoch)
-						self._agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
+					episode_len = epoch - episode_start
+					avg_episode_len += [episode_len]
+					if self._agent_dqn.use_tracker:
+						self._agent_dqn.performance_tracker.log({
+								self._agent_dqn.tracker_panel + "-charts/mean_episode_q_vals": episode_q_vals / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/mean_episode_return": episode_rewards / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/episodic_length": episode_len,
+								self._agent_dqn.tracker_panel + "-charts/avg_episode_length": np.mean(avg_episode_len),
+								self._agent_dqn.tracker_panel + "-charts/iteration": it,
+								self._agent_dqn.tracker_panel + "-charts/cycle": cycle},
+								step=(it + start_record_it))
 						if not epoch_logging:
-							self._agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), it + start_record_it)
-							self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(episode_len / (time.time() - start_time)), it + start_record_it)
+							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
+																	step=(it + start_record_it))
 					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 					obs, *_ = env.reset()
 					done = True
@@ -576,7 +562,6 @@ class CentralizedMADQN(object):
 	_num_agents: int
 	_madqn: DQNetwork
 	_replay_buffer: ReplayBuffer
-	_write_tensorboard: bool
 	_use_vdn: bool
 	_use_ddqn: bool
 	_joint_action_converter: Callable
@@ -587,7 +572,6 @@ class CentralizedMADQN(object):
 				 cnn_properties: List[int] = None):
 		
 		self._num_agents = num_agents
-		self._write_tensorboard = use_tensorboard
 		self._joint_action_converter = act_converter
 		now = datetime.now()
 		if tensorboard_data is not None:
@@ -610,10 +594,6 @@ class CentralizedMADQN(object):
 	@property
 	def madqn(self) -> DQNetwork:
 		return self._madqn
-	
-	@property
-	def write_tensorboard(self) -> bool:
-		return self._write_tensorboard
 	
 	@property
 	def get_joint_action(self) -> Callable:
@@ -642,6 +622,8 @@ class CentralizedMADQN(object):
 		start_record_it = cycle * num_iterations
 		start_record_epoch = cycle * max_timesteps
 		history = []
+		avg_loss = []
+		avg_episode_len = []
 		
 		for it in range(num_iterations):
 			if use_render:
@@ -684,14 +666,15 @@ class CentralizedMADQN(object):
 				self._replay_buffer.add(obs, next_obs, joint_action, rewards, finished[0], infos)
 				for a_idx in range(self._num_agents):
 					episode_rewards += (rewards[a_idx] / self._num_agents)
-					if self._write_tensorboard:
+					if self._madqn.use_tracker:
 						self._madqn.summary_writer.add_scalar("charts/reward", rewards[a_idx], epoch + start_record_epoch)
 				obs = next_obs
 				
 				# update Q-network and target network
 				if epoch >= warmup:
 					if epoch % train_freq == 0:
-						loss = self.update_model(batch_size, epoch, start_time, tensorboard_frequency)
+						loss = jax.device_get(self.update_model(batch_size))
+						avg_loss.append(loss)
 					
 					if epoch % target_freq == 0:
 						self._madqn.update_target_model(tau)
@@ -701,13 +684,20 @@ class CentralizedMADQN(object):
 				
 				# Check if iteration is over
 				if terminated or timeout:
-					if self._write_tensorboard:
-						episode_len = epoch - episode_start
-						self._madqn.summary_writer.add_scalar("charts/episodic_q_vals", episode_q_vals / episode_len, epoch + start_record_epoch)
-						self._madqn.summary_writer.add_scalar("charts/episodic_return", episode_rewards, it + start_record_it)
-						self._madqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
-						self._madqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
+					episode_len = epoch - episode_start
+					avg_episode_len += [episode_len]
+					if self._madqn.use_tracker:
+						self._agent_dqn.performance_tracker.log({
+								self._agent_dqn.tracker_panel + "-charts/mean_episode_q_vals": episode_q_vals / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/mean_episode_return": episode_rewards / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/episodic_length": episode_len,
+								self._agent_dqn.tracker_panel + "-charts/avg_episode_length": np.mean(avg_episode_len),
+								self._agent_dqn.tracker_panel + "-charts/iteration": it,
+								self._agent_dqn.tracker_panel + "-charts/cycle": cycle, },
+								step=(it + start_record_it))
+						if not epoch_logging:
+							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
+																	step=(it + start_record_it))
 					obs, *_ = env.reset()
 					done = True
 					history += [episode_history]
@@ -716,7 +706,7 @@ class CentralizedMADQN(object):
 		
 		return history
 	
-	def update_model(self, batch_size, epoch, start_time, tensorboard_frequency):
+	def update_model(self, batch_size):
 		data = self._replay_buffer.sample(batch_size)
 		observations = data.observations
 		next_observations = data.next_observations
@@ -724,7 +714,7 @@ class CentralizedMADQN(object):
 		rewards = data.rewards.sum(axis=1) / self._num_agents
 		dones = data.dones
 		
-		loss = self._madqn.update_online_model(observations, actions, next_observations, rewards, dones, epoch, start_time, tensorboard_frequency)
+		loss = self._madqn.update_online_model(observations, actions, next_observations, rewards, dones)
 		return loss
 	
 	def save_model(self, filename: str, model_dir: Path, logger: logging.Logger) -> None:
@@ -747,7 +737,7 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 	
 	def __init__(self, num_agents: int, num_envs: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int,
 				 gamma: float, action_space: Space, observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False,
-				 use_vdn: bool = False, use_cnn: bool = False, handle_timeout: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None,
+				 use_vdn: bool = False, use_cnn: bool = False, handle_timeout: bool = False, use_tracker: bool = False, tensorboard_data: List = None,
 				 cnn_properties: List = None):
 		
 		"""
@@ -764,7 +754,7 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 		:param observation_space: gym space for the agent observations
 		:param use_gpu: flag that controls use of cpu or gpu
 		:param handle_timeout: flag that controls handle timeout termination (due to timelimit) separately and treat the task as infinite horizon task.
-		:param use_tensorboard: flag that notes usage of a tensorboard summary writer (default: False)
+		:param use_tracker: flag that notes usage of a tensorboard summary writer (default: False)
 		:param tensorboard_data: list of the form [log_dir: str, queue_size: int, flush_interval: int, filename_suffix: str] with summary data for
 		the summary writer (default is None)
 
@@ -776,7 +766,7 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 		:type layer_sizes: list[int]
 		:type use_gpu: bool
 		:type handle_timeout: bool
-		:type use_tensorboard: bool
+		:type use_tracker: bool
 		:type gamma: float
 		:type act_function: callable
 		:type observation_space: gym.Space
@@ -785,7 +775,7 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 		
 		self._n_envs = num_envs
 		super().__init__(num_agents, action_dim, num_layers, act_function, layer_sizes, buffer_size, gamma, action_space, observation_space, use_gpu,
-						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, use_tensorboard, tensorboard_data, cnn_properties, n_envs=num_envs)
+						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, use_tracker, tensorboard_data, cnn_properties, n_envs=num_envs)
 	
 	########################
 	### Class Properties ###
@@ -923,6 +913,7 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 		start_record_it = cycle * num_iterations
 		history = []
 		epoch = 0
+		avg_episode_len = []
 		
 		for it in range(num_iterations):
 			avg_loss = []
@@ -960,15 +951,17 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 				# Check if iteration is over
 				if envs_finished:
 					episode_len = epoch - episode_start
-					if self._write_tensorboard:
-						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
-						self._agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
+					avg_episode_len.append(episode_len)
+					if self._agent_dqn.use_tracker:
+						self._agent_dqn.performance_tracker.log({
+								self._agent_dqn.tracker_panel + "-charts/mean_episode_q_vals": episode_q_vals / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/mean_episode_return": episode_rewards / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/episodic_length":     episode_len,
+								self._agent_dqn.tracker_panel + "-charts/avg_episode_length":  np.mean(avg_episode_len),
+								self._agent_dqn.tracker_panel + "-charts/iteration":           it,
+								self._agent_dqn.tracker_panel + "-charts/cycle":               cycle,
+								self._agent_dqn.tracker_panel + "losses/td_loss": sum(avg_loss) / max(len(avg_loss), 1)},
+								step=(it + start_record_it))
 					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (episode_len, eps, episode_rewards))
 					envs_obs = np.array([env.reset()[0] for env in envs])
 					done = True

@@ -210,11 +210,11 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			else:
 				finished = np.zeros(dqn_model.num_agents)
 			
-			if dqn_model.agent_dqn.use_summary:
-				dqn_model.agent_dqn.summary_writer.add_scalar("charts/legible_reward", sum(legible_rewards) / dqn_model.n_leg_agents,
-															  epoch + start_record_epoch)
-				dqn_model.agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards[:dqn_model.n_leg_agents]) / dqn_model.n_leg_agents,
-															  epoch + start_record_epoch)
+			if dqn_model.agent_dqn.use_tracker:
+				dqn_model.agent_dqn.performance_tracker.log({
+						dqn_model.agent_dqn.tracker_panel + "-charts/legible_reward": sum(legible_rewards) / dqn_model.n_leg_agents,
+						dqn_model.agent_dqn.tracker_panel + "-charts/reward": sum(rewards[:dqn_model.n_leg_agents]) / dqn_model.n_leg_agents},
+						step=(epoch + start_record_epoch))
 			# store new samples
 			if dqn_model.use_vdn:
 				dqn_model.replay_buffer.add(obs, next_obs, actions, np.hstack((legible_rewards[:dqn_model.n_leg_agents], rewards[dqn_model.n_leg_agents:])),
@@ -242,19 +242,18 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			if terminated or timeout:
 				episode_len = epoch - episode_start
 				avg_episode_len += [episode_len]
-				if dqn_model.write_tensorboard:
-					dqn = dqn_model.agent_dqn
-					dqn.summary_writer.add_scalar("charts/avg_episode_length", np.mean(avg_episode_len), it + start_record_it)
-					dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
-					# dqn.summary_writer.add_scalar("charts/episode_q_vals", episode_q_vals, it + start_record_it)
-					dqn.summary_writer.add_scalar("charts/mean_episode_q_vals", episode_q_vals / episode_len, it + start_record_it)
-					# dqn.summary_writer.add_scalar("charts/episode_return", episode_rewards, it + start_record_it)
-					dqn.summary_writer.add_scalar("charts/mean_episode_return", episode_rewards / episode_len, it + start_record_it)
-					dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
-					dqn.summary_writer.add_scalar("charts/cycle", cycle, it + start_record_it)
-					dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), epoch)
-					# dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
-					# dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
+				dqn = dqn_model.agent_dqn
+				if dqn.use_tracker:
+					dqn.performance_tracker.log({
+							dqn.tracker_panel + "-charts/mean_episode_q_vals": episode_q_vals / episode_len,
+							dqn.tracker_panel + "-charts/mean_episode_return": episode_rewards / episode_len,
+							dqn.tracker_panel + "-charts/episodic_length":     episode_len,
+							dqn.tracker_panel + "-charts/avg_episode_length":  np.mean(avg_episode_len),
+							dqn.tracker_panel + "-charts/iteration":           it,
+							dqn.tracker_panel + "-charts/cycle":               cycle,
+							dqn.tracker_panel + "-losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)
+					},
+					step=(it + start_record_it))
 				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 				obs, *_ = env.reset()
 				if env.use_render:
@@ -497,26 +496,32 @@ def main():
 	####################
 	if len(locs_train) > 0:
 		try:
-			wandb.init(project='lb-foraging-legible', entity='miguel-faria',
-					   config={
-						   "field": "%dx%d" % (field_size[0], field_size[1]),
-						   "agents": n_agents,
-						   "legible_agents": n_leg_agents,
-						   "foods": n_foods,
-						   "online_learing_rate": learn_rate,
-						   "target_learning_rate": target_update_rate,
-						   "discount": gamma,
-						   "eps_decay": eps_type,
-						   "cycle_decay": cycle_eps_decay,
-						   "dqn_architecture": architecture,
-						   "iterations": n_iterations,
-						   "cycles": n_cycles,
-						   "beta": beta,
-					   },
-					   dir=tensorboard_details[0],
-					   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
-							 now.strftime("%Y%m%d-%H%M%S")),
-					   sync_tensorboard=True)
+			wandb_run = wandb.init(project='lb-foraging-legible', entity='miguel-faria',
+								   config={
+										   "field": "%dx%d" % (field_size[0], field_size[1]),
+										   "agents": n_agents,
+										   "legible_agents": n_leg_agents,
+										   "foods": n_foods,
+										   "online_learing_rate": learn_rate,
+										   "target_learning_rate": target_update_rate,
+										   "discount": gamma,
+										   "eps_decay_type": eps_type,
+										   "eps_decay": eps_decay,
+										   "cycle_decay": cycle_eps_decay,
+										   "cycle_decay_type": cycle_eps_type,
+										   "dqn_architecture": architecture,
+										   "iterations": n_iterations,
+										   "cycles": n_cycles,
+										   "beta": beta,
+										   "softmax_temp": temp,
+										   "buffer_size": buffer_size,
+										   "buffer_add": args.buffer_method if args.buffer_smart_add else "standard",
+										   "reward_type": leg_reward,
+								   },
+								   dir=tensorboard_details[0],
+								   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
+										 now.strftime("%Y%m%d-%H%M%S")),
+								   sync_tensorboard=True)
 			logger.info('Starting training for different food locations')
 			for loc in locs_train:
 				logger.info('Training for location: %dx%d' % (loc[0], loc[1]))
@@ -536,15 +541,13 @@ def main():
 					action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
 					agent_madqn = LegibleSingleMADQN(n_agents, n_actions, n_layers, nn.relu, layer_sizes, buffer_size, gamma, beta, action_space, env.observation_space,
 													 use_gpu, False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn, use_vdn,
-													 use_cnn, use_tensorboard, tensorboard_details + ['l%dx%d-%df-t%dx%d-legible' % (field_size[0], field_size[1],
-																																	 n_foods_spawn, loc[0], loc[1])],
+													 use_cnn, use_tensorboard, wandb_run, 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1]),
 													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties,
 													 buffer_data=(args.buffer_smart_add, args.buffer_method))
 				else:
 					agent_madqn = LegibleSingleMADQN(n_agents, n_actions, n_layers, nn.relu, layer_sizes, buffer_size, gamma, beta, agent_action_space,
-													 obs_space, use_gpu, False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn,
-													 use_vdn, use_cnn, use_tensorboard, tensorboard_details + ['l%dx%d-%df-t%dx%d-legible' % (field_size[0], field_size[1],
-																																			  n_foods_spawn, loc[0], loc[1])],
+													 obs_space, use_gpu, False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn, use_vdn,
+													 use_cnn, use_tensorboard, wandb_run, 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1]),
 													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties,
 													 buffer_data=(args.buffer_smart_add, args.buffer_method))
 				

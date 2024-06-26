@@ -168,7 +168,7 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: PursuitEnv, nu
 					dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], [])
 					episode_rewards += legible_rewards[a_idx] / dqn_model.n_leg_agents
 			
-			if dqn_model.agent_dqn.use_summary:
+			if dqn_model.agent_dqn.use_tracker:
 				dqn_model.agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards[:env.n_hunters]) / env.n_hunters, epoch + start_record_epoch)
 			obs = next_obs
 			

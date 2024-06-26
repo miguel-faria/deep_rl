@@ -160,7 +160,7 @@ def train_dtde_pursuit_model(agents_ids: List[str], pursuit_env: PursuitEnv, pur
 						q_values = agent_dqn.q_network.apply(agent_dqn.online_state.params, obs[hunter_idx])
 						action = q_values.argmax(axis=-1)
 						actions += [int(jax.device_get(action))]
-						if pursuit_models.agent_dqns[a_id].use_summary and epoch % summary_freq == 0:
+						if pursuit_models.agent_dqns[a_id].use_tracker and epoch % summary_freq == 0:
 							pursuit_models.agent_dqns[a_id].summary_writer.add_scalar("charts/episodic_q_vals", float(q_values[int(action)]), epoch)
 			next_obs, rewards, finished, infos = pursuit_env.step(actions)
 			episode_history += [get_history_entry(obs, actions, pursuit_models.agent_ids)]
@@ -172,7 +172,7 @@ def train_dtde_pursuit_model(agents_ids: List[str], pursuit_env: PursuitEnv, pur
 				pursuit_models.agent_dqns[hunter].replay_buffer.add(obs[hunter_idx], next_obs[hunter_idx], np.array(actions[a_idx]),	# store examples
 																	rewards[a_idx], finished, infos)
 				episode_rewards[hunter_idx] += rewards[a_idx]
-				if pursuit_models.agent_dqns[hunter].use_summary:
+				if pursuit_models.agent_dqns[hunter].use_tracker:
 					if finished:
 						print(hunter, rewards[a_idx], episode_rewards[hunter_idx])
 					pursuit_models.agent_dqns[hunter].summary_writer.add_scalar("charts/reward", rewards[a_idx], epoch)
@@ -197,7 +197,7 @@ def train_dtde_pursuit_model(agents_ids: List[str], pursuit_env: PursuitEnv, pur
 			if finished:
 				for hunter in pursuit_models.agent_ids:
 					hunter_idx = pursuit_models.agent_ids.index(hunter)
-					if pursuit_models.agent_dqns[hunter].use_summary:
+					if pursuit_models.agent_dqns[hunter].use_tracker:
 						pursuit_models.agent_dqns[hunter].summary_writer.add_scalar("charts/episodic_return", episode_rewards[hunter_idx], it)
 						pursuit_models.agent_dqns[hunter].summary_writer.add_scalar("charts/episodic_length", epoch - episode_start, it)
 						pursuit_models.agent_dqns[hunter].summary_writer.add_scalar("charts/epsilon", eps, epoch)

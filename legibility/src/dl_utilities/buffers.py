@@ -197,6 +197,7 @@ class ReplayBuffer(GeneralBuffer):
         self.add_method = add_method
         self.optimize_memory_usage = optimize_memory_usage
         self.samples_order = None
+        self.pos_probs = None
         self.observations = np.zeros((self.buffer_size, self.n_envs, *obs_shape), dtype=observation_space.dtype)
 
         if optimize_memory_usage:
@@ -237,12 +238,13 @@ class ReplayBuffer(GeneralBuffer):
                 if self.add_method == 'weighted':
                     if self.samples_order is None:
                         self.samples_order = jnp.arange(self.buffer_size).tolist()
-                    probs = self.buffer_size - jnp.arange(self.buffer_size)
-                    probs = probs / probs.sum()
+                    if self.pos_probs is None:
+                        probs = self.buffer_size - jnp.arange(self.buffer_size)
+                        self.pos_probs = probs / probs.sum()
                     _, subkey = jax.random.split(self.rng_key)
-                    pop_pos = jax.random.choice(subkey, jnp.arange(self.buffer_size), p=probs)
-                    self.samples_order.pop(pop_pos)
-                    pos = self.buffer_size - 1
+                    pop_pos = jax.random.choice(subkey, jnp.arange(self.buffer_size), p=self.pos_probs)
+                    pos = self.samples_order.pop(pop_pos)
+                    self.samples_order.append(pos)
                 else:
                     _, subkey = jax.random.split(self.rng_key)
                     pos = jax.random.randint(subkey, minval=0, maxval=self.buffer_size, shape=())

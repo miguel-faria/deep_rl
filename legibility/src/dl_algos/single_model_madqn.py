@@ -136,14 +136,14 @@ class SingleModelMADQN(object):
 	def train_dqn(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float,
 				  final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99,
 				  warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0,
-				  greedy_action: bool = True, epoch_logging: bool = False, previous_model_path: str = ''):
+				  greedy_action: bool = True, epoch_logging: bool = False, initial_model_path: str = ''):
 		
 		rng_gen = np.random.default_rng(rng_seed)
 		# self._replay_buffer.reseed(rng_seed)
 		
 		# Setup DQNs for training
 		obs, *_ = env.reset()
-		self.initialize_network(cnn_shape, logger, obs, optim_learn_rate, rng_seed, previous_model_path)
+		self.initialize_network(cnn_shape, logger, obs, optim_learn_rate, rng_seed, initial_model_path)
 		
 		start_time = time.time()
 		epoch = 0
@@ -420,7 +420,7 @@ class LegibleSingleMADQN(SingleModelMADQN):
 	def train_dqn(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float,
 				  final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99,
 				  warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0,
-				  greedy_action: bool = True, epoch_logging: bool = False, previous_model_path: str = ''):
+				  greedy_action: bool = True, epoch_logging: bool = False, initial_model_path: str = ''):
 			
 		np.random.seed(rng_seed)
 		rng_gen = np.random.default_rng(rng_seed)
@@ -428,7 +428,7 @@ class LegibleSingleMADQN(SingleModelMADQN):
 		# Setup DQNs for training
 		logger.info('Initializing network')
 		obs, _ = env.reset()
-		self.initialize_network(cnn_shape, logger, obs, optim_learn_rate, rng_seed, previous_model_path)
+		self.initialize_network(cnn_shape, logger, obs, optim_learn_rate, rng_seed, initial_model_path)
 		
 		start_time = time.time()
 		epoch = 0

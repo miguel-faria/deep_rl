@@ -70,8 +70,10 @@ parser.add_argument('--models-dir', dest='models_dir', type=str, default='', hel
 parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
 					help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
-parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
-					help='Flag that signals training using model trained with one less food item spawned (when using to train with only 1 item, defaults to false).')
+parser.add_argument('--use-lower-curriculum', dest='use_lower_model', action='store_true',
+					help='Flag that signals the use of curriculum learning with a model with one less food item spawned.')
+parser.add_argument('--use-higher-curriculum', dest='use_higher_model', action='store_true',
+					help='Flag that signals the use of curriculum learning with a model with one more food item spawned.')
 parser.add_argument('--buffer-smart-add', dest='buffer_smart_add', action='store_true',
 					help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
 parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=False, default='uniform', choices=['uniform', 'weighted'],
@@ -89,10 +91,11 @@ logs_dir = input_args.logs_dir
 cycle_type = input_args.cycle_type
 cycle_eps = input_args.cycle_eps
 use_lower_model = input_args.use_lower_model
+use_higher_model = input_args.use_higher_model
 smart_add = input_args.buffer_smart_add
 add_method = input_args.buffer_method
 
-for i in range(limits[0], limits[1] + 1):
+for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else range(limits[0], limits[1] + 1)):
 	print('Launching training script for %d foods spawned' % i)
 	N_SPAWN_FOODS = i
 	args = (" --nagents %d --architecture %s --buffer %d --gamma %f --iterations %d --max-cycles %d --batch %d --train-freq %d "
@@ -107,8 +110,8 @@ for i in range(limits[0], limits[1] + 1):
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
 			 (" --debug" if DEBUG else "") + (" --vdn" if USE_VDN else "") + (" --fraction %f" % PRECOMP_FRAC) + (" --cycle-type %s" % cycle_type) +
 			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --data-dir %s" % data_dir if data_dir != '' else "")  +
-			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") + (" --buffer-smart-add" if smart_add else "") +
-			 (" --buffer-method %s" % add_method))
+			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") +  (" --use-higher-model" if use_higher_model else "") +
+			 (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else ""))
 	commamd = "python " + str(src_dir / 'train_lb_single_dqn.py') + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)

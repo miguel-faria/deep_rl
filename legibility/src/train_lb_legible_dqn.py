@@ -90,7 +90,7 @@ def get_live_obs_goals(env: FoodCOOPLBForaging) -> Tuple[List, List]:
 def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float,
 					  tau: float, initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger,
 					  cnn_shape: Tuple[int], exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100,
-					  tensorboard_frequency: int = 1, cycle: int = 0, greedy_action: bool = True, sofmax_temp: float = 1.0, previous_model_path: str = ''):
+					  tensorboard_frequency: int = 1, cycle: int = 0, greedy_action: bool = True, sofmax_temp: float = 1.0, initial_model_path: str = ''):
 		
 	# np.random.seed(rng_seed)
 	rng_gen = np.random.default_rng(rng_seed)
@@ -99,9 +99,9 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 	obs, *_ = env.reset()
 	if not dqn_model.agent_dqn.dqn_initialized:
 		if dqn_model.agent_dqn.cnn_layer:
-			dqn_model.agent_dqn.init_network_states(rng_seed, obs[0].reshape((1, *cnn_shape)), optim_learn_rate, previous_model_path)
+			dqn_model.agent_dqn.init_network_states(rng_seed, obs[0].reshape((1, *cnn_shape)), optim_learn_rate, initial_model_path)
 		else:
-			dqn_model.agent_dqn.init_network_states(rng_seed, obs[0], optim_learn_rate, previous_model_path)
+			dqn_model.agent_dqn.init_network_states(rng_seed, obs[0], optim_learn_rate, initial_model_path)
 	
 	start_time = time.time()
 	epoch = 0
@@ -306,16 +306,13 @@ def main():
 	parser.add_argument('--init-eps', dest='initial_eps', type=float, required=False, default=1., help='Exploration rate when training starts')
 	parser.add_argument('--final-eps', dest='final_eps', type=float, required=False, default=0.05, help='Minimum exploration rate for training')
 	parser.add_argument('--eps-decay', dest='eps_decay', type=float, required=False, default=0.5, help='Decay rate for the exploration update')
-	parser.add_argument('--legibility-temp', dest='temp', type=float, required=False, default=0.5,
-						help='Temperature parameter for legibility softmax')
-	parser.add_argument('--cycle-eps-decay', dest='cycle_eps_decay', type=float, required=False, default=0.95,
-						help='Decay rate for the exploration update')
+	parser.add_argument('--legibility-temp', dest='temp', type=float, required=False, default=0.5, help='Temperature parameter for legibility softmax')
+	parser.add_argument('--cycle-eps-decay', dest='cycle_eps_decay', type=float, required=False, default=0.95, help='Decay rate for the exploration update')
 	parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, default='log', choices=['linear', 'exp', 'log', 'epoch'],
 						help='Type of exploration rate update to use: linear, exponential (exp), logarithmic (log), epoch based (epoch)')
 	parser.add_argument('--cycle-eps-type', dest='cycle_eps_type', type=str, required=False, default='log', choices=['linear', 'log'],
 						help='Type of update for each cycle starting exploration rate: linear, logarithmic (log)')
-	parser.add_argument('--warmup-steps', dest='warmup', type=int, required=False, default=10000,
-						help='Number of epochs to pass before training starts')
+	parser.add_argument('--warmup-steps', dest='warmup', type=int, required=False, default=10000, help='Number of epochs to pass before training starts')
 	parser.add_argument('--tensorboard-freq', dest='tensorboard_freq', type=int, required=False, default=1,
 						help='Number of epochs between each log in tensorboard. Use only in combination with --tensorboard option')
 	parser.add_argument('--restart', dest='restart_train', action='store_true',
@@ -334,7 +331,9 @@ def main():
 						help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
 	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 	parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
-						help='Flag that signals training using model trained with one less food item spawned (when using to train with only 1 item, defaults to false).')
+						help='Flag that signals using curriculum learning using a model with one less food item spawned (when using with only 1 item, defaults to false).')
+	parser.add_argument('--use-higher-model', dest='use_higher_model', action='store_true',
+						help='Flag that signals using curriculum learning using a model with one more food item spawned (when using with only all items, defaults to false).')
 	parser.add_argument('--buffer-smart-add', dest='buffer_smart_add', action='store_true',
 						help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
 	parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=False, default='uniform', choices=['uniform', 'weighted'],
@@ -390,6 +389,7 @@ def main():
 	optim_vdn = args.opt_vdn
 	tags = args.tags if args.tags is not None else ''
 	use_lower_model = args.use_lower_model
+	use_higher_model = args.use_higher_model
 	
 	# LB-Foraging environment args
 	n_players = args.n_players
@@ -400,6 +400,14 @@ def main():
 	max_steps = args.max_steps
 	use_render = args.use_render
 	n_foods_spawn = args.n_foods_spawn
+	
+	try:
+		assert not (use_higher_model and use_lower_model)
+	
+	except AssertionError:
+		print('Attempt at using curriculum learning using both model trained with one more and one less food item spawned')
+		return
+		
 	
 	os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = args.fraction
 	if not use_gpu:
@@ -565,14 +573,22 @@ def main():
 				if use_lower_model and n_foods_spawn > 1:
 					prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (max(n_foods_spawn - 1, 1), food_level)) / 'best'
 					if (prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
-						logger.info('Using model trained with %d foods spawned as a baseline' % (n_foods_spawn - 1))
-						small_model_pth = str(prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
+						logger.info('Using model trained with %d foods spawned as a baseline' % (max(n_foods_spawn - 1, 1)))
+						curriculum_model_path = str(prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
 					else:
-						logger.info('Training model from scratch')
-						small_model_pth = ''
+						logger.info('Model with one less food item not found, training from scratch')
+						curriculum_model_path = ''
+				elif use_higher_model and n_foods_spawn < n_foods:
+					next_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (max(n_foods_spawn + 1, n_foods), food_level)) / 'best'
+					if (next_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
+						logger.info('Using model trained with %d foods spawned as a baseline' % (max(n_foods_spawn + 1, n_foods)))
+						curriculum_model_path = str(next_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
+					else:
+						logger.info('Model with one more food item not found, training from scratch')
+						curriculum_model_path = ''
 				else:
 					logger.info('Training model from scratch')
-					small_model_pth = ''
+					curriculum_model_path = ''
 				
 				cycle_warmup = warmup
 				for cycle in cycles_range:
@@ -595,7 +611,7 @@ def main():
 					cnn_shape = (0,) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
 					history = train_legible_dqn(env, agent_madqn, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
 												final_eps, eps_type, leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-												cycle, greedy_action=False, sofmax_temp=temp, previous_model_path=small_model_pth)
+												cycle, greedy_action=False, sofmax_temp=temp, initial_model_path=curriculum_model_path)
 					
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None

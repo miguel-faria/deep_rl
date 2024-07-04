@@ -85,9 +85,3 @@ class CNNActorNetwork(nn.Module):
 		x = nn.tanh(nn.Dense(self.action_dim)(x))
 		x = x * self.action_scale + self.action_bias
 		return x
-
-
-class Actor(nn.Module):
-	action_dim: int
-	def __call__(self, x: jnp.ndarray) -> jnp.ndarray:
-		return nn.Dense(self.action_dim, kernel_init=)(x)

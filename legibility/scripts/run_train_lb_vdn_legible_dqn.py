@@ -30,7 +30,7 @@ LEG_REWARD = 'q_vals'
 # Train params
 MAX_CYCLES = 100
 N_ITERATIONS = 400
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 TRAIN_FREQ = 1
 TARGET_FREQ = 10
 # ALPHA = 0.003566448247686571
@@ -63,15 +63,17 @@ WARMUP_STEPS = STEPS_EPISODE * 2
 USE_RENDER = False
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--limits', dest='limits', nargs=2, type=int, required=False, default=[1, MAX_SPAWN_FOODS],
-					help='Minimum and maximum food spawns')
-parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH,
-					help='Length of the field')
-parser.add_argument('--episode-steps', dest='max_steps', type=int, required=False, default=STEPS_EPISODE)
-parser.add_argument('--iterations', dest='max_iterations', type=int, required=False, default=N_ITERATIONS)
-parser.add_argument('--logs', dest='logs', type=str, required=False, default=TENSORBOARD_DATA[0])
-parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False, default=CYCLE_TYPE)
-parser.add_argument('--cycle-eps', dest='cycle_eps', type=float, required=False, default=CYCLE_EPS)
+parser.add_argument('--limits', dest='limits', nargs=2, type=int, required=False, default=[1, MAX_SPAWN_FOODS], help='Min and max number of food spawns to train.')
+parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH, help='Length of the field.')
+parser.add_argument('--episode-steps', dest='max_steps', type=int, required=False, default=STEPS_EPISODE, help='Maximum number of steps per episode.')
+parser.add_argument('--iterations', dest='max_iterations', type=int, required=False, default=N_ITERATIONS, help='Number of iterations to train.')
+parser.add_argument('--logs', dest='logs', type=str, required=False, default=TENSORBOARD_DATA[0], help='Directory to store the performance logs.')
+parser.add_argument('--legible-reward', dest='legible_reward', type=str, choices=['simple', 'q_vals', 'info', 'reward'], required=False, default=LEG_REWARD,
+					help='Type of legible reward. Types: simple, q_vals, info, reward')
+parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False, default=CYCLE_TYPE, help='Type of decay for each cycle starting epsilon.')
+parser.add_argument('--cycle-eps', dest='cycle_eps', type=float, required=False, default=CYCLE_EPS, help='Epsilon decay for each cycle.')
+parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, default=EPS_TYPE, help='Type of epsilon decay.')
+parser.add_argument('--eps-decay', dest='eps_decay', type=float, required=False, default=EPS_DECAY, help='Epsilon decay.')
 parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
 					help='Directory to store trained models and load optimal models, if left blank stored in default location')
 parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
@@ -97,6 +99,8 @@ data_dir = input_args.data_dir
 logs_dir = input_args.logs_dir
 cycle_type = input_args.cycle_type
 cycle_eps = input_args.cycle_eps
+eps_type = input_args.eps_type
+eps_decay = input_args.eps_decay
 use_lower_model = input_args.use_lower_model
 use_higher_model = input_args.use_higher_model
 smart_add = input_args.buffer_smart_add
@@ -109,8 +113,8 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 		eps = 'log'
 		decay = 0.175
 	else:
-		eps = EPS_TYPE
-		decay = EPS_DECAY
+		eps = eps_type
+		decay = eps_decay
 	args = (" --n-agents %d --architecture %s --buffer %d --gamma %f --beta %f --reward %s --iterations %d --max-cycles %d --batch %d --train-freq %d "
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f --legibility-temp %f "
 			"--n-players %d --player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --tensorboardDetails %s %d %d %s"

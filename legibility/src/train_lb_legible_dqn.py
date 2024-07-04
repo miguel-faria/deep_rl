@@ -523,8 +523,10 @@ def main():
 										   "beta": beta,
 										   "softmax_temp": temp,
 										   "buffer_size": buffer_size,
-										   "buffer_add": args.buffer_method if args.buffer_smart_add else "standard",
+										   "buffer_add": "smart" if args.buffer_smart_add else "plain",
+										   "buffer_add_method": args.buffer_method if args.buffer_smart_add else "standard",
 										   "reward_type": leg_reward,
+										   "batch_size": batch_size
 								   },
 								   dir=tensorboard_details[0],
 								   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +

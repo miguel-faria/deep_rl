@@ -12,7 +12,7 @@ import wandb
 from typing import Callable, Tuple, Union, List, Optional
 from flax.training.train_state import TrainState
 from flax.training.checkpoints import save_checkpoint
-from models.q_networks import CNNCriticNetwork, CriticNetwork, CNNActorNetwork, ActorNetwork
+from algos.q_networks import CNNCriticNetwork, CriticNetwork, CNNActorNetwork, ActorNetwork
 from utilities.buffers import ReplayBuffer
 from pathlib import Path
 from functools import partial
@@ -133,8 +133,8 @@ class DDPG(object):
 			q = self._critic_network.apply(params, observations, actions).squeeze()								# get online model's q_values
 			return ((q - next_q_value) ** 2).mean()
 		
-		next_actions = self._actor_network.apply(self._actor_target_params, next_observations)  					# get actor's actions
-		q_next = self._critic_network.apply(self._critic_online_state.params, next_observations, next_actions)	# get critic evaluation
+		next_actions = (self._actor_network.apply(self._actor_target_params, next_observations)).clip(-1, 1)		# get actor's actions
+		q_next = self._critic_network.apply(self._critic_target_params, next_observations, next_actions)			# get critic evaluation
 		next_q_value = rewards + (1 - dones) * gamma * q_next  															# compute Bellman equation
 		
 		loss_value, grads = jax.value_and_grad(mse_loss)(q_state.params)

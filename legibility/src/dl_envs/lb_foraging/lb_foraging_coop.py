@@ -393,6 +393,7 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 			current_step=self._current_step,
 			objective=self._obj_food_pos
 		)
+
 	def make_obs_array(self) -> np.ndarray:
 		if self._grid_observation:
 			self._grid_observation = False
@@ -596,7 +597,7 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 		
 		return players_adj
 	
-	def spawn_food(self, max_food, max_level):
+	def spawn_food(self, max_food: int, max_level: int):
 		min_level = max_level if self._force_coop else 1
 		self.field = np.zeros(self.field_size, np.int32)
 		foods_spawned = []

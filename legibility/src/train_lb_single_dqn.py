@@ -15,6 +15,7 @@ import wandb
 
 from dl_algos.single_model_madqn import SingleModelMADQN
 from dl_envs.lb_foraging.lb_foraging_coop import FoodCOOPLBForaging
+from dl_envs.lb_foraging.lb_foraging import Action
 from pathlib import Path
 from itertools import product
 from typing import List
@@ -40,6 +41,7 @@ def input_callback(env: FoodCOOPLBForaging, stop_flag: bool):
 	except KeyboardInterrupt as ki:
 		return
 
+
 def number_food_combinations(max_foods: int, n_foods_spawn: int) -> int:
 	return max(1, int(math.factorial(max_foods) / (math.factorial(n_foods_spawn) * math.factorial(max_foods - n_foods_spawn)) * 0.75))
 
@@ -50,7 +52,6 @@ def eps_cycle_schedule(cycle_nr: int, max_cycles: int, init_eps: float, final_ep
 	else:
 		return max(init_eps - decay_rate ** ((max_cycles - 1) / cycle_nr), final_eps)
 	
-
 
 def cycle_foods_spawn(max_foods_spawn: int, cycle: int, rng_gen: np.random.Generator) -> int:
 	if cycle < 2:
@@ -408,7 +409,11 @@ def main():
 				logger.info('Testing for location: %dx%d' % (loc[0], loc[1]))
 				env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, TEST_RNG_SEED, food_locs,
 										 use_encoding=True, agent_center=True, grid_observation=use_cnn)
-				failed_history = []
+				if isinstance(env.observation_space, MultiBinary):
+					obs_space = MultiBinary([*env.observation_space.shape[1:]])
+				else:
+					obs_space = env.observation_space[0]
+				cnn_shape = (0, ) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
 				tests_passed = 0
 				env.seed(TEST_RNG_SEED)
 				np.random.seed(TEST_RNG_SEED)
@@ -425,7 +430,6 @@ def main():
 					obs, *_ = env.reset()
 					epoch = 0
 					agent_reward = [0] * n_agents
-					test_history = []
 					game_over = False
 					finished = False
 					timeout = False
@@ -435,8 +439,7 @@ def main():
 						for a_idx in range(agent_madqn.num_agents):
 							dqn = agent_madqn.agent_dqn
 							if use_cnn:
-								obs_shape = obs[a_idx].shape
-								cnn_obs = obs[a_idx].reshape((1, *obs_shape[1:], obs_shape[0]))
+								cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
 								q_values = dqn.q_network.apply(dqn.online_state.params, cnn_obs)[0]
 							else:
 								q_values = dqn.q_network.apply(dqn.online_state.params, obs[a_idx])
@@ -447,8 +450,8 @@ def main():
 							actions += [action]
 						actions = np.array(actions)
 						next_obs, rewards, finished, timeout, infos = env.step(actions)
+						logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]))
 						agent_reward = [agent_reward[idx] + rewards[idx] for idx in range(n_agents)]
-						test_history += [get_history_entry(env.make_obs_array(), actions, agent_madqn.num_agents)]
 						obs = next_obs
 						
 						if finished or timeout:
@@ -466,14 +469,11 @@ def main():
 						logger.info('Accumulated reward:\n\t' + '\n\t'.join(['- agent %d: %.2f' % (idx + 1, agent_reward[idx]) for idx in range(n_agents)]))
 						logger.info('Average reward:\n\t' + '\n\t'.join(['- agent %d: %.2f' % (idx + 1, agent_reward[0] / epoch) for idx in range(n_agents)]))
 					if timeout:
-						failed_history += [test_history]
 						logger.info('Test %d timed out' % (i + 1))
 				
 				env.close()
 				logger.info('Passed %d tests out of %d for location %dx%d' % (tests_passed, N_TESTS, loc[0], loc[1]))
-				logger.info('Failed tests history:')
-				logger.info(failed_history)
-				
+
 				if (tests_passed / N_TESTS) > train_acc['%s, %s' % (loc[0], loc[1])]:
 					logger.info('Updating best model for current loc')
 					Path.mkdir(model_path.parent.absolute() / 'best', parents=True, exist_ok=True)

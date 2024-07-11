@@ -283,17 +283,19 @@ class DQNetwork(object):
             else:
                 logger.error('ERROR!! Could not load checkpoint, expected checkpoint directory got file instead')
     
-    def save_model(self, filename: str, model_dir: Path, logger: logging.Logger) -> None:
+    def save_model(self, filename: str, model_dir: Path, logger: logging.Logger, use_logger: bool = True) -> None:
         file_path = model_dir / (filename + '.model')
         with open(file_path, "wb") as f:
             f.write(flax.serialization.to_bytes(self._online_state))
-        logger.info("Model state saved to file: " + str(file_path))
+        if use_logger:
+            logger.info("Loaded model state from file: " + str(file_path))
     
-    def load_model(self, filename: str, model_dir: Path, logger: logging.Logger, obs_shape: tuple) -> None:
+    def load_model(self, filename: str, model_dir: Path, logger: logging.Logger, obs_shape: tuple, use_logger: bool = True) -> None:
         file_path = model_dir / (filename + '.model')
         template = TrainState.create(apply_fn=self._q_network.apply,
                                      params=self._q_network.init(jax.random.PRNGKey(201), jnp.empty(obs_shape, dtype=jnp.float32)),
                                      tx=optax.adam(learning_rate=0.0))
         with open(file_path, "rb") as f:
             self._online_state = flax.serialization.from_bytes(template, f.read())
-        logger.info("Loaded model state from file: " + str(file_path))
+        if use_logger:
+            logger.info("Loaded model state from file: " + str(file_path))

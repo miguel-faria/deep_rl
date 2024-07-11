@@ -12,7 +12,7 @@ import logging
 from dl_algos.q_networks import QNetwork, DuelingQNetwork, CNNQNetwork, CNNDuelingQNetwork, MultiObsCNNDuelingQNetwork
 from flax.training.checkpoints import save_checkpoint, restore_checkpoint
 from flax.training.train_state import TrainState
-from typing import Callable, List, Union
+from typing import Callable, List, Union, Optional
 from pathlib import Path
 from termcolor import colored
 from functools import partial
@@ -20,6 +20,7 @@ from jax import jit
 from wandb import run
 
 EPS_TYPE = {'linear': 1, 'exp': 2, 'log': 3, 'epoch': 4}
+
 
 class DQNetwork(object):
 
@@ -283,14 +284,14 @@ class DQNetwork(object):
             else:
                 logger.error('ERROR!! Could not load checkpoint, expected checkpoint directory got file instead')
     
-    def save_model(self, filename: str, model_dir: Path, logger: logging.Logger, use_logger: bool = True) -> None:
+    def save_model(self, filename: str, model_dir: Path, logger: Optional[logging.Logger], use_logger: bool = True) -> None:
         file_path = model_dir / (filename + '.model')
         with open(file_path, "wb") as f:
             f.write(flax.serialization.to_bytes(self._online_state))
         if use_logger:
             logger.info("Loaded model state from file: " + str(file_path))
     
-    def load_model(self, filename: str, model_dir: Path, logger: logging.Logger, obs_shape: tuple, use_logger: bool = True) -> None:
+    def load_model(self, filename: str, model_dir: Path, logger: Optional[logging.Logger], obs_shape: tuple, use_logger: bool = True) -> None:
         file_path = model_dir / (filename + '.model')
         template = TrainState.create(apply_fn=self._q_network.apply,
                                      params=self._q_network.init(jax.random.PRNGKey(201), jnp.empty(obs_shape, dtype=jnp.float32)),

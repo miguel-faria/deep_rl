@@ -2,13 +2,13 @@
 import numpy as np
 import flax.linen as nn
 import yaml
+import argparse
 
 from dl_envs.lb_foraging.lb_foraging_coop import FoodCOOPLBForaging
 from dl_algos.dqn import DQNetwork
 from itertools import product
 from pathlib import Path
 from gymnasium.spaces import MultiBinary
-from typing import List, Tuple
 
 np.set_printoptions(precision=5, threshold=10000)
 
@@ -20,7 +20,13 @@ N_CYCLES = 2
 
 
 def main():
-	
+
+	parser = argparse.ArgumentParser(description='LB-Foraging model train with human inputs')
+	parser.add_argument('--seed', type=int, default=RNG_SEED)
+	parser.add_argument('--legible', dest='legible', action='store_true')
+
+	args = parser.parse_args()
+
 	n_leg_agents = 1
 	n_players = 2
 	player_level = 1
@@ -80,76 +86,84 @@ def main():
 	legible_dqn_model.load_model(('food_%dx%d_single_model' % (obj_food[0], obj_food[1])), leg_dir, None, obs_shape, False)
 	optim_dqn_model.load_model(('food_%dx%d_single_model' % (obj_food[0], obj_food[1])), optim_dir, None, obs_shape, False)
 
-	for cycle in range(N_CYCLES):
-		print('Cycle %d' % (cycle + 1))
-		rng_gen = np.random.default_rng(RNG_SEED)
-		env.set_objective(obj_food)
-		env.seed(seed=RNG_SEED)
-		env.spawn_food(n_foods_spawn, food_level)
-		env.spawn_players()
-		print('Food objective is (%d, %d)' % (obj_food[0], obj_food[1]))
-		print('Foods spawned: ' + str(obj_food) + ' ' + str(env.food_spawn_pos))
-		obs, *_ = env.reset(seed=RNG_SEED)
-		# env.spawn_players([1, 1], [(2, 1), (5, 3)])
-		# env.render()
-		finished_runs = 0
-		timeout_runs = 0
+	rng_gen = np.random.default_rng(RNG_SEED)
+	env.set_objective(obj_food)
+	env.seed(seed=RNG_SEED)
+	env.spawn_food(n_foods_spawn, food_level)
+	env.spawn_players()
+	print('Food objective is (%d, %d)' % (obj_food[0], obj_food[1]))
+	print('Foods spawned: ' + str(obj_food) + ' ' + str(env.food_spawn_pos))
+	obs, *_ = env.reset(seed=RNG_SEED)
+	# env.spawn_players([1, 1], [(2, 1), (5, 3)])
+	env.render()
+	finished_runs = 0
+	timeout_runs = 0
 
-		for i in range(250):
+	for i in range(250):
 
-			print('Iteration: %d' % (i + 1))
-			print(env.get_full_env_log())
-			done = False
-			while not done:
-				actions = []
-				for a_idx in range(n_players):
-					if cycle < 1:
-						if a_idx < n_leg_agents:
-							online_params = legible_dqn_model.online_state.params
-							if use_cnn:
-								q_values = legible_dqn_model.q_network.apply(online_params, obs[a_idx].reshape((1, *obs_shape)))[0]
-							else:
-								q_values = legible_dqn_model.q_network.apply(online_params, obs[a_idx])
-						else:
-							online_params = optim_dqn_model.online_state.params
-							if use_cnn:
-								q_values = optim_dqn_model.q_network.apply(online_params, obs[a_idx].reshape((1, *obs_shape)))[0]
-							else:
-								q_values = optim_dqn_model.q_network.apply(online_params, obs[a_idx])
-					else:
+		print('Iteration: %d' % (i + 1))
+		print(env.get_full_env_log())
+		done = False
+		while not done:
+			actions = []
+			for a_idx in range(n_players):
+				if a_idx > 0:
+					if args.legible:
+						print('Legible action!')
 						online_params = legible_dqn_model.online_state.params
 						if use_cnn:
 							q_values = legible_dqn_model.q_network.apply(online_params, obs[a_idx].reshape((1, *obs_shape)))[0]
 						else:
 							q_values = legible_dqn_model.q_network.apply(online_params, obs[a_idx])
+					else:
+						print('Optimal action!')
+						online_params = optim_dqn_model.online_state.params
+						if use_cnn:
+							q_values = optim_dqn_model.q_network.apply(online_params, obs[a_idx].reshape((1, *obs_shape)))[0]
+						else:
+							q_values = optim_dqn_model.q_network.apply(online_params, obs[a_idx])
 
 					pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
 					pol = pol / pol.sum()
 					action = rng_gen.choice(range(env.action_space[0].n), p=pol)
 					actions.append(action)
 
-				print('Actions: ' + ' & '.join([ACTION_MAP[action] for action in actions]))
-				next_obs, rewards, finished, timeout, info = env.step(actions)
-				print(env.get_env_log())
-				print('Rewards: ', str(rewards))
-				# env.render()
-				# input()
+				else:
+					valid_action = False
+					while not valid_action:
+						human_input = input("Action for agent %d:\t" % (a_idx + 1))
+						if human_input not in KEY_MAP.keys():
+							print('Action %s is invalid, please provide one of the following valid actions: \t' % human_input, str(KEY_MAP.keys()))
+						else:
+							action = int(KEY_MAP[human_input])
+							if action < 6:
+								valid_action = True
+								actions.append(action)
+							else:
+								print('Action ID must be between 0 and 5, you gave ID %d' % action)
 
-				if finished or timeout:
-					if finished:
-						print('Result: Finished!!')
-						finished_runs += 1
-					else:
-						print('Result: Timeout!!')
-						timeout_runs += 1
-					env.food_spawn_pos = None
-					obs, *_ = env.reset()
-					done = True
-					# env.render()
+			print('Actions: ' + ' & '.join([ACTION_MAP[action] for action in actions]))
+			next_obs, rewards, finished, timeout, info = env.step(actions)
+			print(env.get_env_log())
+			print('Rewards: ', str(rewards))
+			env.render()
+			# input()
 
-				obs = next_obs
+			if finished or timeout:
+				if finished:
+					print('Result: Finished!!')
+					finished_runs += 1
+				else:
+					print('Result: Timeout!!')
+					timeout_runs += 1
+				env.food_spawn_pos = None
+				obs, *_ = env.reset()
+				done = True
+				env.render()
 
-		print('Cycle %d: Finished %d out of 250 runs.\tTimeout %d out of 250 runs.' % (cycle+1, finished_runs, timeout_runs))
+			obs = next_obs
+
+	print('Finished %d out of 250 runs.\tTimeout %d out of 250 runs.' % (finished_runs, timeout_runs))
 
 
 if __name__ == '__main__':

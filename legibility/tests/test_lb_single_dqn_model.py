@@ -29,6 +29,7 @@ from datetime import datetime
 
 
 RNG_SEED = 4072023
+MAX_FOOD_SPAWN = 6
 STATE_LEN = 8
 ACTION_DIM = 6
 MAX_EPOCH = 4000
@@ -373,7 +374,7 @@ def run_loc_test_full(n_agents: int, player_level: int, field_size: Tuple[int, i
 						run_rewards += [acc_reward / n_cycles]
 					else:
 						env.obj_food = test_seq.pop(0)
-						agents_dqn.load_model(('food_%dx%d' % (env.obj_food[0], env.obj_food[1])),
+						agents_dqn.load_model(('food_%dx%d_single_model' % (env.obj_food[0], env.obj_food[1])),
 											  model_path / ('%d-foods_%d-food-level' % (remain_foods, food_level)) / model_dirname, logger, obs_shape)
 						steps_food.append(env.timestep)
 						logger.info('New food observation:')
@@ -657,7 +658,8 @@ def main():
 	parser.add_argument('--food-level', dest='food_level', type=int, required=True, help='Level of the food items')
 	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
 	parser.add_argument('--render', dest='use_render', action='store_true', help='Flag that signals the use of the field render while training')
-	parser.add_argument('--n-foods-spawn', dest='n_foods_spawn', type=int, required=True, help='Number of foods to be spawned for training.')
+	parser.add_argument('--n-foods-spawn', dest='n_foods_spawn', type=int, required=False, default=MAX_FOOD_SPAWN,
+	                    help='Number of foods to be spawned for training.')
 	parser.add_argument('--debug', dest='debug', action='store_true', help='Flag signalling debug mode for model training')
 	
 	args = parser.parse_args()

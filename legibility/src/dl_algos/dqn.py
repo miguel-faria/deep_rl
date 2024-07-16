@@ -21,6 +21,7 @@ from wandb import run
 
 EPS_TYPE = {'linear': 1, 'exp': 2, 'log': 3, 'epoch': 4}
 
+
 class DQNetwork(object):
 
     _q_network: nn.Module
@@ -283,11 +284,12 @@ class DQNetwork(object):
             else:
                 logger.error('ERROR!! Could not load checkpoint, expected checkpoint directory got file instead')
     
-    def save_model(self, filename: str, model_dir: Path, logger: logging.Logger) -> None:
+    def save_model(self, filename: str, model_dir: Path, logger: Optional[logging.Logger], use_logger: bool = True) -> None:
         file_path = model_dir / (filename + '.model')
         with open(file_path, "wb") as f:
             f.write(flax.serialization.to_bytes(self._online_state))
-        logger.info("Model state saved to file: " + str(file_path))
+        if use_logger:
+            logger.info("Loaded model state from file: " + str(file_path))
     
     def load_model(self, filename: str, model_dir: Path, logger: Optional[logging.Logger], obs_shape: tuple, use_logger: bool = True) -> None:
         file_path = model_dir / (filename + '.model')

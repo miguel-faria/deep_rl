@@ -154,8 +154,10 @@ class MultiAgentDQN(object):
 						action = q_values.argmax(axis=-1)
 						action = jax.device_get(action)
 						if self._agent_dqns[a_id].use_tracker and epoch % tensorboard_frequency == 0:
-							self._agent_dqns[a_id].performance_tracker.log({self._agent_dqns[a_id].tracker_panel + "-charts/episodic_q_vals": float(q_values[int(action)])},
-																		   step=(epoch + start_record_epoch))
+							self._agent_dqns[a_id].performance_tracker.log({
+									self._agent_dqns[a_id].tracker_panel + "-charts/performance/episodic_q_vals": float(q_values[int(action)]),
+									},
+									step=(epoch + start_record_epoch))
 						actions += [action]
 					actions = np.array(actions)
 				next_obs, rewards, terminated, timeout, infos = env.step(actions)
@@ -177,7 +179,7 @@ class MultiAgentDQN(object):
 					a_id = self._agent_ids[a_idx]
 					episode_rewards[a_idx] += rewards[a_idx]
 					if self._agent_dqns[a_id].use_tracker:
-						self._agent_dqns[a_id].performance_tracker.log({self._agent_dqns[a_id].tracker_panel + "-charts/reward": rewards[a_idx]}, step=(epoch + start_record_epoch))
+						self._agent_dqns[a_id].performance_tracker.log({self._agent_dqns[a_id].tracker_panel + "-charts/performance/reward": rewards[a_idx]}, step=(epoch + start_record_epoch))
 				obs = next_obs
 				
 				# update Q-network and target network
@@ -194,10 +196,10 @@ class MultiAgentDQN(object):
 						if self._agent_dqns[a_idx].use_tracker:
 							a_id = self._agent_ids[a_idx]
 							self._agent_dqns[a_id].performance_tracker.log({
-									"charts/episodic_return": episode_rewards[a_idx],
-									"charts/episodic_length": epoch - episode_start,
-									"charts/epsilon": eps,
-									"charts/iteration": it},
+									self._agent_dqns[a_id].tracker_panel + "-charts/performance/episodic_return": episode_rewards[a_idx],
+									self._agent_dqns[a_id].tracker_panel + "-charts/performance/episodic_length": epoch - episode_start,
+									self._agent_dqns[a_id].tracker_panel + "-charts/control/epsilon": eps,
+									self._agent_dqns[a_id].tracker_panel + "-charts/control/iteration": it},
 									step=(it + start_record_it))
 						print("Agent %s episode over:\tReward: %f\tLength: %d" % (self._agent_ids[a_idx], episode_rewards[a_idx], epoch - episode_start))
 	
@@ -266,16 +268,16 @@ class MultiAgentDQN(object):
 						
 						#  update tensorboard
 						if agent_dqn.use_tracker and epoch % tensorboard_frequency == 0:
-							agent_dqn.performance_tracker.add_scalar("losses/td_loss", jax.device_get(loss), epoch)
-							agent_dqn.performance_tracker.add_scalar("losses/avg_q_values", jax.device_get(q_pred).mean(), epoch)
-							agent_dqn.performance_tracker.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
+							agent_dqn.performance_tracker.log({
+									agent_dqn.tracker_panel + "-charts/losses/td_loss": jax.device_get(loss),
+									agent_dqn.tracker_panel + "-losses/avg_q_values": jax.device_get(q_pred).mean(),
+							}, step=epoch)
 					
 				else:
 					losses = []
 					for a_idx in range(self._num_agents):
 						a_id = self._agent_ids[a_idx]
-						loss = self._agent_dqns[a_id].update_online_model(observations[a_idx], actions[a_idx], next_observations[a_idx], rewards[a_idx],
-																		  dones[a_idx], epoch, start_time, tensorboard_frequency)
+						loss = self._agent_dqns[a_id].update_online_model(observations[a_idx], actions[a_idx], next_observations[a_idx], rewards[a_idx], dones[a_idx])
 						losses += [loss]
 					
 			if epoch % target_freq == 0:

@@ -92,7 +92,7 @@ class SingleAgentDQN(object):
 				episode_rewards += reward
 				episode_history += [obs, action]
 				if self._agent_dqn.use_tracker and epoch_logging:
-					self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/reward": reward}, step=(epoch + start_record_epoch))
+					self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/performance/reward": reward}, step=(epoch + start_record_epoch))
 				
 				# store new samples
 				self._replay_buffer.add(obs, next_obs, action, reward, np.array(finished), info)
@@ -110,7 +110,7 @@ class SingleAgentDQN(object):
 						
 						loss = jax.device_get(self._agent_dqn.update_online_model(observations, actions, next_observations, rewards, dones))
 						if self._agent_dqn.use_tracker and epoch_logging:
-							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-losses/td_loss": loss}, step=epoch)
+							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/losses/td_loss": loss}, step=epoch)
 						else:
 							avg_loss += [loss]
 					
@@ -127,15 +127,17 @@ class SingleAgentDQN(object):
 					avg_episode_len += [episode_len]
 					if self._agent_dqn.use_tracker:
 						self._agent_dqn.performance_tracker.log({
-								self._agent_dqn.tracker_panel + "-charts/mean_episode_q_vals": episode_q_vals / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/mean_episode_return": episode_rewards / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/episodic_length": episode_len,
-								self._agent_dqn.tracker_panel + "-charts/avg_episode_length": np.mean(avg_episode_len),
-								self._agent_dqn.tracker_panel + "-charts/iteration": it,
-								self._agent_dqn.tracker_panel + "-charts/cycle": cycle, },
+								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/performance/episodic_length": episode_len,
+								self._agent_dqn.tracker_panel + "-charts/performance/avg_episode_length": np.mean(avg_episode_len),
+								self._agent_dqn.tracker_panel + "-charts/control/iteration": it,
+								self._agent_dqn.tracker_panel + "-charts/control/cycle": cycle,
+								self._agent_dqn.tracker_panel + "-charts/control/exploration": eps,
+						},
 								step=(it + start_record_it))
 						if not epoch_logging:
-							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
+							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
 																	step=(it + start_record_it))
 						print("Episode over:\tReward: %f\tLength: %d" % (episode_rewards, epoch - episode_start))
 		
@@ -190,7 +192,7 @@ class SingleAgentDQN(object):
 				episode_rewards += reward
 				episode_history += [obs, action]
 				if self._agent_dqn.use_tracker and epoch_logging:
-					self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/reward": reward}, step=(epoch + start_record_epoch))
+					self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/performance/reward": reward}, step=(epoch + start_record_epoch))
 				
 				# store new samples
 				self._replay_buffer.add(obs, next_obs, action, reward, finished, info)
@@ -208,7 +210,7 @@ class SingleAgentDQN(object):
 						
 						loss = jax.device_get(self._agent_dqn.update_online_model(observations, actions, next_observations, rewards, dones))
 						if self._agent_dqn.use_tracker and epoch_logging:
-							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-losses/td_loss": loss}, step=epoch)
+							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/losses/td_loss": loss}, step=epoch)
 						else:
 							avg_loss += [loss]
 					
@@ -226,15 +228,17 @@ class SingleAgentDQN(object):
 					avg_episode_len += [episode_len]
 					if self._agent_dqn.use_tracker:
 						self._agent_dqn.performance_tracker.log({
-								self._agent_dqn.tracker_panel + "-charts/mean_episode_q_vals": episode_q_vals / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/mean_episode_return": episode_rewards / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/episodic_length": episode_len,
-								self._agent_dqn.tracker_panel + "-charts/avg_episode_length": np.mean(avg_episode_len),
-								self._agent_dqn.tracker_panel + "-charts/iteration": it,
-								self._agent_dqn.tracker_panel + "-charts/cycle": cycle, },
+								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
+								self._agent_dqn.tracker_panel + "-charts/performance/episodic_length":     episode_len,
+								self._agent_dqn.tracker_panel + "-charts/performance/avg_episode_length":  np.mean(avg_episode_len),
+								self._agent_dqn.tracker_panel + "-charts/control/iteration":               it,
+								self._agent_dqn.tracker_panel + "-charts/control/cycle":                   cycle,
+								self._agent_dqn.tracker_panel + "-charts/control/cycle": cycle,
+						},
 								step=(it + start_record_it))
 						if not epoch_logging:
-							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
+							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
 																	step=(it + start_record_it))
 					logger.debug("Episode over:\tReward: %f\tLength: %d" % (episode_rewards, episode_len))
 		

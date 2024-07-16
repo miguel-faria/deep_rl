@@ -206,14 +206,13 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			if terminated:
 				finished = np.ones(dqn_model.num_agents)
 				legible_rewards = legible_rewards / (1 - dqn_model.agent_dqn.gamma)
-				# legible_rewards = legible_rewards / dqn_model.agent_dqn.gamma
 			else:
 				finished = np.zeros(dqn_model.num_agents)
 			
 			if dqn_model.agent_dqn.use_tracker:
 				dqn_model.agent_dqn.performance_tracker.log({
-						dqn_model.agent_dqn.tracker_panel + "-charts/legible_reward": sum(legible_rewards) / dqn_model.n_leg_agents,
-						dqn_model.agent_dqn.tracker_panel + "-charts/reward": sum(rewards[:dqn_model.n_leg_agents]) / dqn_model.n_leg_agents},
+						dqn_model.agent_dqn.tracker_panel + "-charts/performance/legible_reward": 	sum(legible_rewards) / dqn_model.n_leg_agents,
+						dqn_model.agent_dqn.tracker_panel + "-charts/performance/reward": 			sum(rewards[:dqn_model.n_leg_agents]) / dqn_model.n_leg_agents},
 						step=(epoch + start_record_epoch))
 			# store new samples
 			if dqn_model.use_vdn:
@@ -245,13 +244,14 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 				dqn = dqn_model.agent_dqn
 				if dqn.use_tracker:
 					dqn.performance_tracker.log({
-							dqn.tracker_panel + "-charts/mean_episode_q_vals": episode_q_vals / episode_len,
-							dqn.tracker_panel + "-charts/mean_episode_return": episode_rewards / episode_len,
-							dqn.tracker_panel + "-charts/episodic_length":     episode_len,
-							dqn.tracker_panel + "-charts/avg_episode_length":  np.mean(avg_episode_len),
-							dqn.tracker_panel + "-charts/iteration":           it,
-							dqn.tracker_panel + "-charts/cycle":               cycle,
-							dqn.tracker_panel + "-losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)
+							dqn.tracker_panel + "-charts/performance/mean_episode_q_vals": 	episode_q_vals / episode_len,
+							dqn.tracker_panel + "-charts/performance/mean_episode_return": 	episode_rewards / episode_len,
+							dqn.tracker_panel + "-charts/performance/episodic_length":     	episode_len,
+							dqn.tracker_panel + "-charts/performance/avg_episode_length":  	np.mean(avg_episode_len),
+							dqn.tracker_panel + "-charts/control/iteration":           		it,
+							dqn.tracker_panel + "-charts/control/cycle":               		cycle,
+							dqn.tracker_panel + "-charts/control/exploration": 				eps,
+							dqn.tracker_panel + "-charts/losses/td_loss" : 					sum(avg_loss) / max(len(avg_loss), 1)
 					},
 					step=(it + start_record_it))
 				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
@@ -428,9 +428,9 @@ def main():
 
 	now = datetime.now()
 	home_dir = Path(__file__).parent.absolute().parent.absolute()
-	log_dir = Path(args.logs_dir) / 'logs' if args.logs_dir != '' else home_dir / 'logs'
-	data_dir = Path(args.data_dir) / 'data' if args.data_dir != '' else home_dir / 'data'
-	models_dir = Path(args.models_dir) / 'models' if args.models_dir != '' else home_dir / 'models'
+	log_dir = Path(args.logs_dir) if args.logs_dir != '' else home_dir / 'logs'
+	data_dir = Path(args.data_dir) if args.data_dir != '' else home_dir / 'data'
+	models_dir = Path(args.models_dir) if args.models_dir != '' else home_dir / 'models'
 	log_filename = (('train_lb_coop_legible%s_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (('_vdn' if use_vdn else ''), field_size[0], field_size[1],
 																								   n_players, n_foods_spawn, food_level)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))

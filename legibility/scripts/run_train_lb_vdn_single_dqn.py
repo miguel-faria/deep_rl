@@ -57,16 +57,17 @@ WARMUP_STEPS = STEPS_EPISODE * 2
 USE_RENDER = False
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--limits', dest='limits', nargs=2, type=int, required=False, default=[1, MAX_SPAWN_FOODS],
-					help='Minimum and maximum food spawns')
-parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH,
-					help='Length of the field')
-parser.add_argument('--episode-steps', dest='max_steps', type=int, required=False, default=STEPS_EPISODE)
-parser.add_argument('--iterations', dest='max_iterations', type=int, required=False, default=N_ITERATIONS)
-parser.add_argument('--logs', dest='logs', type=str, required=False, default=TENSORBOARD_DATA[0])
-parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False, default=CYCLE_TYPE)
-parser.add_argument('--cycle-eps', dest='cycle_eps', type=float, required=False, default=CYCLE_EPS)
-parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
+parser.add_argument('--limits', dest='limits', nargs=2, type=int, required=False, default=[1, MAX_SPAWN_FOODS], help='Min and max number of food spawns to train.')
+parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH, help='Length of the field.')
+parser.add_argument('--episode-steps', dest='max_steps', type=int, required=False, default=STEPS_EPISODE, help='Maximum number of steps per episode.')
+parser.add_argument('--iterations', dest='max_iterations', type=int, required=False, default=N_ITERATIONS, help='Number of iterations to train.')
+parser.add_argument('--logs', dest='logs', type=str, required=False, default=TENSORBOARD_DATA[0], help='Directory to store the performance logs.')
+parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False, default=CYCLE_TYPE, help='Type of decay for each cycle starting epsilon.')
+parser.add_argument('--cycle-eps', dest='cycle_eps', type=float, required=False, default=CYCLE_EPS, help='Epsilon decay for each cycle.')
+parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, default=EPS_TYPE, help='Type of epsilon decay.')
+parser.add_argument('--eps-decay', dest='eps_decay', type=float, required=False, default=EPS_DECAY, help='Epsilon decay.')
+parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
+					help='Directory to store trained models and load optimal models, if left blank stored in default location')
 parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
 					help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
@@ -80,20 +81,23 @@ parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=
 					help='Method of deciding how to add new experience samples when replay buffer is full')
 
 input_args = parser.parse_args()
-field_len = input_args.field_len
-limits = input_args.limits
-max_steps = input_args.max_steps
-iterations = input_args.max_iterations
-logs = input_args.logs
-models_dir = input_args.models_dir
-data_dir = input_args.data_dir
-logs_dir = input_args.logs_dir
+add_method = input_args.buffer_method
 cycle_type = input_args.cycle_type
 cycle_eps = input_args.cycle_eps
+data_dir = input_args.data_dir
+eps_type = input_args.eps_type
+eps_decay = input_args.eps_decay
+field_len = input_args.field_len
+iterations = input_args.max_iterations
+leg_reward = input_args.legible_reward
+limits = input_args.limits
+logs_dir = input_args.logs_dir
+models_dir = input_args.models_dir
+max_steps = input_args.max_steps
+smart_add = input_args.buffer_smart_add
+tracker_logs = input_args.logs
 use_lower_model = input_args.use_lower_model
 use_higher_model = input_args.use_higher_model
-smart_add = input_args.buffer_smart_add
-add_method = input_args.buffer_method
 
 for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else range(limits[0], limits[1] + 1)):
 	print('Launching training script for %d foods spawned' % i)
@@ -101,10 +105,10 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 	args = (" --nagents %d --architecture %s --buffer %d --gamma %f --iterations %d --max-cycles %d --batch %d --train-freq %d "
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f "
 			"--player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --tensorboardDetails %s %d %d %s"
-			% (N_AGENTS, ARQUITECTURE, BUFFER, GAMMA,																											# DQN parameters
-			   iterations, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, cycle_eps,		# Train parameters
-			   PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS,																			# Environment parameters
-			   logs, TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
+			% (N_AGENTS, ARQUITECTURE, BUFFER, GAMMA,  																										# DQN parameters
+			   iterations, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, WARMUP_STEPS, cycle_eps,  # Train parameters
+			   PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS,  																		# Environment parameters
+			   tracker_logs, TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +

@@ -89,22 +89,23 @@ parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=
 					help='Method of deciding how to add new experience samples when replay buffer is full')
 
 input_args = parser.parse_args()
-field_len = input_args.field_len
-limits = input_args.limits
-max_steps = input_args.max_steps
-iterations = input_args.max_iterations
-logs = input_args.logs
-models_dir = input_args.models_dir
-data_dir = input_args.data_dir
-logs_dir = input_args.logs_dir
+add_method = input_args.buffer_method
 cycle_type = input_args.cycle_type
 cycle_eps = input_args.cycle_eps
+data_dir = input_args.data_dir
 eps_type = input_args.eps_type
 eps_decay = input_args.eps_decay
+field_len = input_args.field_len
+iterations = input_args.max_iterations
+leg_reward = input_args.legible_reward
+limits = input_args.limits
+logs_dir = input_args.logs_dir
+models_dir = input_args.models_dir
+max_steps = input_args.max_steps
+smart_add = input_args.buffer_smart_add
+tracker_logs = input_args.logs
 use_lower_model = input_args.use_lower_model
 use_higher_model = input_args.use_higher_model
-smart_add = input_args.buffer_smart_add
-add_method = input_args.buffer_method
 
 for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else range(limits[0], limits[1] + 1)):
 	print('Launching training script for %d foods spawned' % i)
@@ -118,10 +119,10 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 	args = (" --n-agents %d --architecture %s --buffer %d --gamma %f --beta %f --reward %s --iterations %d --max-cycles %d --batch %d --train-freq %d "
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f --legibility-temp %f "
 			"--n-players %d --player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --tensorboardDetails %s %d %d %s"
-			% (N_AGENTS, ARQUITECTURE, BUFFER, GAMMA, BETA, LEG_REWARD,  																				# DQN parameters
-			   iterations, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, decay, eps, WARMUP_STEPS, cycle_eps, TEMP, # Train parameters
-			   N_PLAYERS, PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS,  														# Environment parameters
-			   logs, TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
+			% (N_AGENTS, ARQUITECTURE, BUFFER, GAMMA, BETA, leg_reward,  																					# DQN parameters
+			   iterations, MAX_CYCLES, BATCH_SIZE, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, decay, eps, WARMUP_STEPS, cycle_eps, TEMP,  	# Train parameters
+			   N_PLAYERS, PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS,  															# Environment parameters
+			   tracker_logs, TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") + (" --vdn" if USE_VDN else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +

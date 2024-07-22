@@ -93,7 +93,6 @@ eps_type = input_args.eps_type
 eps_decay = input_args.eps_decay
 field_len = input_args.field_len
 iterations = input_args.max_iterations
-leg_reward = input_args.legible_reward
 limits = input_args.limits
 logs_dir = input_args.logs_dir
 models_dir = input_args.models_dir

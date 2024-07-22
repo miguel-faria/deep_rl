@@ -92,7 +92,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 					  initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
 					  exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, cycle: int = 0,
 					  greedy_action: bool = True, sofmax_temp: float = 1.0, initial_model_path: str = '', use_tracker: bool = False, performance_tracker: Optional[Run] = None,
-					  tracker_panel: str = ''):
+					  tracker_panel: str = '', debug: bool = False):
 		
 	# np.random.seed(rng_seed)
 	rng_gen = np.random.default_rng(rng_seed)
@@ -167,7 +167,8 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 					# action = jax.device_get(action)
 					episode_q_vals += (float(q_values[int(action)]) / dqn_model.num_agents)
 					actions += [action]
-			logger.debug(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]) + ' Explored? %r' % explore + '\n')
+			if debug:
+				logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]) + ' Explored? %r' % explore + '\n')
 			actions = np.array(actions)
 			
 			next_obs, rewards, terminated, timeout, infos = env.step(actions)
@@ -614,7 +615,7 @@ def main():
 					greedy_actions = False
 					history = train_legible_dqn(env, agent_madqn, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
 												final_eps, eps_type, leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-												cycle, greedy_actions, temp, curriculum_model_path, use_tensorboard, wandb_run, tracker_panel)
+												cycle, greedy_actions, temp, curriculum_model_path, use_tensorboard, wandb_run, tracker_panel, debug)
 					
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None

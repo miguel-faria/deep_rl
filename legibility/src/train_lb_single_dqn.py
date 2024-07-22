@@ -319,15 +319,13 @@ def main():
 					obs_space = env.observation_space[0]
 				if use_vdn:
 					action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
-					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space,
-												   env.observation_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
-												   wandb_run, 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1]),
-												   cnn_properties=cnn_properties, buffer_data=(args.buffer_smart_add, args.buffer_method))
+					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space, env.observation_space, use_gpu,
+												   dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
+												   buffer_data=(args.buffer_smart_add, args.buffer_method))
 				else:
-					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space,
-												   obs_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
-												   wandb_run, 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1]),
-												   cnn_properties=cnn_properties, buffer_data=(args.buffer_smart_add, args.buffer_method))
+					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space, obs_space, use_gpu,
+												   dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
+												   buffer_data=(args.buffer_smart_add, args.buffer_method))
 				if restart_train:
 					start_cycle = int(restart_info[2])
 					logger.info('Load trained model')
@@ -378,9 +376,11 @@ def main():
 					logger.info('Starting train')
 					logger.info('Cycle starting epsilon: %f' % cycle_init_eps)
 					cnn_shape = (0, ) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
-					history = agent_madqn.train_dqn(env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps, final_eps,
-													eps_type, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-													use_render, cycle, greedy_action=False, epoch_logging=args.ep_log, initial_model_path=curriculum_model_path)
+					tracker_panel = 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])
+					greedy_actions = False
+					history = agent_madqn.train_dqn(env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps, final_eps, eps_type,
+													RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq, use_render, cycle,
+													greedy_actions, args.ep_log, curriculum_model_path, use_tensorboard, wandb_run, tracker_panel)
 					
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None

@@ -7,7 +7,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-import json
 import logging
 
 from flax.training.train_state import TrainState
@@ -15,11 +14,10 @@ from gymnasium.spaces import Space
 from pathlib import Path
 from dl_algos.dqn import DQNetwork, EPS_TYPE
 from dl_utilities.buffers import ReplayBuffer
-from typing import List, Dict, Callable, Set
-from datetime import datetime
+from typing import List, Dict, Callable, Optional
 from functools import partial
 from jax import jit
-from wandb import run
+from wandb.wandb_run import Run
 
 
 COEF = 1.0
@@ -34,10 +32,9 @@ class MultiAgentDQN(object):
 	_use_vdn: bool
 	_use_ddqn: bool
 	
-	def __init__(self, num_agents: int, agent_ids: List[str], action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int],
-				 buffer_size: int, gamma: float, action_space: Space, observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False,
-				 use_vdn: bool = False, use_cnn: bool = False, handle_timeout: bool = False, use_tracker: bool = False, tracker: run = None, tracker_panel: str = '',
-				 cnn_properties: List[int] = None):
+	def __init__(self, num_agents: int, agent_ids: List[str], action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float,
+				 action_space: Space, observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False, use_cnn: bool = False,
+				 handle_timeout: bool = False, cnn_properties: List[int] = None):
 		
 		"""
 		Initialize a multi-agent scenario DQN with decentralized training and execution
@@ -52,8 +49,6 @@ class MultiAgentDQN(object):
         :param observation_space: gym space for the agent observations
         :param use_gpu: flag that controls use of cpu or gpu
         :param handle_timeout: flag that controls handle timeout termination (due to timelimit) separately and treat the task as infinite horizon task.
-        :param use_tensorboard: flag that notes usage of a tensorboard summary writer (default: False)
-        :param tensorboard_data: list of the form [log_dir: str, queue_size: int, flush_interval: int, filename_suffix: str] with summary data for
         the summary writer (default is None)
         
         :type num_agents: int
@@ -63,11 +58,9 @@ class MultiAgentDQN(object):
         :type layer_sizes: list[int]
         :type use_gpu: bool
         :type handle_timeout: bool
-        :type use_tensorboard: bool
         :type gamma: float
         :type act_function: callable
         :type observation_space: gym.Space
-        :type tensorboard_data: list
 		"""
 		
 		self._num_agents = num_agents
@@ -78,8 +71,7 @@ class MultiAgentDQN(object):
 		self._replay_buffer = ReplayBuffer(buffer_size, observation_space, action_space, "cuda" if use_gpu else "cpu",
 										   handle_timeout_termination=handle_timeout, n_agents=num_agents)
 		for agent_id in agent_ids:
-			self._agent_dqns[agent_id] = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, use_tracker, tracker,
-												   tracker_panel + '_' + agent_id, cnn_properties)
+			self._agent_dqns[agent_id] = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, cnn_properties)
 	
 	########################
 	### Class Properties ###
@@ -107,9 +99,9 @@ class MultiAgentDQN(object):
 	#####################
 	### Class Methods ###
 	#####################
-	def train_dqns(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float,
-				   final_eps: float, eps_type: str, rng_seed: int, log_filename: str, exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1,
-				   target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0):
+	def train_dqns(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float, final_eps: float,
+				   eps_type: str, rng_seed: int, exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1,
+				   use_render: bool = False, cycle: int = 0, use_tracker: bool = False, performance_tracker: Optional[Run] = None, tracker_panel: str = ''):
 		
 		rng_gen = np.random.default_rng(rng_seed)
 		
@@ -134,7 +126,6 @@ class MultiAgentDQN(object):
 			done = False
 			episode_rewards = [0] * self._num_agents
 			episode_start = epoch
-			episode_history = []
 			print("Iteration %d out of %d" % (it + 1, num_iterations))
 			while not done:
 				
@@ -153,10 +144,10 @@ class MultiAgentDQN(object):
 						q_values = agent_dqn.q_network.apply(agent_dqn.online_state.params, obs[a_idx])
 						action = q_values.argmax(axis=-1)
 						action = jax.device_get(action)
-						if self._agent_dqns[a_id].use_tracker and epoch % tensorboard_frequency == 0:
-							self._agent_dqns[a_id].performance_tracker.log({
-									self._agent_dqns[a_id].tracker_panel + "-charts/performance/episodic_q_vals": float(q_values[int(action)]),
-									},
+						if use_tracker and epoch % tensorboard_frequency == 0:
+							performance_tracker.log({
+									tracker_panel + '_' + a_id + "-charts/performance/episodic_q_vals": float(q_values[int(action)]),
+							},
 									step=(epoch + start_record_epoch))
 						actions += [action]
 					actions = np.array(actions)
@@ -178,12 +169,12 @@ class MultiAgentDQN(object):
 				for a_idx in range(self._num_agents):
 					a_id = self._agent_ids[a_idx]
 					episode_rewards[a_idx] += rewards[a_idx]
-					if self._agent_dqns[a_id].use_tracker:
-						self._agent_dqns[a_id].performance_tracker.log({self._agent_dqns[a_id].tracker_panel + "-charts/performance/reward": rewards[a_idx]}, step=(epoch + start_record_epoch))
+					if use_tracker:
+						performance_tracker.log({tracker_panel + '_' + a_id + "-charts/performance/reward": rewards[a_idx]}, step=(epoch + start_record_epoch))
 				obs = next_obs
 				
 				# update Q-network and target network
-				self.update_dqn_models(batch_size, epoch, start_time, target_freq, tau, tensorboard_frequency, train_freq, warmup)
+				self.update_dqn_models(batch_size, epoch, target_freq, tau, tensorboard_frequency, train_freq, warmup, use_tracker, performance_tracker, tracker_panel)
 				
 				epoch += 1
 				sys.stdout.flush()
@@ -193,13 +184,13 @@ class MultiAgentDQN(object):
 					done = True
 					obs, *_ = env.reset()
 					for a_idx in range(self._num_agents):
-						if self._agent_dqns[a_idx].use_tracker:
+						if use_tracker:
 							a_id = self._agent_ids[a_idx]
-							self._agent_dqns[a_id].performance_tracker.log({
-									self._agent_dqns[a_id].tracker_panel + "-charts/performance/episodic_return": episode_rewards[a_idx],
-									self._agent_dqns[a_id].tracker_panel + "-charts/performance/episodic_length": epoch - episode_start,
-									self._agent_dqns[a_id].tracker_panel + "-charts/control/epsilon": eps,
-									self._agent_dqns[a_id].tracker_panel + "-charts/control/iteration": it},
+							performance_tracker.log({
+									tracker_panel + '_' + a_id + "-charts/performance/episodic_return": episode_rewards[a_idx],
+									tracker_panel + '_' + a_id + "-charts/performance/episodic_length": epoch - episode_start,
+									tracker_panel + '_' + a_id + "-charts/control/epsilon": eps,
+									tracker_panel + '_' + a_id + "-charts/control/iteration": it},
 									step=(it + start_record_it))
 						print("Agent %s episode over:\tReward: %f\tLength: %d" % (self._agent_ids[a_idx], episode_rewards[a_idx], epoch - episode_start))
 	
@@ -243,8 +234,8 @@ class MultiAgentDQN(object):
 			new_q_states.append(q_state[idx].apply_gradients(grads=grads))
 		return loss_value, q_vals, new_q_states
 		
-	def update_dqn_models(self, batch_size: int, epoch: int, start_time: float, target_freq: int, tau: float, tensorboard_frequency: int,
-						  train_freq: int, warmup: int):
+	def update_dqn_models(self, batch_size: int, epoch: int, target_freq: int, tau: float, tensorboard_frequency: int, train_freq: int, warmup: int,
+						  use_tracker: bool = False, performance_tracker: Optional[Run] = None, tracker_panel: str = ''):
 		if epoch >= warmup:
 			if epoch % train_freq == 0:
 				data = self._replay_buffer.sample(batch_size)
@@ -267,10 +258,10 @@ class MultiAgentDQN(object):
 						agent_dqn.online_state = q_states[a_idx]
 						
 						#  update tensorboard
-						if agent_dqn.use_tracker and epoch % tensorboard_frequency == 0:
-							agent_dqn.performance_tracker.log({
-									agent_dqn.tracker_panel + "-charts/losses/td_loss": jax.device_get(loss),
-									agent_dqn.tracker_panel + "-losses/avg_q_values": jax.device_get(q_pred).mean(),
+						if use_tracker and epoch % tensorboard_frequency == 0:
+							performance_tracker.log({
+									tracker_panel + '_' + self._agent_ids[a_idx] + "-charts/losses/td_loss": jax.device_get(loss),
+									tracker_panel + '_' + self._agent_ids[a_idx] + "-losses/avg_q_values": jax.device_get(q_pred).mean(),
 							}, step=epoch)
 					
 				else:

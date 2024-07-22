@@ -14,11 +14,11 @@ from gymnasium.spaces import Space
 from pathlib import Path
 from dl_algos.dqn import DQNetwork, EPS_TYPE
 from dl_utilities.buffers import ReplayBuffer
-from typing import List, Dict, Callable, Tuple
+from typing import List, Dict, Callable, Tuple, Optional
 from datetime import datetime
 from functools import partial
 from jax import jit
-from wandb import run
+from wandb.wandb_run import Run
 
 
 # noinspection DuplicatedCode,PyTypeChecker
@@ -32,8 +32,7 @@ class SingleModelMADQN(object):
 	
 	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float, action_space: Space,
 				 observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False, use_cnn: bool = False,
-				 handle_timeout: bool = False, use_tracker: bool = False, tracker: run = None, tracker_panel: str = '', cnn_properties: List = None, n_envs: int = 1,
-				 buffer_data: tuple = (False, '')):
+				 handle_timeout: bool = False, cnn_properties: List = None, n_envs: int = 1, buffer_data: tuple = (False, '')):
 		
 		"""
 		Initialize a multi-agent scenario DQN with a single DQN model
@@ -48,8 +47,6 @@ class SingleModelMADQN(object):
         :param observation_space: 	gym space for the agent observations
         :param use_gpu: 			flag that controls use of cpu or gpu
         :param handle_timeout: 		flag that controls handle timeout termination (due to timelimit) separately and treat the task as infinite horizon task.
-        :param use_tracker:         flag that notes usage of a performance tracker (wandb) (default: False)
-        :param tracker:             wandb tracker to track model performance
 
         :type num_agents: int
         :type action_dim: int
@@ -58,17 +55,15 @@ class SingleModelMADQN(object):
         :type layer_sizes: list[int]
         :type use_gpu: bool
         :type handle_timeout: bool
-        :type use_tracker: bool
         :type gamma: float
         :type act_function: callable
         :type observation_space: gym.Space
-        :type tensorboard_data: list
 		"""
 		
 		self._n_agents = num_agents
 		self._use_vdn = use_vdn
 		self._use_ddqn = use_ddqn
-		self._agent_dqn = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, use_tracker, tracker, tracker_panel, cnn_properties)
+		self._agent_dqn = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, cnn_properties)
 		if use_vdn:
 			self._replay_buffer = ReplayBuffer(buffer_size, observation_space, action_space, "cuda" if use_gpu else "cpu", handle_timeout_termination=handle_timeout,
 											   n_agents=num_agents, n_envs=n_envs, smart_add=buffer_data[0], add_method=buffer_data[1])
@@ -134,9 +129,9 @@ class SingleModelMADQN(object):
 		return loss_value, q_pred, q_state
 	
 	def train_dqn(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float,
-				  final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99,
-				  warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0,
-				  greedy_action: bool = True, epoch_logging: bool = False, initial_model_path: str = ''):
+				  final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99, warmup: int = 0,
+				  train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0, greedy_action: bool = True,
+				  epoch_logging: bool = False, initial_model_path: str = '', use_tracker: bool = False, performance_tracker: Optional[Run] = None, tracker_panel: str = ''):
 		
 		rng_gen = np.random.default_rng(rng_seed)
 		# self._replay_buffer.reseed(rng_seed)
@@ -216,16 +211,16 @@ class SingleModelMADQN(object):
 					for a_idx in range(self._n_agents):
 						self.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], rewards[a_idx], finished[a_idx], infos)
 						episode_rewards += (rewards[a_idx] / self._n_agents)
-				if self._agent_dqn.use_tracker and epoch_logging:
-					self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/performance/reward": sum(rewards)}, step=(epoch + start_record_epoch))
+				if use_tracker and epoch_logging:
+					performance_tracker.log({tracker_panel + "-charts/performance/reward": sum(rewards)}, step=(epoch + start_record_epoch))
 				obs = next_obs
 				
 				# update Q-network and target network
 				if epoch >= warmup:
 					if epoch % train_freq == 0:
 						loss = jax.device_get(self.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger, cnn_shape))
-						if self._agent_dqn.use_tracker and epoch_logging:
-							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/losses/td_loss": loss}, step=epoch)
+						if use_tracker and epoch_logging:
+							performance_tracker.log({tracker_panel + "-charts/losses/td_loss": loss}, step=epoch)
 						else:
 							avg_loss += [loss]
 					
@@ -239,19 +234,19 @@ class SingleModelMADQN(object):
 				if terminated or timeout:
 					episode_len = epoch - episode_start
 					avg_episode_len += [episode_len]
-					if self._agent_dqn.use_tracker:
-						self._agent_dqn.performance_tracker.log({
-								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/episodic_length": episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/avg_episode_length": np.mean(avg_episode_len),
-								self._agent_dqn.tracker_panel + "-charts/control/iteration": it,
-								self._agent_dqn.tracker_panel + "-charts/control/cycle": cycle,
-								self._agent_dqn.tracker_panel + "-charts/control/exploration": eps,
+					if use_tracker:
+						performance_tracker.log({
+								tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
+								tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
+								tracker_panel + "-charts/performance/episodic_length": episode_len,
+								tracker_panel + "-charts/performance/avg_episode_length": np.mean(avg_episode_len),
+								tracker_panel + "-charts/control/iteration": it,
+								tracker_panel + "-charts/control/cycle": cycle,
+								tracker_panel + "-charts/control/exploration": eps,
 						},
 								step=(it + start_record_it))
 						if not epoch_logging:
-							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
+							performance_tracker.log({tracker_panel + "-charts/losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
 																	step=(it + start_record_it))
 					logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 					obs, *_ = env.reset()
@@ -324,11 +319,11 @@ class LegibleSingleMADQN(SingleModelMADQN):
 	
 	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float, beta: float,
 				 action_space: Space, observation_space: Space, use_gpu: bool, handle_timeout: bool, models_dir: Path, model_names: Dict[str, str], goal: str,
-				 dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False, use_cnn: bool = False, use_tracker: bool = False, tracker: run = None,
-				 tracker_panel: str = '', n_legible_agents: int = 1, cnn_properties: List = None, buffer_data: tuple = (False, '')):
+				 dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False, use_cnn: bool = False, n_legible_agents: int = 1, cnn_properties: List = None,
+				 buffer_data: tuple = (False, '')):
 		
 		super().__init__(num_agents, action_dim, num_layers, act_function, layer_sizes, buffer_size, gamma, action_space, observation_space, use_gpu,
-						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, use_tracker, tracker, tracker_panel, cnn_properties, buffer_data=buffer_data)
+						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, cnn_properties, buffer_data=buffer_data)
 		
 		self._n_leg_agents = n_legible_agents
 		self._goal_ids = list(model_names.keys())
@@ -419,10 +414,10 @@ class LegibleSingleMADQN(SingleModelMADQN):
 		q_state = q_state.apply_gradients(grads=grads)
 		return loss_value, q_pred, q_state
 
-	def train_dqn(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float,
-				  final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99,
-				  warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0,
-				  greedy_action: bool = True, epoch_logging: bool = False, initial_model_path: str = ''):
+	def train_dqn(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float, final_eps: float,
+				  eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1,
+				  target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0, greedy_action: bool = True, epoch_logging: bool = False,
+				  initial_model_path: str = '', use_tracker: bool = False, performance_tracker: Optional[Run] = None, tracker_panel: str = ''):
 			
 		np.random.seed(rng_seed)
 		rng_gen = np.random.default_rng(rng_seed)
@@ -503,10 +498,10 @@ class LegibleSingleMADQN(SingleModelMADQN):
 				else:
 					finished = np.zeros(self._n_agents)
 				
-				if self._agent_dqn.use_tracker and epoch_logging:
-					self._agent_dqn.performance_tracker.log({
-							self._agent_dqn.tracker_panel + "-charts/performance/reward": sum(rewards),
-							self._agent_dqn.tracker_panel + "-charts/performance/legible_reward": sum(legible_rewards) / self._n_agents},
+				if use_tracker and epoch_logging:
+					performance_tracker.log({
+							tracker_panel + "-charts/performance/reward": sum(rewards),
+							tracker_panel + "-charts/performance/legible_reward": sum(legible_rewards) / self._n_agents},
 							step=(epoch + start_record_epoch))
 				
 				# store new samples
@@ -521,8 +516,8 @@ class LegibleSingleMADQN(SingleModelMADQN):
 				if epoch >= warmup:
 					if epoch % train_freq == 0:
 						loss = self.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger)
-						if self._agent_dqn.use_tracker and epoch_logging:
-							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/losses/td_loss": loss}, step=epoch)
+						if use_tracker and epoch_logging:
+							performance_tracker.log({tracker_panel + "-charts/losses/td_loss": loss}, step=epoch)
 						else:
 							avg_loss += [loss]
 					
@@ -536,19 +531,19 @@ class LegibleSingleMADQN(SingleModelMADQN):
 				if terminated or timeout:
 					episode_len = epoch - episode_start
 					avg_episode_len += [episode_len]
-					if self._agent_dqn.use_tracker:
-						self._agent_dqn.performance_tracker.log({
-								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/episodic_length": episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/avg_episode_length": np.mean(avg_episode_len),
-								self._agent_dqn.tracker_panel + "-charts/control/iteration": it,
-								self._agent_dqn.tracker_panel + "-charts/control/cycle": cycle,
-								self._agent_dqn.tracker_panel + "-charts/control/exploration": eps,
+					if use_tracker:
+						performance_tracker.log({
+								tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
+								tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
+								tracker_panel + "-charts/performance/episodic_length": episode_len,
+								tracker_panel + "-charts/performance/avg_episode_length": np.mean(avg_episode_len),
+								tracker_panel + "-charts/control/iteration": it,
+								tracker_panel + "-charts/control/cycle": cycle,
+								tracker_panel + "-charts/control/exploration": eps,
 						},
 								step=(it + start_record_it))
 						if not epoch_logging:
-							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
+							performance_tracker.log({tracker_panel + "-charts/losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
 																	step=(it + start_record_it))
 					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 					obs, *_ = env.reset()
@@ -570,23 +565,15 @@ class CentralizedMADQN(object):
 	_use_ddqn: bool
 	_joint_action_converter: Callable
 	
-	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_converter: Callable, act_function: Callable, layer_sizes: List[int],
-				 buffer_size: int, gamma: float, action_space: Space, observation_space: Space, use_gpu: bool, dueling_dqn: bool = False,
-				 use_ddqn: bool = False, use_cnn: bool = False, handle_timeout: bool = False, use_tensorboard: bool = False, tensorboard_data: List = None,
-				 cnn_properties: List[int] = None):
+	def __init__(self, num_agents: int, action_dim: int, num_layers: int, act_converter: Callable, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float,
+				 action_space: Space, observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False, use_cnn: bool = False,
+				 handle_timeout: bool = False, cnn_properties: List[int] = None):
 		
 		self._num_agents = num_agents
 		self._joint_action_converter = act_converter
-		now = datetime.now()
-		if tensorboard_data is not None:
-			board_data = [tensorboard_data[0] + '/centralized_madqn_' + now.strftime("%Y%m%d-%H%M%S"), tensorboard_data[1], tensorboard_data[2],
-						  tensorboard_data[3], 'centralized_madqn']
-		else:
-			board_data = tensorboard_data
-		self._madqn = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, use_tensorboard,
-								board_data, cnn_properties, ma_obs=True, n_obs=num_agents)
-		self._replay_buffer = ReplayBuffer(buffer_size, observation_space, action_space, "cuda" if use_gpu else "cpu",
-										   handle_timeout_termination=handle_timeout, n_agents=num_agents)
+		self._madqn = DQNetwork(action_dim, num_layers, act_function, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, cnn_properties, ma_obs=True, n_obs=num_agents)
+		self._replay_buffer = ReplayBuffer(buffer_size, observation_space, action_space, "cuda" if use_gpu else "cpu", handle_timeout_termination=handle_timeout,
+										   n_agents=num_agents, smart_add=buffer_data[0], add_method=buffer_data[1])
 		
 	########################
 	### Class Properties ###
@@ -610,9 +597,9 @@ class CentralizedMADQN(object):
 	#####################
 	### Class Methods ###
 	#####################
-	def train_dqn(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float,
-				  initial_eps: float, final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, exploration_decay: float = 0.99, warmup: int = 0,
-				  train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0):
+	def train_dqn(self, env: gymnasium.Env, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float, final_eps: float,
+				  eps_type: str, rng_seed: int, logger: logging.Logger, exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100,
+				  use_render: bool = False, cycle: int = 0, use_tracker: bool = False, performance_tracker: Optional[Run] = None, tracker_panel: str = ''):
 		
 		rng_gen = np.random.default_rng(rng_seed)
 		
@@ -669,8 +656,8 @@ class CentralizedMADQN(object):
 				# store new samples
 				self._replay_buffer.add(obs, next_obs, joint_action, rewards, finished[0], infos)
 				episode_rewards += sum(rewards) / self._num_agents
-				if self._madqn.use_tracker:
-					self._agent_dqn.performance_tracker.log({"charts/performance/reward": sum(rewards)}, step=(epoch + start_record_epoch))
+				if use_tracker:
+					performance_tracker.log({"charts/performance/reward": sum(rewards)}, step=(epoch + start_record_epoch))
 				obs = next_obs
 				
 				# update Q-network and target network
@@ -689,19 +676,19 @@ class CentralizedMADQN(object):
 				if terminated or timeout:
 					episode_len = epoch - episode_start
 					avg_episode_len += [episode_len]
-					if self._madqn.use_tracker:
-						self._agent_dqn.performance_tracker.log({
-								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/episodic_length": episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/avg_episode_length": np.mean(avg_episode_len),
-								self._agent_dqn.tracker_panel + "-charts/control/iteration": it,
-								self._agent_dqn.tracker_panel + "-charts/control/cycle": cycle,
-								self._agent_dqn.tracker_panel + "-charts/control/exploration": eps,
+					if use_tracker:
+						performance_tracker.log({
+								tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
+								tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
+								tracker_panel + "-charts/performance/episodic_length": episode_len,
+								tracker_panel + "-charts/performance/avg_episode_length": np.mean(avg_episode_len),
+								tracker_panel + "-charts/control/iteration": it,
+								tracker_panel + "-charts/control/cycle": cycle,
+								tracker_panel + "-charts/control/exploration": eps,
 						},
 								step=(it + start_record_it))
 						if not epoch_logging:
-							self._agent_dqn.performance_tracker.log({self._agent_dqn.tracker_panel + "-charts/losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
+							performance_tracker.log({tracker_panel + "-charts/losses/td_loss" : sum(avg_loss) / max(len(avg_loss), 1)},
 																	step=(it + start_record_it))
 					obs, *_ = env.reset()
 					done = True
@@ -740,10 +727,9 @@ class CentralizedMADQN(object):
 class MultiEnvSingleMADQN(SingleModelMADQN):
 	_n_envs: int
 	
-	def __init__(self, num_agents: int, num_envs: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int,
-				 gamma: float, action_space: Space, observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False,
-				 use_vdn: bool = False, use_cnn: bool = False, handle_timeout: bool = False, use_tracker: bool = False, tensorboard_data: List = None,
-				 cnn_properties: List = None):
+	def __init__(self, num_agents: int, num_envs: int, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], buffer_size: int, gamma: float,
+				 action_space: Space, observation_space: Space, use_gpu: bool, dueling_dqn: bool = False, use_ddqn: bool = False, use_vdn: bool = False, use_cnn: bool = False,
+				 handle_timeout: bool = False, cnn_properties: List = None, buffer_data: tuple = (False, '')):
 		
 		"""
 		Initialize a multi-agent scenario DQN with a single DQN model using multiple simultaneous environments for training
@@ -759,9 +745,6 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 		:param observation_space: gym space for the agent observations
 		:param use_gpu: flag that controls use of cpu or gpu
 		:param handle_timeout: flag that controls handle timeout termination (due to timelimit) separately and treat the task as infinite horizon task.
-		:param use_tracker: flag that notes usage of a tensorboard summary writer (default: False)
-		:param tensorboard_data: list of the form [log_dir: str, queue_size: int, flush_interval: int, filename_suffix: str] with summary data for
-		the summary writer (default is None)
 
 		:type num_agents: int
 		:type num_envs: int
@@ -771,16 +754,14 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 		:type layer_sizes: list[int]
 		:type use_gpu: bool
 		:type handle_timeout: bool
-		:type use_tracker: bool
 		:type gamma: float
 		:type act_function: callable
 		:type observation_space: gym.Space
-		:type tensorboard_data: list
 		"""
 		
 		self._n_envs = num_envs
 		super().__init__(num_agents, action_dim, num_layers, act_function, layer_sizes, buffer_size, gamma, action_space, observation_space, use_gpu,
-						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, use_tracker, tensorboard_data, cnn_properties, n_envs=num_envs)
+						 dueling_dqn, use_ddqn, use_vdn, use_cnn, handle_timeout, cnn_properties, n_envs=num_envs, buffer_data=buffer_data)
 	
 	########################
 	### Class Properties ###
@@ -896,9 +877,9 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 		return loss_value, q_pred, grads
 	
 	def train_dqn(self, envs: List[gymnasium.Env], num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float, initial_eps: float,
-				  final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99,
-				  warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0,
-				  greedy_action: bool = True, epoch_logging: bool = False, all_envs: bool = False):
+				  final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99, warmup: int = 0,
+				  train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, use_render: bool = False, cycle: int = 0, greedy_action: bool = True,
+				  epoch_logging: bool = False, all_envs: bool = False, use_tracker: bool = False, performance_tracker: Optional[Run] = None, tracker_panel: str = ''):
 		
 		rng_gen = np.random.default_rng(rng_seed)
 		# self._replay_buffer.reseed(rng_seed)
@@ -957,16 +938,16 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 				if envs_finished:
 					episode_len = epoch - episode_start
 					avg_episode_len.append(episode_len)
-					if self._agent_dqn.use_tracker:
-						self._agent_dqn.performance_tracker.log({
-								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_q_vals": 		episode_q_vals / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/mean_episode_return": 		episode_rewards / episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/episodic_length":     		episode_len,
-								self._agent_dqn.tracker_panel + "-charts/performance/avg_episode_length":  		np.mean(avg_episode_len),
-								self._agent_dqn.tracker_panel + "-charts/performance/iteration":          		it,
-								self._agent_dqn.tracker_panel + "-charts/control/cycle":               			cycle,
-								self._agent_dqn.tracker_panel + "-charts/control/exploration": 					eps,
-								self._agent_dqn.tracker_panel + "-charts/losses/td_loss": 						sum(avg_loss) / max(len(avg_loss), 1)},
+					if use_tracker:
+						performance_tracker.log({
+								tracker_panel + "-charts/performance/mean_episode_q_vals": 		episode_q_vals / episode_len,
+								tracker_panel + "-charts/performance/mean_episode_return": 		episode_rewards / episode_len,
+								tracker_panel + "-charts/performance/episodic_length":     		episode_len,
+								tracker_panel + "-charts/performance/avg_episode_length":  		np.mean(avg_episode_len),
+								tracker_panel + "-charts/performance/iteration":          		it,
+								tracker_panel + "-charts/control/cycle":               			cycle,
+								tracker_panel + "-charts/control/exploration": 					eps,
+								tracker_panel + "-charts/losses/td_loss": 						sum(avg_loss) / max(len(avg_loss), 1)},
 								step=(it + start_record_it))
 					logger.debug("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (episode_len, eps, episode_rewards))
 					envs_obs = np.array([env.reset()[0] for env in envs])
@@ -1017,8 +998,6 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 				next_observations = next_observations.reshape((len(next_observations), *cnn_shape))
 			loss = self._agent_dqn.update_online_model(observations, actions, next_observations, rewards, dones)
 		
-		# train_info += ('loss: %.7f\t' % loss)
-		# logger.debug('Train Info: ' + train_info)
 		return loss
 	
 	def save_model(self, filename: str, model_dir: Path, logger: logging.Logger) -> None:

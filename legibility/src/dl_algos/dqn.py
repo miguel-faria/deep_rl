@@ -27,15 +27,12 @@ class DQNetwork(object):
     _q_network: nn.Module
     _online_state: TrainState
     _target_state_params: flax.core.FrozenDict
-    _perform_tracker: run
-    _tracker_panel: str
     _gamma: float
     _use_ddqn: bool
     _cnn_layer: bool
     
     def __init__(self, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], gamma: float, dueling_dqn: bool = False,
-                 use_ddqn: bool = False, cnn_layer: bool = False, use_tracker: bool = False, tracker: run = None, tracker_panel: str = '', cnn_properties: List = None,
-                 ma_obs: bool = False, n_obs: int = 1):
+                 use_ddqn: bool = False, cnn_layer: bool = False, cnn_properties: List = None, ma_obs: bool = False, n_obs: int = 1):
         
         """
         Initializes a DQN
@@ -48,8 +45,6 @@ class DQNetwork(object):
         :param dueling_dqn:         flag denoting the use of a dueling architecture
         :param use_ddqn:            flag denoting the use of a double dqn variant
         :param cnn_layer:           flag denoting the use of a convolutional layer as the entry layer
-        :param use_tracker:         flag that notes usage of a performance tracker (wandb) (default: False)
-        :param tracker:             wandb tracker to track model performance
         :param cnn_properties:      list of the properties for the convolutional layer (layer size, kernel size, pooling window size)
         
         """
@@ -96,16 +91,12 @@ class DQNetwork(object):
                     self._q_network = QNetwork(action_dim=action_dim, num_layers=num_layers, activation_function=act_function, layer_sizes=layer_sizes.copy())
             
         self._gamma = gamma
-        self._use_tracker = use_tracker
         self._target_state_params = None
         self._online_state = None
         self._use_ddqn = use_ddqn
         self._cnn_layer = cnn_layer
         self._q_network.apply = jax.jit(self._q_network.apply)
         self._dqn_initialized = False
-        if use_tracker:
-            self._perform_tracker = tracker
-            self._tracker_panel = tracker_panel
 
     #############################
     ##    GETTERS & SETTERS    ##
@@ -126,18 +117,6 @@ class DQNetwork(object):
     @property
     def gamma(self) -> float:
         return self._gamma
-    
-    @property
-    def use_tracker(self) -> bool:
-        return self._use_tracker
-    
-    @property
-    def performance_tracker(self) -> run:
-        return self._perform_tracker
-    
-    @property
-    def tracker_panel(self) -> str:
-        return self._tracker_panel
     
     @property
     def cnn_layer(self) -> bool:

@@ -21,9 +21,10 @@ from dl_envs.lb_foraging.lb_foraging_coop import FoodCOOPLBForaging
 from dl_envs.lb_foraging.lb_foraging import Action
 from pathlib import Path
 from itertools import product
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from datetime import datetime
 from gymnasium.spaces import MultiBinary, MultiDiscrete
+from wandb.wandb_run import Run
 
 
 RNG_SEED = 13042023
@@ -87,10 +88,11 @@ def get_live_obs_goals(env: FoodCOOPLBForaging) -> Tuple[List, List]:
 	return live_goals, goals_obs
 
 
-def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float,
-					  tau: float, initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger,
-					  cnn_shape: Tuple[int], exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100,
-					  tensorboard_frequency: int = 1, cycle: int = 0, greedy_action: bool = True, sofmax_temp: float = 1.0, initial_model_path: str = ''):
+def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float,
+					  initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
+					  exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, cycle: int = 0,
+					  greedy_action: bool = True, sofmax_temp: float = 1.0, initial_model_path: str = '', use_tracker: bool = False, performance_tracker: Optional[Run] = None,
+					  tracker_panel: str = ''):
 		
 	# np.random.seed(rng_seed)
 	rng_gen = np.random.default_rng(rng_seed)
@@ -209,10 +211,10 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			else:
 				finished = np.zeros(dqn_model.num_agents)
 			
-			if dqn_model.agent_dqn.use_tracker:
-				dqn_model.agent_dqn.performance_tracker.log({
-						dqn_model.agent_dqn.tracker_panel + "-charts/performance/legible_reward": 	sum(legible_rewards) / dqn_model.n_leg_agents,
-						dqn_model.agent_dqn.tracker_panel + "-charts/performance/reward": 			sum(rewards[:dqn_model.n_leg_agents]) / dqn_model.n_leg_agents},
+			if use_tracker:
+				performance_tracker.log({
+						tracker_panel + "-charts/performance/legible_reward": 	sum(legible_rewards) / dqn_model.n_leg_agents,
+						tracker_panel + "-charts/performance/reward": 			sum(rewards[:dqn_model.n_leg_agents]) / dqn_model.n_leg_agents},
 						step=(epoch + start_record_epoch))
 			# store new samples
 			if dqn_model.use_vdn:
@@ -241,17 +243,16 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			if terminated or timeout:
 				episode_len = epoch - episode_start
 				avg_episode_len += [episode_len]
-				dqn = dqn_model.agent_dqn
-				if dqn.use_tracker:
-					dqn.performance_tracker.log({
-							dqn.tracker_panel + "-charts/performance/mean_episode_q_vals": 	episode_q_vals / episode_len,
-							dqn.tracker_panel + "-charts/performance/mean_episode_return": 	episode_rewards / episode_len,
-							dqn.tracker_panel + "-charts/performance/episodic_length":     	episode_len,
-							dqn.tracker_panel + "-charts/performance/avg_episode_length":  	np.mean(avg_episode_len),
-							dqn.tracker_panel + "-charts/control/iteration":           		it,
-							dqn.tracker_panel + "-charts/control/cycle":               		cycle,
-							dqn.tracker_panel + "-charts/control/exploration": 				eps,
-							dqn.tracker_panel + "-charts/losses/td_loss" : 					sum(avg_loss) / max(len(avg_loss), 1)
+				if use_tracker:
+					performance_tracker.log({
+							tracker_panel + "-charts/performance/mean_episode_q_vals": 	episode_q_vals / episode_len,
+							tracker_panel + "-charts/performance/mean_episode_return": 	episode_rewards / episode_len,
+							tracker_panel + "-charts/performance/episodic_length":     	episode_len,
+							tracker_panel + "-charts/performance/avg_episode_length":  	np.mean(avg_episode_len),
+							tracker_panel + "-charts/control/iteration":           		it,
+							tracker_panel + "-charts/control/cycle":               		cycle,
+							tracker_panel + "-charts/control/exploration": 				eps,
+							tracker_panel + "-charts/losses/td_loss" : 					sum(avg_loss) / max(len(avg_loss), 1)
 					},
 					step=(it + start_record_it))
 				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
@@ -549,15 +550,13 @@ def main():
 					obs_space = env.observation_space[0]
 				if use_vdn:
 					action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
-					agent_madqn = LegibleSingleMADQN(n_agents, n_actions, n_layers, nn.relu, layer_sizes, buffer_size, gamma, beta, action_space, env.observation_space,
-													 use_gpu, False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn, use_vdn,
-													 use_cnn, use_tensorboard, wandb_run, 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1]),
+					agent_madqn = LegibleSingleMADQN(n_agents, n_actions, n_layers, nn.relu, layer_sizes, buffer_size, gamma, beta, action_space, env.observation_space, use_gpu,
+													 False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn, use_vdn, use_cnn,
 													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties,
 													 buffer_data=(args.buffer_smart_add, args.buffer_method))
 				else:
-					agent_madqn = LegibleSingleMADQN(n_agents, n_actions, n_layers, nn.relu, layer_sizes, buffer_size, gamma, beta, agent_action_space,
-													 obs_space, use_gpu, False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn, use_vdn,
-													 use_cnn, use_tensorboard, wandb_run, 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1]),
+					agent_madqn = LegibleSingleMADQN(n_agents, n_actions, n_layers, nn.relu, layer_sizes, buffer_size, gamma, beta, agent_action_space, obs_space, use_gpu,
+													 False, optim_dir, optim_models, str(loc), dueling_dqn, use_ddqn, use_vdn, use_cnn,
 													 n_legible_agents=min(n_leg_agents, n_agents), cnn_properties=cnn_properties,
 													 buffer_data=(args.buffer_smart_add, args.buffer_method))
 				
@@ -611,9 +610,11 @@ def main():
 					logger.info('Starting train')
 					logger.info('Cycle starting epsilon: %f' % cycle_init_eps)
 					cnn_shape = (0,) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
+					tracker_panel = 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])
+					greedy_actions = False
 					history = train_legible_dqn(env, agent_madqn, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
 												final_eps, eps_type, leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-												cycle, greedy_action=False, sofmax_temp=temp, initial_model_path=curriculum_model_path)
+												cycle, greedy_actions, temp, curriculum_model_path, use_tensorboard, wandb_run, tracker_panel)
 					
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None

@@ -71,6 +71,11 @@ class GeneralBuffer(ABC):
     def reset_seed(self):
         self.rng_key = jax.random.PRNGKey(self.start_seed)
     
+    def set_pos(self, new_pos: int) -> None:
+        self.pos = min(new_pos, self.buffer_size)
+        if new_pos < self.buffer_size:
+            self.full = False
+    
     @staticmethod
     def swap_and_flatten(arr: np.ndarray) -> np.ndarray:
         """
@@ -234,7 +239,7 @@ class ReplayBuffer(GeneralBuffer):
     def add(self, obs: np.ndarray, next_obs: np.ndarray, action: Union[np.ndarray, int], reward: Union[np.ndarray, float], done: Union[np.ndarray, bool],
             infos: List[Dict[str, Any]]) -> None:
         if self.smart_add:
-            if self.pos >= self.buffer_size:
+            if self.full:
                 if self.add_method == 'weighted':
                     if self.samples_order is None:
                         self.samples_order = jnp.arange(self.buffer_size).tolist()
@@ -252,6 +257,8 @@ class ReplayBuffer(GeneralBuffer):
             else:
                 self.add_sample(self.pos, obs, next_obs, action, reward, done, infos)
                 self.pos += 1
+                if self.pos == self.buffer_size:
+                    self.full = True
             
         else:
             self.add_sample(self.pos, obs, next_obs, action, reward, done, infos)
@@ -327,7 +334,7 @@ class ReplayBuffer(GeneralBuffer):
             if self.optimize_memory_usage:
                 next_obs = self._normalize_obs(self.next_observations[(batch_inds + 1) % self.buffer_size, :], env)
             else:
-                next_obs = self._normalize_obs(self.next_observations[batch_inds,  :], env)
+                next_obs = self._normalize_obs(self.next_observations[batch_inds, :], env)
     
             rewards_shape = self.rewards.shape
             rewards = (np.zeros((batch_size * rewards_shape[-1], self.n_envs, 1)) if self.n_agents < 2 else

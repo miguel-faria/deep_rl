@@ -221,11 +221,10 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			if dqn_model.use_vdn:
 				dqn_model.replay_buffer.add(obs, next_obs, actions, np.hstack((legible_rewards[:dqn_model.n_leg_agents], rewards[dqn_model.n_leg_agents:])),
 											finished[0], [infos])
-				episode_rewards += sum(legible_rewards) / dqn_model.n_leg_agents
 			else:
 				for a_idx in range(dqn_model.n_leg_agents):
 					dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], [infos])
-					episode_rewards += legible_rewards[a_idx] / dqn_model.n_leg_agents
+			episode_rewards += sum(legible_rewards) / dqn_model.n_leg_agents
 			obs = next_obs
 			
 			# update Q-network and target network
@@ -601,12 +600,14 @@ def main():
 						cycle_init_eps = eps_cycle_schedule(cycle, n_cycles, initial_eps, final_eps, cycle_eps_decay, cycle_eps_type)
 					env.spawn_players([player_level] * n_agents)
 					env.spawn_food(n_foods_spawn, food_level)
+					# agent_madqn.replay_buffer.reseed(RNG_SEED + cycle)
 					# agent_madqn.replay_buffer.reset()
 					logger.info('Cycle params:')
 					logger.info('Agents: ' + ', '.join(['%s @ (%d, %d) with level %d' % (player.player_id, *player.position, player.level) for player in env.players]))
 					logger.info('Number of food spawn:\t%d' % n_foods_spawn)
 					logger.info('Food locations: ' + ', '.join(['(%d, %d)' % pos for pos in ([loc] + env.food_spawn_pos if n_foods_spawn < n_foods else food_locs)]))
 					logger.info('Food objective: (%d, %d)' % env.obj_food)
+					logger.info('Warmup cycles: %d' % cycle_warmup)
 				
 					logger.info('Starting train')
 					logger.info('Cycle starting epsilon: %f' % cycle_init_eps)

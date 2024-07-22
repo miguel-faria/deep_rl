@@ -388,9 +388,9 @@ class LegibleSingleMADQN(SingleModelMADQN):
 			if idx < self._n_leg_agents:
 				next_q_value += self._agent_dqn.compute_dqn_targets(dones, next_observations[:, idx], rewards[:, idx], target_state_params)
 			else:
-				# next_q_value += self._agent_dqn.compute_dqn_targets(dones, next_observations[:, idx], rewards[:, idx],
-				# 													self._optimal_models[self._goal].params)
-				next_q_value += self._agent_dqn.q_network.apply(self._optimal_models[self._goal].params, next_observations[:, idx]).max(axis=1)
+				next_q_value += self._agent_dqn.compute_dqn_targets(dones, next_observations[:, idx], rewards[:, idx],
+																	self._optimal_models[self._goal].params)
+				# next_q_value += self._agent_dqn.q_network.apply(self._optimal_models[self._goal].params, next_observations[:, idx]).max(axis=1)
 		
 		(loss_value, q_pred), grads = jax.value_and_grad(self.mse_loss, has_aux=True)(q_state.params, observations, actions, next_q_value)
 		q_state = q_state.apply_gradients(grads=grads)
@@ -406,9 +406,9 @@ class LegibleSingleMADQN(SingleModelMADQN):
 				next_q_value += self._agent_dqn.compute_ddqn_targets(dones, next_observations[:, idx], rewards[:, idx].reshape(-1, 1), target_state_params,
 																	 q_state.params).squeeze()
 			else:
-				# next_q_value += self._agent_dqn.compute_dqn_targets(dones, next_observations[:, idx], rewards[:, idx],
-				# 													self._optimal_models[self._goal].params)
-				next_q_value += self._agent_dqn.q_network.apply(self._optimal_models[self._goal].params, next_observations[:, idx]).max(axis=1)
+				next_q_value += self._agent_dqn.compute_dqn_targets(dones, next_observations[:, idx], rewards[:, idx],
+																	self._optimal_models[self._goal].params)
+				# next_q_value += self._agent_dqn.q_network.apply(self._optimal_models[self._goal].params, next_observations[:, idx]).max(axis=1)
 		
 		(loss_value, q_pred), grads = jax.value_and_grad(self.mse_loss, has_aux=True)(q_state.params, observations, actions, next_q_value)
 		q_state = q_state.apply_gradients(grads=grads)

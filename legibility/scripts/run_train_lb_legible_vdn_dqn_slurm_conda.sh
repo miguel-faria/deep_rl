@@ -22,13 +22,13 @@ fi
 
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
-source "$HOME"/miniconda3/bin/activate deep_rl_env
+source "$HOME"/miniconda3/bin/activate drl_env
 
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 8 --iterations 600 --limits 1 8 --logs-dir /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data --cycle-type linear --cycle-eps 0.4 --eps-type log --eps-decay 0.175 --use-lower-curriculum
+  python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 8 --iterations 600 --epsiode-steps 800 --limits 1 8 --logs-dir /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data --cycle-type linear --cycle-eps 0.4 --eps-type log --eps-decay 0.175 --use-lower-curriculum
 else
-  python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 8 --iterations 600 --limits 1 8 --use-lower-model
+  python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 8 --iterations 600 --episode-steps 800 --limits 2 2 --use-lower-curriculum --cycle-type linear --cycle-eps 0.4 --eps-type log --eps-decay 0.175 --use-lower-curriculum --legible-reward info
 fi
 
 source "$HOME"/miniconda3/bin/deactivate

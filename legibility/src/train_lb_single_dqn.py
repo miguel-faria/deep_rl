@@ -211,9 +211,9 @@ def main():
 
 	now = datetime.now()
 	home_dir = Path(__file__).parent.absolute().parent.absolute()
-	log_dir = Path(args.logs_dir) / 'logs' if args.logs_dir != '' else home_dir / 'logs'
-	data_dir = Path(args.data_dir) / 'data' if args.data_dir != '' else home_dir / 'data'
-	models_dir = Path(args.models_dir) / 'models' if args.models_dir != '' else home_dir / 'models'
+	log_dir = Path(args.logs_dir) if args.logs_dir != '' else home_dir / 'logs'
+	data_dir = Path(args.data_dir) if args.data_dir != '' else home_dir / 'data'
+	models_dir = Path(args.models_dir) if args.models_dir != '' else home_dir / 'models'
 	log_filename = (('train_lb_coop_single_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents,
 																								 n_foods_spawn, food_level)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))

@@ -26,10 +26,10 @@ fi
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   source "$HOME"/miniconda3/bin/activate deep_rl_env
-  python "$script_path"/run_train_lb_vdn_single_dqn.py --field-len 20 --batch-size 64 --buffer-size 5000 --iterations 500 --episode-steps 800 --limits 1 8  --logs-dir /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data --cycle-type linear --cycle-eps 0.4 --eps-type log --eps-decay 0.175 --use-lower-curriculum
+  python "$script_path"/run_train_lb_vdn_single_dqn.py --field-len 20 --batch-size 64 --buffer-size 5000 --iterations 500 --episode-steps 800 --limits 1 8  --logs-dir /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data --cycle-type linear --cycle-eps 0.4 --eps-type log --eps-decay 0.175 --use-higher-curriculum
 else
   source "$HOME"/miniconda3/bin/activate drl_env
-  python "$script_path"/run_train_lb_vdn_single_dqn.py --field-len 20 --iterations 500 --episode-steps 800 --limits 1 8  --cycle-eps 0.4 --eps-type log --eps-decay 0.175 --use-lower-curriculum
+  python "$script_path"/run_train_lb_vdn_single_dqn.py --field-len 20 --iterations 500 --episode-steps 800 --limits 1 8  --cycle-eps 0.4 --eps-type log --eps-decay 0.175 --use-higher-curriculum
 fi
 
 source "$HOME"/miniconda3/bin/deactivate

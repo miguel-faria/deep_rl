@@ -130,13 +130,13 @@ class DDPG(object):
 							dones: Union[np.ndarray, jax.Array], gamma: float) -> Tuple[float, TrainState]:
 		
 		def mse_loss(params: flax.core.FrozenDict):
-			q = self._critic_network.apply(params, observations, actions).squeeze()								# get online model's q_values
+			q = self._critic_network.apply(params, observations, actions).squeeze()             								# get online model's q_values
 			return ((q - next_q_value) ** 2).mean()
 		
-		next_actions = (self._actor_network.apply(self._actor_target_params, next_observations)).clip(-1, 1)		# get actor's actions
-		q_next = self._critic_network.apply(self._critic_target_params, next_observations, next_actions)			# get critic evaluation
-		next_q_value = rewards + (1 - dones) * gamma * q_next  															# compute Bellman equation
-		
+		next_actions = (self._actor_network.apply(self._actor_target_params, next_observations)).clip(-1, 1)		            # get actor's actions
+		q_next = self._critic_network.apply(self._critic_target_params, next_observations, next_actions)			            # get critic evaluation
+		next_q_value = (rewards + (1 - dones) * gamma * q_next).reshape(-1)															# compute Bellman equation
+
 		loss_value, grads = jax.value_and_grad(mse_loss)(q_state.params)
 		q_state = q_state.apply_gradients(grads=grads)
 		return loss_value, q_state
@@ -167,7 +167,7 @@ class DDPG(object):
 		critic_loss, self._critic_online_state = self.compute_critic_loss(self._critic_online_state, observations, actions, next_observations, rewards,
 																			 dones, gamma)
 		actor_loss, self._actor_online_state = self.compute_actor_loss(self._actor_online_state, observations)
-		
+
 		return critic_loss, actor_loss
 		
 	def update_targets(self, tau: float) -> None:

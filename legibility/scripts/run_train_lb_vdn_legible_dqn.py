@@ -141,7 +141,7 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --cycle-eps-type %s" % cycle_type)  + (" --data-dir %s" % data_dir if data_dir != '' else "") +
 			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") +  (" --use-higher-model" if use_higher_model else "") +
 			 (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else "") )
-	commamd = "python " + str(src_dir / ('train_lb_legible_dqn%s.py' % (train_version if train_version != 'v1' else ''))) + args
+	commamd = "python " + str(src_dir / ('train_lb_legible_dqn%s.py' % ('_' + train_version if train_version != 'v1' else ''))) + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)
 		

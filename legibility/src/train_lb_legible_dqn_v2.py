@@ -98,6 +98,8 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 	rng_gen = np.random.default_rng(rng_seed)
 	
 	# Setup DQNs for training
+	env.spawn_players([env.max_player_level] * env.n_players)
+	env.spawn_food(n_foods_spawn, env.max_food_level)
 	obs, *_ = env.reset()
 	if not dqn_model.agent_dqn.dqn_initialized:
 		if dqn_model.agent_dqn.cnn_layer:
@@ -121,8 +123,6 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 		episode_q_vals = 0
 		episode_start = epoch
 		avg_loss = []
-		env.spawn_players([env.max_player_level] * env.n_players)
-		env.spawn_food(n_foods_spawn, env.max_food_level)
 		logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
 		logger.info('Agents: ' + ', '.join(['%s @ (%d, %d) with level %d' % (player.player_id, *player.position, player.level) for player in env.players]))
 		logger.info('Number of food spawn:\t%d' % n_foods_spawn)

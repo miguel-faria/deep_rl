@@ -353,7 +353,7 @@ def main():
 	models_dir = Path(args.models_dir) if args.models_dir != '' else home_dir / 'models'
 	if tracker_dir == '':
 		tracker_dir = log_dir
-	log_filename = (('train_lb_coop_single_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents,
+	log_filename = (('train_lb_coop_single_v2_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents,
 																								 n_foods_spawn, food_level)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / ('lb_coop_single%s_dqn' % ('_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
@@ -409,8 +409,6 @@ def main():
 	logger.info('##############################')
 	logger.info('Starting LB Foraging DQN Train')
 	logger.info('##############################')
-	n_cycles = min(number_food_combinations(n_foods - 1, n_foods_spawn - 1), max_cycles)
-	logger.info('Number of cycles: %d' % n_cycles)
 	gc.enable()
 	
 	####################
@@ -432,14 +430,14 @@ def main():
 										   "cycle_rate": cycle_eps_decay,
 										   "dqn_architecture": architecture,
 										   "iterations": n_iterations,
-										   "cycles": n_cycles,
+										   "cycles": 1,
 										   "buffer_size": buffer_size,
 										   "buffer_add": "smart" if args.buffer_smart_add else "plain",
 										   "buffer_add_method": args.buffer_method if args.buffer_smart_add else "fifo",
 										   "batch_size": batch_size
 								   },
 								   dir=tracker_dir,
-								   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
+								   name=('%ssingle_v2-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
 										 now.strftime("%Y%m%d-%H%M%S")),
 								   sync_tensorboard=True)
 			logger.info('Starting training for different food locations')
@@ -466,14 +464,10 @@ def main():
 												   dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
 												   buffer_data=(args.buffer_smart_add, args.buffer_method))
 				if restart_train:
-					start_cycle = int(restart_info[2])
 					logger.info('Load trained model')
 					agent_madqn.load_model(restart_info[1], model_path.parent.absolute() / restart_info[0], logger,
 										   env.observation_space[0].shape if not use_cnn else (1, *env.observation_space[0].shape))
-					cycles_range = range(start_cycle, n_cycles)
-					logger.info('Restarting train from cycle %d' % start_cycle)
 				else:
-					cycles_range = range(n_cycles)
 					logger.info('Starting train')
 				
 				if use_lower_model and n_foods_spawn > 1:

@@ -244,11 +244,23 @@ class LBForagingEnv(Env):
 	@property
 	def players(self) -> List[Player]:
 		return self._players
-	
+
+	@property
+	def max_foods(self) -> int:
+		return self._max_spawn_food
+
+	@property
+	def max_food_level(self) -> int:
+		return self._max_food_lvl
+
 	@property
 	def n_players(self) -> int:
 		return self._n_agents
-	
+
+	@property
+	def max_player_level(self) -> int:
+		return self._max_player_level
+
 	@property
 	def foods(self) -> List[Food]:
 		return self._foods

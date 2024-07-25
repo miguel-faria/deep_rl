@@ -50,6 +50,7 @@ DEBUG = False
 RESTART_INFO = ["20230724-171745", "food_5x4_cycle_2", 2]
 OPT_VDN = True
 PRECOMP_FRAC = 0.3
+TRAIN_VERSION = 'v1'
 
 # Environment params
 N_PLAYERS = 2
@@ -89,6 +90,9 @@ parser.add_argument('--use-lower-curriculum', dest='use_lower_model', action='st
 					help='Flag that signals the use of curriculum learning with a model with one less food item spawned.')
 parser.add_argument('--use-higher-curriculum', dest='use_higher_model', action='store_true',
 					help='Flag that signals the use of curriculum learning with a model with one more food item spawned.')
+parser.add_argument('--version', dest='version', type=str, required=False, default=TRAIN_VERSION, choices=['v1', 'v2'],
+                    help='Model of the train script to use:\n\t- version 1: the food configuration changes in cycles that run for N iterations'
+                         '\n\t- version 2: the food configuration changes every iteration, there are no cycles')
 parser.add_argument('--warmup', dest='warmup', type=int, default=WARMUP_STEPS, help='Number of steps to collect data before starting train')
 
 input_args = parser.parse_args()
@@ -108,6 +112,7 @@ logs_dir = input_args.logs_dir
 models_dir = input_args.models_dir
 max_steps = input_args.max_steps
 smart_add = input_args.buffer_smart_add
+train_version = input_args.version
 tracker_logs = input_args.logs
 use_lower_model = input_args.use_lower_model
 use_higher_model = input_args.use_higher_model
@@ -136,7 +141,7 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --cycle-eps-type %s" % cycle_type)  + (" --data-dir %s" % data_dir if data_dir != '' else "") +
 			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") +  (" --use-higher-model" if use_higher_model else "") +
 			 (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else "") )
-	commamd = "python " + str(src_dir / 'train_lb_legible_dqn.py') + args
+	commamd = "python " + str(src_dir / ('train_lb_legible_dqn%s.py' % (train_version if train_version != 'v1' else ''))) + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)
 		

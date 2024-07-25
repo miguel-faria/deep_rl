@@ -50,7 +50,11 @@ class LimitedCOOPLBForaging(LBForagingEnv):
 					n_foods = len(self._foods_pos)
 		else:
 			self._foods_pos = foods_pos.copy()
-	
+
+	@property
+	def food_pos(self) -> List[Tuple[int, int]]:
+		return self._foods_pos
+
 	def spawn_players(self, player_levels: List = None, player_pos: List = None):
 		if player_pos is None:
 			super().spawn_players(player_levels)

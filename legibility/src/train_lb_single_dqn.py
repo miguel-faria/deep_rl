@@ -86,10 +86,7 @@ def main():
 	parser.add_argument('--dueling', dest='dueling_dqn', action='store_true', help='Flag that signals the use of a Dueling DQN architecture')
 	parser.add_argument('--tensorboard', dest='use_tensorboard', action='store_true',
 						help='Flag the signals the use of a tensorboard summary writer. Expects argument --tensorboardDetails to be present')
-	parser.add_argument('--tensorboardDetails', dest='tensorboard_details', nargs='+', required=False, default=None,
-						help='List with the details for the tensorboard summary writer: <log_dirname: str>, <queue_size :int>, <flush_time: int>, <suffix: str>'
-							 ' Use only in combination with --tensorboard option')
-	
+
 	# Train parameters
 	parser.add_argument('--max-cycles', dest='max_cycles', type=int, required=True, help='Max number of training cycles.')
 	parser.add_argument('--iterations', dest='n_iterations', type=int, required=True, help='Number of iterations to run training')
@@ -123,6 +120,7 @@ def main():
 	parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
 						help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
 	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
+	parser.add_argument('--tracker-dir', dest='tracker_dir', type=str, default='', help='Path to the directory to store the tracker data')
 	parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
 						help='Flag that signals using curriculum learning using a model with one less food item spawned (when using with only 1 item, defaults to false).')
 	parser.add_argument('--use-higher-model', dest='use_higher_model', action='store_true',
@@ -153,7 +151,7 @@ def main():
 	use_vdn = args.use_vdn
 	use_cnn = args.use_cnn
 	use_tensorboard = args.use_tensorboard
-	tensorboard_details = args.tensorboard_details
+	tracker_dir = args.tracker_dir
 	
 	# Train args
 	max_cycles = args.max_cycles
@@ -214,6 +212,8 @@ def main():
 	log_dir = Path(args.logs_dir) if args.logs_dir != '' else home_dir / 'logs'
 	data_dir = Path(args.data_dir) if args.data_dir != '' else home_dir / 'data'
 	models_dir = Path(args.models_dir) if args.models_dir != '' else home_dir / 'models'
+	if tracker_dir == '':
+		tracker_dir = log_dir
 	log_filename = (('train_lb_coop_single_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents,
 																								 n_foods_spawn, food_level)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
@@ -299,7 +299,7 @@ def main():
 										   "buffer_add_method": args.buffer_method if args.buffer_smart_add else "fifo",
 										   "batch_size": batch_size
 								   },
-								   dir=tensorboard_details[0],
+								   dir=tracker_dir,
 								   name=('%ssingle-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
 										 now.strftime("%Y%m%d-%H%M%S")),
 								   sync_tensorboard=True)

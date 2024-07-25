@@ -406,8 +406,7 @@ def main():
 	except AssertionError:
 		print('Attempt at using curriculum learning using both model trained with one more and one less food item spawned')
 		return
-		
-	
+
 	os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = args.fraction
 	if not use_gpu:
 		jax.config.update('jax_platform_name', 'cpu')

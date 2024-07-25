@@ -16,7 +16,6 @@ N_AGENTS = 2
 ARQUITECTURE = "v3"
 BUFFER = 2000
 GAMMA = 0.9
-TENSORBOARD_DATA = [str(log_dir), 50, 25, '.log']
 USE_DUELING = True
 USE_DDQN = True
 USE_CNN = True
@@ -29,8 +28,8 @@ N_ITERATIONS = 400
 BATCH_SIZE = 32
 TRAIN_FREQ = 1
 TARGET_FREQ = 10
-ALPHA = 0.001
-TAU = 0.1
+ONLINE_LR = 0.001
+TARGET_LR = 0.1
 INIT_EPS = 1.0
 FINAL_EPS = 0.05
 # EPS_DECAY = 0.5	# for linear eps
@@ -73,10 +72,12 @@ parser.add_argument('--episode-steps', dest='max_steps', type=int, required=Fals
 parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH, help='Length of the field.')
 parser.add_argument('--iterations', dest='max_iterations', type=int, required=False, default=N_ITERATIONS, help='Number of iterations to train.')
 parser.add_argument('--limits', dest='limits', nargs=2, type=int, required=False, default=[1, MAX_SPAWN_FOODS], help='Min and max number of food spawns to train.')
-parser.add_argument('--logs', dest='logs', type=str, required=False, default=TENSORBOARD_DATA[0], help='Directory to store the performance logs.')
+parser.add_argument('--tracker-dir', dest='logs', type=str, required=False, default='', help='Directory to store the performance logs.')
 parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
 					help='Directory to store trained models and load optimal models, if left blank stored in default location')
+parser.add_argument('--online-lr', dest='online_lr', type=float, default=ONLINE_LR, help='Learning rate for the online model.')
+parser.add_argument('--target-lr', dest='target_lr', type=float, default=TARGET_LR, help='Learning rate for the target model.')
 parser.add_argument('--use-lower-curriculum', dest='use_lower_model', action='store_true',
 					help='Flag that signals the use of curriculum learning with a model with one less food item spawned.')
 parser.add_argument('--use-higher-curriculum', dest='use_higher_model', action='store_true',
@@ -98,7 +99,9 @@ limits = input_args.limits
 logs_dir = input_args.logs_dir
 models_dir = input_args.models_dir
 max_steps = input_args.max_steps
+online_lr = input_args.online_lr
 smart_add = input_args.buffer_smart_add
+target_lr = input_args.target_lr
 tracker_logs = input_args.logs
 use_lower_model = input_args.use_lower_model
 use_higher_model = input_args.use_higher_model
@@ -109,18 +112,17 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 	N_SPAWN_FOODS = i
 	args = (" --nagents %d --architecture %s --buffer %d --gamma %f --iterations %d --max-cycles %d --batch %d --train-freq %d "
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f "
-			"--player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --tensorboardDetails %s %d %d %s"
-			% (N_AGENTS, ARQUITECTURE, buffer_size, GAMMA,  																								# DQN parameters
-			   iterations, MAX_CYCLES, batch_size, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, warmup, cycle_eps,  		# Train parameters
-			   PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS,  																		# Environment parameters
-			   tracker_logs, TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
+			"--player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d "
+			% (N_AGENTS, ARQUITECTURE, buffer_size, GAMMA,                                                                                                      # DQN parameters
+			   iterations, MAX_CYCLES, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, warmup, cycle_eps,  # Train parameters
+			   PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS)) 														                    # Environment parameters
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
 			 (" --debug" if DEBUG else "") + (" --vdn" if USE_VDN else "") + (" --fraction %f" % PRECOMP_FRAC) + (" --cycle-type %s" % cycle_type) +
-			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --data-dir %s" % data_dir if data_dir != '' else "")  +
-			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") +  (" --use-higher-model" if use_higher_model else "") +
-			 (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else ""))
+			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --data-dir %s" % data_dir if data_dir != '' else "") +
+			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") + (" --use-higher-model" if use_higher_model else "") +
+			 (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else "") + (" --tracker-dir %s" % tracker_logs if tracker_logs != '' else ""))
 	commamd = "python " + str(src_dir / 'train_lb_single_dqn.py') + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)

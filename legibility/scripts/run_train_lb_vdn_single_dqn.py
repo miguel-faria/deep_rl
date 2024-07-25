@@ -44,6 +44,7 @@ RESTART = False
 DEBUG = False
 RESTART_INFO = ["20230724-171745", "food_5x4_cycle_2", 2]
 PRECOMP_FRAC = 0.3
+TRAIN_VERSION = 'v1'
 
 # Environment params
 N_FOODS = 8

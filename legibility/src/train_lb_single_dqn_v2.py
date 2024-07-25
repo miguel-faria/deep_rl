@@ -426,8 +426,6 @@ def main():
 										   "discount": gamma,
 										   "eps_decay": eps_type,
 										   "eps_rate": eps_decay,
-										   "cycle_decay": args.cycle_type,
-										   "cycle_rate": cycle_eps_decay,
 										   "dqn_architecture": architecture,
 										   "iterations": n_iterations,
 										   "cycles": 1,

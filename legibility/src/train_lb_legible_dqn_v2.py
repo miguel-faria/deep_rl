@@ -518,8 +518,6 @@ def main():
 										   "discount": gamma,
 										   "eps_decay_type": eps_type,
 										   "eps_decay": eps_decay,
-										   "cycle_decay": cycle_eps_decay,
-										   "cycle_decay_type": cycle_eps_type,
 										   "dqn_architecture": architecture,
 										   "iterations": n_iterations,
 										   "cycles": 1,

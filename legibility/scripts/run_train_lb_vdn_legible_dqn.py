@@ -89,6 +89,7 @@ parser.add_argument('--use-lower-curriculum', dest='use_lower_model', action='st
 					help='Flag that signals the use of curriculum learning with a model with one less food item spawned.')
 parser.add_argument('--use-higher-curriculum', dest='use_higher_model', action='store_true',
 					help='Flag that signals the use of curriculum learning with a model with one more food item spawned.')
+parser.add_argument('--warmup', dest='warmup', type=int, default=WARMUP_STEPS, help='Number of steps to collect data before starting train')
 
 input_args = parser.parse_args()
 add_method = input_args.buffer_method
@@ -110,6 +111,7 @@ smart_add = input_args.buffer_smart_add
 tracker_logs = input_args.logs
 use_lower_model = input_args.use_lower_model
 use_higher_model = input_args.use_higher_model
+warmup = input_args.warmup
 
 for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else range(limits[0], limits[1] + 1)):
 	print('Launching training script for %d foods spawned' % i)
@@ -124,7 +126,7 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f --legibility-temp %f "
 			"--n-players %d --player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --tensorboardDetails %s %d %d %s"
 			% (N_AGENTS, ARQUITECTURE, buffer_size, GAMMA, BETA, leg_reward,  																				# DQN parameters
-			   iterations, MAX_CYCLES, batch_size, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, decay, eps, WARMUP_STEPS, cycle_eps, TEMP,  	# Train parameters
+			   iterations, MAX_CYCLES, batch_size, TRAIN_FREQ, TARGET_FREQ, ALPHA, TAU, INIT_EPS, FINAL_EPS, decay, eps, warmup, cycle_eps, TEMP,		  	# Train parameters
 			   N_PLAYERS, PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS,  															# Environment parameters
 			   tracker_logs, TENSORBOARD_DATA[1], TENSORBOARD_DATA[2], TENSORBOARD_DATA[3]))
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +

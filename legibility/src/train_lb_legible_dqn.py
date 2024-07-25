@@ -621,6 +621,7 @@ def main():
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None
 					env.food_spawn = 0
+					env.set_objective(loc)
 					cycle_warmup *= (0.5 ** min(n_cycles, 1))
 					
 					if debug:

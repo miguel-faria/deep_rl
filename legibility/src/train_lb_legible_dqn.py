@@ -89,12 +89,11 @@ def get_live_obs_goals(env: FoodCOOPLBForaging) -> Tuple[List, List]:
 
 
 def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float, tau: float,
-					  initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
-					  exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1, cycle: int = 0,
-					  greedy_action: bool = True, sofmax_temp: float = 1.0, initial_model_path: str = '', use_tracker: bool = False, performance_tracker: Optional[Run] = None,
-					  tracker_panel: str = '', debug: bool = False):
+                      initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
+                      exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tracker_frequency: int = 1, cycle: int = 0,
+                      greedy_action: bool = True, sofmax_temp: float = 1.0, initial_model_path: str = '', use_tracker: bool = False, performance_tracker: Optional[Run] = None,
+                      tracker_panel: str = '', debug: bool = False) -> None:
 		
-	# np.random.seed(rng_seed)
 	rng_gen = np.random.default_rng(rng_seed)
 	
 	# Setup DQNs for training
@@ -110,7 +109,6 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 	sys.stdout.flush()
 	start_record_it = cycle * num_iterations
 	start_record_epoch = cycle * max_timesteps
-	history = []
 	avg_episode_len = []
 	
 	for it in range(num_iterations):
@@ -164,7 +162,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 						pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
 						pol = pol / pol.sum()
 						action = rng_gen.choice(range(env.action_space[0].n), p=pol)
-					# action = jax.device_get(action)
+
 					episode_q_vals += (float(q_values[int(action)]) / dqn_model.num_agents)
 					actions += [action]
 			if debug:
@@ -230,7 +228,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			# update Q-network and target network
 			if epoch >= warmup:
 				if epoch % train_freq == 0:
-					loss = jax.device_get(dqn_model.update_model(batch_size, epoch, start_time, tensorboard_frequency, logger, cnn_shape))
+					loss = jax.device_get(dqn_model.update_model(batch_size, epoch, start_time, tracker_frequency, logger, cnn_shape))
 					avg_loss += [loss]
 				
 				if epoch % target_freq == 0:
@@ -266,8 +264,6 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 				episode_q_vals = 0
 				episode_start = epoch
 				avg_loss = []
-
-	return history
 
 
 # noinspection DuplicatedCode

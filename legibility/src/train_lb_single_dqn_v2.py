@@ -73,15 +73,17 @@ def get_history_entry(obs: np.ndarray, actions: List[int], n_agents: int) -> Lis
 	return entry
 
 
-def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_iterations: int, max_timesteps: int, batch_size: int, online_lr: float, target_lr: float,
-                   initial_eps: float, final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int], exploration_decay: float = 0.99,
-                   warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tracker_frequency: int = 1, use_render: bool = False, cycle: int = 0,
+def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_iterations: int, max_timesteps: int, n_foods_spawn: int, batch_size: int, online_lr: float,
+                   target_lr: float, initial_eps: float, final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
+                   exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tracker_frequency: int = 1, use_render: bool = False,
                    greedy_action: bool = True, epoch_logging: bool = False, initial_model_path: str = '', use_tracker: bool = False, performance_tracker: Optional[Run] = None,
                    tracker_panel: str = '', debug: bool = False) -> None:
 
 	rng_gen = np.random.default_rng(rng_seed)
 
 	# Setup DQNs for training
+	env.spawn_players([env.max_player_level] * env.n_players)
+	env.spawn_food(n_foods_spawn, env.max_food_level)
 	obs, *_ = env.reset()
 	if not dqn_model.agent_dqn.dqn_initialized:
 		dqn_model.initialize_network(cnn_shape, logger, obs, online_lr, rng_seed, initial_model_path)
@@ -89,8 +91,8 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 	start_time = time.time()
 	epoch = 0
 	sys.stdout.flush()
-	start_record_it = cycle * num_iterations
-	start_record_epoch = cycle * max_timesteps
+	start_record_it = 0
+	start_record_epoch = 0
 	avg_episode_len = []
 
 	for it in range(num_iterations):
@@ -102,6 +104,10 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 		episode_start = epoch
 		avg_loss = []
 		logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
+		logger.info('Agents: ' + ', '.join(['%s @ (%d, %d) with level %d' % (player.player_id, *player.position, player.level) for player in env.players]))
+		logger.info('Number of food spawn:\t%d' % n_foods_spawn)
+		logger.info('Food locations: ' + ', '.join(['(%d, %d)' % pos for pos in ([env.obj_food] + env.food_spawn_pos if n_foods_spawn < env.max_foods else env.food_pos)]))
+		logger.info('Food objective: (%d, %d)' % env.obj_food)
 		while not done:
 
 			# interact with environment
@@ -186,7 +192,6 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 							tracker_panel + "-charts/performance/episodic_length":     episode_len,
 							tracker_panel + "-charts/performance/avg_episode_length":  np.mean(avg_episode_len),
 							tracker_panel + "-charts/control/iteration":               it,
-							tracker_panel + "-charts/control/cycle":                   cycle,
 							tracker_panel + "-charts/control/exploration":             eps,
 					},
 							step=(it + start_record_it))
@@ -194,6 +199,10 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 						performance_tracker.log({tracker_panel + "-charts/losses/td_loss": sum(avg_loss) / max(len(avg_loss), 1)},
 						                        step=(it + start_record_it))
 				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
+				# Reset params that determine how foods are spawn
+				env.food_spawn_pos = None
+				env.food_spawn = 0
+				env.spawn_food(n_foods_spawn, env.max_food_level)
 				obs, *_ = env.reset()
 				done = True
 				episode_rewards = 0
@@ -487,42 +496,14 @@ def main():
 					logger.info('Training model from scratch')
 					curriculum_model_path = ''
 				
-				cycle_warmup = warmup
-				for cycle in cycles_range:
-					logger.info('Cycle %d of %d' % (cycle+1, n_cycles))
-					if cycle == 0:
-						cycle_init_eps = initial_eps
-					else:
-						cycle_init_eps = eps_cycle_schedule(cycle, n_cycles, initial_eps, final_eps, cycle_eps_decay, args.cycle_type)
-					env.spawn_players([player_level] * n_agents)
-					env.spawn_food(n_foods_spawn, food_level)
-					# agent_madqn.replay_buffer.reset()
-					logger.info('Cycle params:')
-					logger.info('Agents: ' + ', '.join(['%s @ (%d, %d) with level %d' % (player.player_id, *player.position, player.level) for player in env.players]))
-					logger.info('Number of food spawn:\t%d' % n_foods_spawn)
-					logger.info('Food locations: ' + ', '.join(['(%d, %d)' % pos for pos in ([loc] + env.food_spawn_pos if n_foods_spawn < n_foods else food_locs)]))
-					logger.info('Food objective: (%d, %d)' % env.obj_food)
-				
-					logger.info('Starting train')
-					logger.info('Cycle starting epsilon: %f' % cycle_init_eps)
-					cnn_shape = (0, ) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
-					tracker_panel = 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])
-					greedy_actions = False
-					train_lb_model(env, agent_madqn, n_iterations, max_steps * n_iterations, batch_size, online_lr, target_lr, cycle_init_eps, final_eps, eps_type, RNG_SEED,
-					               logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tracker_frq, use_render, cycle, greedy_actions, args.ep_log,
-					               curriculum_model_path, use_tracker, wandb_run, tracker_panel, debug)
-					
-					# Reset params that determine how foods are spawn
-					env.food_spawn_pos = None
-					env.food_spawn = 0
-					env.set_objective(loc)
-					cycle_warmup *= (0.5 ** min(n_cycles, 1))
-					
-					if debug:
-						logger.info('Saving model after cycle %d' % (cycle + 1))
-						Path.mkdir(model_path, parents=True, exist_ok=True)
-						agent_madqn.save_model(('food_%dx%d_cycle_%d' % (loc[0], loc[1], cycle + 1)), model_path, logger)
-						
+				logger.info('Starting train')
+				cnn_shape = (0, ) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
+				tracker_panel = 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])
+				greedy_actions = False
+				train_lb_model(env, agent_madqn, n_iterations, max_steps * n_iterations, n_foods_spawn, batch_size, online_lr, target_lr, initial_eps, final_eps, eps_type,
+				               RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tracker_frq, use_render, greedy_actions, args.ep_log,
+				               curriculum_model_path, use_tracker, wandb_run, tracker_panel, debug)
+
 				env.close()
 				logger.info('Saving final model')
 				agent_madqn.save_model(('food_%dx%d' % (loc[0], loc[1])), model_path, logger)

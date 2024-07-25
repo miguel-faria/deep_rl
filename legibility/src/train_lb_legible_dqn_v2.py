@@ -92,7 +92,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
                       tau: float, initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
 					  exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1,
 					  greedy_action: bool = True, sofmax_temp: float = 1.0, initial_model_path: str = '', use_tracker: bool = False, performance_tracker: Optional[Run] = None,
-					  tracker_panel: str = '', debug: bool = False):
+					  tracker_panel: str = '', debug: bool = False) -> None:
 		
 	# np.random.seed(rng_seed)
 	rng_gen = np.random.default_rng(rng_seed)
@@ -112,7 +112,6 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 	sys.stdout.flush()
 	start_record_it = 0
 	start_record_epoch = 0
-	history = []
 	avg_episode_len = []
 	
 	for it in range(num_iterations):
@@ -274,8 +273,6 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 				episode_q_vals = 0
 				episode_start = epoch
 				avg_loss = []
-
-	return history
 
 
 # noinspection DuplicatedCode
@@ -495,8 +492,6 @@ def main():
 	logger.info('##############################')
 	logger.info('Starting LB Foraging DQN Train')
 	logger.info('##############################')
-	n_cycles = min(int(number_food_combinations(n_foods - 1, n_foods_spawn - 1)), max_cycles)
-	logger.info('Number of cycles: %d' % n_cycles)
 	optim_models = {}
 	model_names = [fname.name for fname in optim_dir.iterdir()]
 	for loc in food_locs:
@@ -527,7 +522,7 @@ def main():
 										   "cycle_decay_type": cycle_eps_type,
 										   "dqn_architecture": architecture,
 										   "iterations": n_iterations,
-										   "cycles": n_cycles,
+										   "cycles": 1,
 										   "beta": beta,
 										   "softmax_temp": temp,
 										   "buffer_size": buffer_size,
@@ -601,8 +596,6 @@ def main():
 				history = train_legible_dqn(env, agent_madqn, n_iterations, n_foods_spawn, batch_size, learn_rate, target_update_rate, initial_eps, final_eps, eps_type,
 				                            leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tensorboard_freq,
 											greedy_actions, temp, curriculum_model_path, use_tensorboard, wandb_run, tracker_panel, debug)
-
-				# cycle_warmup *= (0.5 ** min(n_cycles, 1))
 
 				env.close()
 				logger.info('Saving final model')

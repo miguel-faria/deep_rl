@@ -50,6 +50,7 @@ class ActorNetwork(nn.Module):
 	activation_function: Callable
 	action_scale: jnp.ndarray
 	action_bias: jnp.ndarray
+	action_bounds: Tuple[float, float]
 	
 	@nn.compact
 	def __call__(self, x_orig: jnp.ndarray) -> jnp.ndarray:
@@ -58,7 +59,7 @@ class ActorNetwork(nn.Module):
 			x = self.activation_function(nn.Dense(self.layer_sizes[i])(x))
 		x = nn.tanh(nn.Dense(self.action_dim)(x))
 		x = x * self.action_scale + self.action_bias
-		return x
+		return jnp.clip(x, self.action_bounds[0], self.action_bounds[1])
 
 
 class CNNActorNetwork(nn.Module):
@@ -72,6 +73,7 @@ class CNNActorNetwork(nn.Module):
 	pool_window: List[Tuple[int]]
 	action_scale: jnp.ndarray
 	action_bias: jnp.ndarray
+	action_bounds: Tuple[float, float]
 	
 	@nn.compact
 	def __call__(self, x_orig: jnp.ndarray) -> jnp.ndarray:
@@ -84,4 +86,4 @@ class CNNActorNetwork(nn.Module):
 			x = self.activation_function(nn.Dense(self.layer_sizes[i])(x))
 		x = nn.tanh(nn.Dense(self.action_dim)(x))
 		x = x * self.action_scale + self.action_bias
-		return x
+		return jnp.clip(x, self.action_bounds[0], self.action_bounds[1])

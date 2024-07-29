@@ -258,7 +258,7 @@ def main():
 
 			# Reset params that determine how foods are spawn
 			env.food_spawn_pos = None
-			env.food_spawn = 0
+			env.n_food_spawn = 0
 
 			if debug:
 				logger.info('Saving cycle iteration history')
@@ -306,7 +306,7 @@ def main():
 			if finished or timeout:
 				game_over = True
 				env.food_spawn_pos = None
-				env.food_spawn = 0
+				env.n_food_spawn = 0
 
 			sys.stdout.flush()
 			epoch += 1

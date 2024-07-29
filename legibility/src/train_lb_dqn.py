@@ -219,7 +219,7 @@ def main():
 			
 			# Reset params that determine how foods are spawn
 			env.food_spawn_pos = None
-			env.food_spawn = 0
+			env.n_food_spawn = 0
 			
 			print('Saving cycle iteration history')
 			json_path = model_path / ('food_%dx%d_history.json' % (loc[0], loc[1]))

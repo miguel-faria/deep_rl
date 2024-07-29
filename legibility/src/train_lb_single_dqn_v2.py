@@ -201,7 +201,7 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 				# Reset params that determine how foods are spawn
 				env.food_spawn_pos = None
-				env.food_spawn = 0
+				env.n_food_spawn = 0
 				env.spawn_food(n_foods_spawn, env.max_food_level)
 				obs, *_ = env.reset()
 				done = True
@@ -554,7 +554,7 @@ def main():
 						if finished or timeout:
 							game_over = True
 							env.food_spawn_pos = None
-							env.food_spawn = 0
+							env.n_food_spawn = 0
 						
 						sys.stdout.flush()
 						epoch += 1

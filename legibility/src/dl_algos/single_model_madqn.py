@@ -299,7 +299,7 @@ class SingleModelMADQN(object):
 		self._agent_dqn.save_model(filename + '_single_model', model_dir, logger)
 	
 	def load_model(self, filename: str, model_dir: Path, logger: logging.Logger, obs_shape: Tuple) -> None:
-		self._agent_dqn.load_model(filename + '_single_model', model_dir, logger, obs_shape)
+		self._agent_dqn.load_model(filename, model_dir, logger, obs_shape)
 	
 	def get_history_entry(self, obs: np.ndarray, actions: List):
 		
@@ -713,7 +713,7 @@ class CentralizedMADQN(object):
 		self._agent_dqn.save_model(filename + '_ctce', model_dir, logger)
 	
 	def load_model(self, filename: str, model_dir: Path, logger: logging.Logger, obs_shape: Tuple) -> None:
-		self._agent_dqn.load_model(filename + '_ctce', model_dir, logger, obs_shape)
+		self._agent_dqn.load_model(filename, model_dir, logger, obs_shape)
 	
 	def get_history_entry(self, obs: np.ndarray, actions: List):
 		
@@ -1002,9 +1002,6 @@ class MultiEnvSingleMADQN(SingleModelMADQN):
 	
 	def save_model(self, filename: str, model_dir: Path, logger: logging.Logger) -> None:
 		self._agent_dqn.save_model(filename + '_single_model_multi_envs', model_dir, logger)
-	
-	def load_model(self, filename: str, model_dir: Path, logger: logging.Logger, obs_shape: Tuple) -> None:
-		self._agent_dqn.load_model(filename + '_single_model_multi_envs', model_dir, logger, obs_shape)
 	
 	def get_history_entry(self, obs: np.ndarray, actions: List):
 		

@@ -381,7 +381,7 @@ def main():
 					if finished or timeout:
 						game_over = True
 						env.food_spawn_pos = None
-						env.food_spawn = 0
+						env.n_food_spawn = 0
 					
 					sys.stdout.flush()
 					epoch += 1

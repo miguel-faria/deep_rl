@@ -164,7 +164,7 @@ def main():
 		print(env.get_full_env_log())
 		
 		# legible_rewards = np.zeros(dqn_model.num_agents)
-		n_goals = env.food_spawn
+		n_goals = env.n_food_spawn
 		for a_idx in range(dqn_model.num_agents):
 			adv_act_q_vals = np.zeros((n_goals, len(TEMPS)))
 			action = actions[a_idx]

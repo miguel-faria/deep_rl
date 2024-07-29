@@ -542,7 +542,7 @@ def run_loc_test(n_agents: int, player_level: int, field_size: Tuple[int, int], 
 						n_epochs += [max_steps]
 					game_over = True
 					env.food_spawn_pos = None
-					env.food_spawn = 0
+					env.n_food_spawn = 0
 					test_history += [history]
 				
 				sys.stdout.flush()

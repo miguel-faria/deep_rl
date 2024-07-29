@@ -88,7 +88,6 @@ def main():
 	rng_key = jax.random.PRNGKey(0)
 	env.render()
 	
-	
 	for i in range(100):
 		
 		llm_prompt = f"Cart position: {obs[0]}, Cart velocity: {obs[1]}, Pole angle: {obs[2]}, Pole velocity: {obs[3]}"

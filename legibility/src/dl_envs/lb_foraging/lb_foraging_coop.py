@@ -51,10 +51,6 @@ class LimitedCOOPLBForaging(LBForagingEnv):
 		else:
 			self._foods_pos = foods_pos.copy()
 
-	@property
-	def food_pos(self) -> List[Tuple[int, int]]:
-		return self._foods_pos
-
 	def spawn_players(self, player_levels: List = None, player_pos: List = None):
 		if player_pos is None:
 			super().spawn_players(player_levels)
@@ -248,7 +244,7 @@ class LimitedCOOPLBForaging(LBForagingEnv):
 		return self._foods_pos
 	
 	@property
-	def food_spawn(self) -> int:
+	def n_food_spawn(self) -> int:
 		return self._n_food_spawn
 	
 	@property
@@ -259,8 +255,8 @@ class LimitedCOOPLBForaging(LBForagingEnv):
 	def food_pos(self, new_pos: List[Tuple[int, int]]):
 		self._foods_pos = new_pos.copy()
 		
-	@food_spawn.setter
-	def food_spawn(self, new_spawn_max: int) -> None:
+	@n_food_spawn.setter
+	def n_food_spawn(self, new_spawn_max: int) -> None:
 		self._n_food_spawn = new_spawn_max
 	
 	@food_spawn_pos.setter

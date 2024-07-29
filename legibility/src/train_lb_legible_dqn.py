@@ -176,7 +176,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			# Obtain the legible rewards
 			legible_rewards = np.zeros(dqn_model.n_leg_agents)
 			live_goals = [str(food.position) for food in env.foods]
-			n_goals = env.food_spawn
+			n_goals = env.n_food_spawn
 			if n_goals > 1:
 				for a_idx in range(dqn_model.n_leg_agents):
 					act_q_vals = np.zeros(n_goals)
@@ -433,7 +433,7 @@ def main():
 	model_path = (models_dir / ('lb_coop_legible%s_dqn' % ('_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
 				  ('%d-agents' % n_players) / ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / now.strftime("%Y%m%d-%H%M%S"))
 	optim_dir = (models_dir / ('lb_coop_single%s_dqn' % ('_vdn' if optim_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
-				 ('%d-agents' % n_players) /  ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / 'best')
+				 ('%d-agents' % n_players) / ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / 'best')
 	
 	with open(data_dir / 'performances' / 'lb_foraging' / ('train_legible%s_performances_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
 			  mode='r+', encoding='utf-8') as train_file:
@@ -615,7 +615,7 @@ def main():
 					
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None
-					env.food_spawn = 0
+					env.n_food_spawn = 0
 					env.set_objective(loc)
 					cycle_warmup *= (0.5 ** min(n_cycles, 1))
 					
@@ -691,7 +691,7 @@ def main():
 						if finished or timeout:
 							game_over = True
 							env.food_spawn_pos = None
-							env.food_spawn = 0
+							env.n_food_spawn = 0
 						
 						sys.stdout.flush()
 						epoch += 1

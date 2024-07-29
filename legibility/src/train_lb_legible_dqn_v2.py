@@ -182,7 +182,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			# Obtain the legible rewards
 			legible_rewards = np.zeros(dqn_model.n_leg_agents)
 			live_goals = [str(food.position) for food in env.foods]
-			n_goals = env.food_spawn
+			n_goals = env.n_food_spawn
 			if n_goals > 1:
 				for a_idx in range(dqn_model.n_leg_agents):
 					act_q_vals = np.zeros(n_goals)
@@ -261,7 +261,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 				# Reset params that determine how foods are spawn
 				env.food_spawn_pos = None
-				env.food_spawn = 0
+				env.n_food_spawn = 0
 				env.spawn_food(n_foods_spawn, env.max_food_level)
 				obs, *_ = env.reset()
 				if env.use_render:
@@ -656,7 +656,7 @@ def main():
 						if finished or timeout:
 							game_over = True
 							env.food_spawn_pos = None
-							env.food_spawn = 0
+							env.n_food_spawn = 0
 						
 						sys.stdout.flush()
 						epoch += 1

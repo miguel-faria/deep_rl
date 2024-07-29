@@ -271,7 +271,7 @@ class DQNetwork(object):
             logger.info("Loaded model state from file: " + str(file_path))
     
     def load_model(self, filename: str, model_dir: Path, logger: Optional[logging.Logger], obs_shape: tuple, use_logger: bool = True) -> None:
-        file_path = model_dir / (filename + '.model')
+        file_path = model_dir / filename
         template = TrainState.create(apply_fn=self._q_network.apply,
                                      params=self._q_network.init(jax.random.PRNGKey(201), jnp.empty(obs_shape, dtype=jnp.float32)),
                                      tx=optax.adam(learning_rate=0.0))

@@ -30,7 +30,7 @@ class DDPG(object):
 	_use_cnn: bool
 	
 	def __init__(self, action_dim: int, num_layers: int, act_function: Callable, layer_sizes: List[int], action_bias: jnp.ndarray, action_scale: jnp.ndarray,
-				 cnn_layer: bool = False, use_wandb: bool = False, cnn_properties: List = None, wandb_writer: wandb.run = None):
+				 cnn_layer: bool = False, use_wandb: bool = False, cnn_properties: List = None, wandb_writer: wandb.run = None, action_bounds: Tuple[float, float] = (-1.0, 1.0)):
 		
 		if cnn_layer:
 			self._use_cnn = True
@@ -49,14 +49,13 @@ class DDPG(object):
 													pool_window=pool_window)
 			self._actor_network = CNNActorNetwork(action_dim=action_dim, num_linear_layers=num_layers, activation_function=act_function,
 												  layer_sizes=layer_sizes.copy(), num_conv_layers=n_conv_layers, cnn_size=cnn_size, cnn_kernel=cnn_kernel,
-												  pool_window=pool_window, action_bias=action_bias, action_scale=action_scale)
+												  pool_window=pool_window, action_bias=action_bias, action_scale=action_scale, action_bounds=action_bounds)
 		
 		else:
 			self._use_cnn = False
-			self._critic_network = CriticNetwork(action_dim=action_dim, num_layers=num_layers, activation_function=act_function,
-												 layer_sizes=layer_sizes.copy())
-			self._actor_network = ActorNetwork(action_dim=action_dim, num_layers=num_layers, activation_function=act_function,
-											   layer_sizes=layer_sizes.copy(), action_bias=action_bias, action_scale=action_scale)
+			self._critic_network = CriticNetwork(action_dim=action_dim, num_layers=num_layers, activation_function=act_function, layer_sizes=layer_sizes.copy())
+			self._actor_network = ActorNetwork(action_dim=action_dim, num_layers=num_layers, activation_function=act_function, layer_sizes=layer_sizes.copy(),
+			                                   action_bias=action_bias, action_scale=action_scale, action_bounds=action_bounds)
 		
 		self._actor_network.apply = jax.jit(self._actor_network.apply)
 		self._critic_network.apply = jax.jit(self._critic_network.apply)
@@ -132,8 +131,8 @@ class DDPG(object):
 		def mse_loss(params: flax.core.FrozenDict):
 			q = self._critic_network.apply(params, observations, actions).squeeze()             								# get online model's q_values
 			return ((q - next_q_value) ** 2).mean()
-		
-		next_actions = (self._actor_network.apply(self._actor_target_params, next_observations)).clip(-1, 1)		            # get actor's actions
+
+		next_actions = self._actor_network.apply(self._actor_target_params, next_observations)               	                # get actor's actions
 		q_next = self._critic_network.apply(self._critic_target_params, next_observations, next_actions)			            # get critic evaluation
 		next_q_value = (rewards + (1 - dones) * gamma * q_next).reshape(-1)															# compute Bellman equation
 

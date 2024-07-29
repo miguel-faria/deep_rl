@@ -284,7 +284,7 @@ class MultiAgentDQN(object):
 	
 	def load_models(self, filename_prefix: str, model_dir: Path, logger: logging.Logger, obs_shape: tuple) -> None:
 		for agent_id in self._agent_ids:
-			self._agent_dqns[agent_id].load_model(filename_prefix + '_' + agent_id, model_dir, logger, obs_shape)
+			self._agent_dqns[agent_id].load_model(filename_prefix + '_' + agent_id + '.model', model_dir, logger, obs_shape)
 	
 	def load_model(self, filename: str, agent_id: str, model_dir: Path, logger: logging.Logger, obs_shape: tuple) -> None:
 		self._agent_dqns[agent_id].load_model(filename, model_dir, logger, obs_shape)

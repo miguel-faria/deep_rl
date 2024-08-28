@@ -80,6 +80,35 @@ class Food:
 	def picked(self, new_val: bool) -> None:
 		self._picked = new_val
 
+	def deepcopy(self):
+		new_food = Food()
+		new_food.setup(self.position, self.level, self.food_id)
+		new_food.picked = self.picked
+		return new_food
+
+	def __eq__(self, other):
+		return (
+				isinstance(other, Food)
+				and self.position == other.position
+				and self.level == other.level
+				and self.food_id == other.food_id
+				and self.picked == other.picked
+		)
+
+	def __hash__(self):
+		return hash((self.position, self.level, self.food_id, self.picked))
+
+	def __repr__(self):
+		return "Food {} with level {} at {} is {}.".format(self.food_id, self.level, self.position, 'picked' if self.picked else 'not picked')
+
+	def to_dict(self):
+		return {
+			"id": self.food_id,
+			"position": self.position,
+			"level": self.level,
+			"picked": self.picked,
+		}
+
 	
 class Player:
 	def __init__(self, level: int=0):
@@ -161,6 +190,34 @@ class Player:
 	@history.setter
 	def history(self, new_history: List):
 		self._history = new_history.copy()
+
+	def deepcopy(self):
+		new_player = Player(self._level)
+		new_player.setup(self._position, self._level, self._field_size, self._id)
+		return new_player
+
+	def __eq__(self, other):
+		return (
+				isinstance(other, Player) and self.position == other.position and self.level == other.level and self.name == other.name and
+				self.reward == other.reward and self.history == other.history and self.score == other.score and self.player_id == other.player_id and
+				self.controller == other.controller
+		)
+
+	def __hash__(self):
+		return hash((self.position, self.level, self.name, self.reward, self.score, self.player_id))
+
+	def __repr__(self):
+		return "Agent {} with level {} at {} has score {}.".format(self.name, self.level, self.position, self.score)
+
+	def to_dict(self):
+		return {
+				"name": self.name,
+				"position": self.position,
+				"level": self.level,
+				"score": self.score,
+				"reward": self.reward,
+				"id": self.player_id,
+		}
 		
 
 class LBForagingEnv(Env):

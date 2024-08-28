@@ -56,6 +56,24 @@ class TomAgent(Agent):
 		goals_likelihood = jnp.array(goals_likelihood)
 		return goals_likelihood
 
+	def task_inference(self, logger: Logger) -> str:
+		if not self._tasks:
+			logger.info('[ERROR]: List of possible tasks not defined!!')
+			return ''
+
+		if len(self._interaction_likelihoods) > 0:
+			likelihood = jnp.cumprod(jnp.array(self._interaction_likelihoods), axis=0)[-1]
+		else:
+			likelihood = jnp.zeros(self._n_tasks)
+		likelihood_sum = likelihood.sum()
+		if likelihood_sum == 0:
+			p_max = jnp.ones(self._n_tasks) / self._n_tasks
+		else:
+			p_max = likelihood / likelihood.sum()
+		high_likelihood = jnp.argwhere(p_max == jnp.amax(p_max)).ravel()
+		self._rng_key, subkey = jax.random.split(self._rng_key)
+		return self._tasks[jax.random.choice(subkey, high_likelihood)]
+
 	def bayesian_task_inference(self, sample: Tuple[jnp.ndarray, int], conf: float, logger: Logger) -> Tuple[str, float]:
 
 		if not self._tasks:

@@ -73,12 +73,14 @@ def main():
 		env.spawn_food(n_food_spawn, food_level)
 		env.spawn_players()
 		state, *_ = env.reset()
+		print(env.field)
+		print(env.foods)
 		agent_state = state[0]
 		state_shape = agent_state.shape
-		print(state_shape)
+		# print(state_shape)
 		s_reshape = agent_state.reshape((1, *state_shape[1:], state_shape[0]))
-		print(s_reshape.shape)
-		print(s_reshape[0, 0, 0])
+		# print(s_reshape.shape)
+		# print(s_reshape[0, 0, 0])
 		# env.render()
 		time.sleep(0.5)
 		# for i in range(1000):

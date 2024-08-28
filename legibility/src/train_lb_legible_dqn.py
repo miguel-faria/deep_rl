@@ -609,9 +609,9 @@ def main():
 					cnn_shape = (0,) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
 					tracker_panel = 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])
 					greedy_actions = False
-					history = train_legible_dqn(env, agent_madqn, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
-												final_eps, eps_type, leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-												cycle, greedy_actions, temp, curriculum_model_path, use_tensorboard, wandb_run, tracker_panel, debug)
+					train_legible_dqn(env, agent_madqn, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps, final_eps,
+					                  eps_type, leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq, cycle,
+					                  greedy_actions, temp, curriculum_model_path, use_tensorboard, wandb_run, tracker_panel, debug)
 					
 					# Reset params that determine how foods are spawn
 					env.food_spawn_pos = None
@@ -624,7 +624,7 @@ def main():
 						if not use_cnn:
 							json_path = model_path / ('food_%dx%d_history_centralized.json' % (loc[0], loc[1]))
 							with open(json_path, 'a') as json_file:
-								json_file.write(json.dumps({('cycle_%d' % (cycle + 1)): history}))
+								json_file.write(json.dumps({('cycle_%d' % (cycle + 1)): []}))
 					
 						logger.info('Saving model after cycle %d' % (cycle + 1))
 						Path.mkdir(model_path, parents=True, exist_ok=True)

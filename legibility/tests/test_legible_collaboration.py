@@ -27,10 +27,31 @@ from flax.linen import relu
 
 
 RNG_SEED = 20240729
+CONF = 1.0
 
 
-def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, n_agents: int, player_level: int, field_dims: Tuple[int, int], max_foods: int, player_sight: int,
-                       max_steps: int, foods_lvl: int, rng_seed: int, food_locs: List[Tuple], use_render: bool, use_cnn: bool, max_foods_spawn: int) -> Dict:
+def is_deadlock(history: List, new_state: str, last_actions: Tuple) -> bool:
+
+	if len(history) < 3:
+		return False
+
+	deadlock = True
+	if all([(act == Action.NONE or act == Action.LOAD) for act in last_actions]):
+		return False
+
+	else:
+		state_repitition = 0
+		for state in history:
+			if new_state == state:
+				state_repitition += 1
+		if state_repitition < 3:
+			deadlock = False
+
+	return deadlock
+
+
+def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, logger: logging.Logger, n_agents: int, player_level: int, field_dims: Tuple[int, int], max_foods: int,
+                       player_sight: int, max_steps: int, foods_lvl: int, rng_seed: int, food_locs: List[Tuple], use_render: bool, use_cnn: bool, max_foods_spawn: int) -> Dict:
 
 	env = FoodCOOPLBForaging(n_agents, player_level, field_dims, max_foods, player_sight, max_steps, True, foods_lvl, rng_seed, food_locs, use_render=use_render,
 	                         use_encoding=True, agent_center=True, grid_observation=use_cnn)
@@ -39,7 +60,8 @@ def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, n_agents: int, 
 	spawned_foods = [food_locs[idx] for idx in rng_gen.choice(max_foods, size=max_foods_spawn, replace=False)]
 	foods_left = spawned_foods.copy()
 	n_foods_left = max_foods_spawn
-	start_obj = foods_left.pop(rng_gen.integers(max_foods))
+	start_obj = foods_left.pop(rng_gen.integers(max_foods_spawn))
+	task = str(start_obj)
 
 	# Setup agents for test
 	leader_agent.init_interaction([str(food) for food in spawned_foods])
@@ -51,11 +73,91 @@ def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, n_agents: int, 
 	env.set_objective(start_obj)
 	env.spawn_players()
 	env.spawn_food(max_foods_spawn, foods_lvl)
+	if isinstance(env.observation_space, MultiBinary):
+		obs_space = MultiBinary([*env.observation_space.shape[1:]])
+	else:
+		obs_space = env.observation_space[0]
+	cnn_shape = (0,) if not use_cnn else (*obs_space.shape[1:], obs_space.shape[0])
 	obs, *_ = env.reset()
+	recent_states = [''.join([''.join(str(x) for x in p.position) for p in env.players]) + ''.join([''.join(str(x) for x in f.position) for f in env.foods])]
+	if use_cnn:
+		leader_obs = obs[0].reshape((1, *cnn_shape))
+		tom_obs = obs[1].reshape((1, *cnn_shape))
+	else:
+		leader_obs = obs[0]
+		tom_obs = obs[1]
+	actions = (leader_agent.action(leader_obs, (leader_obs, Action.NONE), CONF, logger, task), tom_agent.action(tom_obs, (leader_obs, Action.NONE), CONF, logger))
 
 	timeout = False
+	n_steps = 0
+	n_pred_steps = []
+	steps_food = []
+	deadlock_states = []
+	n_deadlocks = 0
+	act_try = 0
+	later_error = 0
+	later_food_step = 0
+
+	if use_render:
+		env.render()
+
 	while n_foods_left > 0 and not timeout:
-		pass
+
+		n_steps += 1
+		if use_render:
+			env.render()
+		last_leader_sample = (leader_obs, actions[0])
+		if str(start_obj) != tom_agent.task_inference(logger):
+			later_error = n_steps
+		obs, _, done, timeout, _ = env.step(actions)
+		current_food_count = np.sum([not food.picked for food in env.foods])
+
+		if use_cnn:
+			leader_obs = obs[0].reshape((1, *cnn_shape))
+			tom_obs = obs[1].reshape((1, *cnn_shape))
+		else:
+			leader_obs = obs[0]
+			tom_obs = obs[1]
+
+		if done or timeout:
+			continue
+
+		elif current_food_count < n_foods_left:
+
+			n_foods_left = current_food_count
+			n_pred_steps += [later_error - later_food_step]
+			steps_food += [n_steps - later_food_step]
+			later_food_step = n_steps
+			later_error = n_steps
+			tom_agent.reset_inference(foods_left.copy())
+			next_obj = foods_left.pop(rng_gen.integers(n_foods_left))
+			task = str(next_obj)
+			env.set_objective(next_obj)
+			last_leader_sample = (leader_obs, Action.NONE)
+			recent_states = []
+
+		current_state = ''.join([''.join(str(x) for x in p.position) for p in env.players]) + ''.join([''.join(str(x) for x in f.position) for f in env.foods])
+		if is_deadlock(recent_states, current_state, actions):
+			n_deadlocks += 1
+			if current_state not in deadlock_states:
+				deadlock_states.append(current_state)
+			act_try += 1
+			actions = (leader_agent.sub_acting(leader_obs, logger, act_try, last_leader_sample, CONF, task),
+			           tom_agent.sub_acting(tom_obs, logger, act_try, last_leader_sample, CONF))
+		else:
+			act_try = 0
+			actions = (leader_agent.action(leader_obs, last_leader_sample, CONF, logger, task), tom_agent.action(tom_obs, last_leader_sample, CONF, logger))
+
+		recent_states.append(current_state)
+		if len(recent_states) > 3:
+			recent_states.pop(0)
+
+	logger.info('Run Over!!')
+	it_results['n_steps'] = n_steps
+	it_results['pred_steps'] = n_pred_steps
+	it_results['avg_pred_steps'] = np.mean(n_pred_steps)
+	it_results['caught_foods'] = max_foods_spawn - n_foods_left
+	it_results['steps_food'] = steps_food
 
 	return it_results
 
@@ -120,8 +222,8 @@ def eval_legibility(n_runs: int, test_mode: int, logger: logging.Logger, opt_mod
 	results = {}
 	if run_paralell:
 		t_pool = mp.Pool(int(0.75 * mp.cpu_count()))
-		pool_results = [t_pool.apply_async(run_test_iteration, args=(leader_agent, follower_agent, n_agents, player_level, field_dims, max_foods, player_sight, max_steps,
-		                                                             foods_lvl, RNG_SEED + run, food_locs, use_render, use_cnn, max_foods_spawn)) for run in range(n_runs)]
+		pool_results = [t_pool.apply_async(run_test_iteration, args=(leader_agent, follower_agent, logger, n_agents, player_level, field_dims, max_foods, player_sight,
+		                                                             max_steps, foods_lvl, RNG_SEED + run, food_locs, use_render, use_cnn, max_foods_spawn)) for run in range(n_runs)]
 		t_pool.close()
 		for idx in range(len(pool_results)):
 			results[idx] = list(pool_results[idx].get())
@@ -198,6 +300,7 @@ def main():
 	gamma = args.gamma
 	use_cnn = args.use_cnn
 	use_dueling_dqn = args.dueling_dqn
+	use_ddqn = args.use_dqn
 	use_vdn = args.use_vdn
 
 	os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = args.fraction
@@ -233,6 +336,17 @@ def main():
 		assert dict_idx in list(config_params['food_locs'].keys())
 		food_locs = [tuple(x) for x in config_params['food_locs'][dict_idx]]
 
+	with open(data_dir / 'configs' / 'q_network_architectures.yaml') as architecture_file:
+		arch_data = yaml.safe_load(architecture_file)
+		if architecture in arch_data.keys():
+			n_layers = arch_data[architecture]['n_layers']
+			layer_sizes = arch_data[architecture]['layer_sizes']
+			n_conv_layers = arch_data[architecture]['n_cnn_layers']
+			cnn_size = arch_data[architecture]['cnn_size']
+			cnn_kernel = [tuple(elem) for elem in arch_data[architecture]['cnn_kernel']]
+			pool_window = [tuple(elem) for elem in arch_data[architecture]['pool_window']]
+			cnn_properties = [n_conv_layers, cnn_size, cnn_kernel, pool_window]
+
 	if len(logging.root.handlers) > 0:
 		for handler in logging.root.handlers:
 			logging.root.removeHandler(handler)
@@ -244,10 +358,10 @@ def main():
 	file_handler.setLevel(logging.INFO)
 	logger.addHandler(file_handler)
 
-	test_fields = []
+	results = eval_legibility(n_runs, mode, logger, opt_models_dir, leg_models_dir, field_lengths, n_agents, player_level, sight, n_foods, n_foods_spawn, food_locs, food_level,
+	                          steps_episode, gamma, n_layers, relu, layer_sizes, use_cnn, use_dueling_dqn, use_ddqn, cnn_properties, use_paralell, use_render)
 
-	results = {}
-
+	print(results)
 
 	return 0
 

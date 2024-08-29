@@ -26,7 +26,7 @@ def main():
 	player_level = 1
 	field_size = (8, 8)
 	n_foods = 8
-	n_foods_spawn = 2
+	n_foods_spawn = 1
 	sight = 8
 	max_steps = 600
 	food_level = 2
@@ -39,7 +39,7 @@ def main():
 		dict_idx = str(field_size[0]) + 'x' + str(field_size[1])
 		if dict_idx in config_params['food_locs'].keys():
 			food_locs = [tuple(x) for x in config_params['food_locs'][dict_idx]]
-			food_confs = [tuple(x) for x in config_params['food_confs'][dict_idx][(n_foods_spawn - 1)]]
+			# food_confs = [tuple(x) for x in config_params['food_confs'][dict_idx][(n_foods_spawn - 1)]]
 		else:
 			food_locs = [tuple(x) for x in product(range(field_size[0]), range(field_size[1]))]
 	
@@ -74,11 +74,11 @@ def main():
 		obs_space = MultiBinary([*env.observation_space.shape[1:]])
 	else:
 		obs_space = env.observation_space[0]
-	legible_dqn_model = DQNetwork(env.action_space[0].n, n_layers, nn.relu, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, use_tracker, cnn_properties=cnn_properties)
-	optim_dqn_model = DQNetwork(env.action_space[0].n, n_layers, nn.relu, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, use_tracker, cnn_properties=cnn_properties)
+	legible_dqn_model = DQNetwork(env.action_space[0].n, n_layers, nn.relu, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, cnn_properties=cnn_properties)
+	optim_dqn_model = DQNetwork(env.action_space[0].n, n_layers, nn.relu, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, cnn_properties=cnn_properties)
 	obs_shape = (0,) if not use_cnn else (*obs_space.shape[1:], obs_space.shape[0])
-	legible_dqn_model.load_model(('food_%dx%d_single_model' % (obj_food[0], obj_food[1])), leg_dir, None, obs_shape, False)
-	optim_dqn_model.load_model(('food_%dx%d_single_model' % (obj_food[0], obj_food[1])), optim_dir, None, obs_shape, False)
+	legible_dqn_model.load_model(('food_%dx%d_single_model.model' % (obj_food[0], obj_food[1])), leg_dir, None, obs_shape, False)
+	optim_dqn_model.load_model(('food_%dx%d_single_model.model' % (obj_food[0], obj_food[1])), optim_dir, None, obs_shape, False)
 
 	for cycle in range(N_CYCLES):
 		print('Cycle %d' % (cycle + 1))

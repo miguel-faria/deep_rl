@@ -6,8 +6,10 @@ import yaml
 from dl_envs.lb_foraging.lb_foraging_coop import FoodCOOPLBForaging
 from dl_envs.lb_foraging.lb_foraging import LBForagingEnv
 from dl_algos.single_model_madqn import SingleModelMADQN
+from dl_algos.dqn import DQNetwork
 from itertools import product
 from pathlib import Path
+from gymnasium.spaces import MultiBinary, MultiDiscrete
 
 ACTION_MAP = {0: 'None', 1: 'Up', 2: 'Down', 3: 'Left', 4: 'Right', 5: 'Load'}
 KEY_MAP = {'w': 1, 's': 2, 'a': 3, 'd': 4, 'q': 0, 'e': 5}
@@ -36,6 +38,8 @@ def main():
 	use_ddqn = True
 	use_cnn = True
 	use_tensorboard = False
+	use_render = True
+	architecture = 'v3'
 	tensorboard_details = []
 	with open(data_dir / 'configs' / 'lbforaging_plan_configs.yaml') as file:
 		config_params = yaml.full_load(file)
@@ -45,19 +49,40 @@ def main():
 			food_confs = config_params['food_confs'][dict_idx][(n_foods_spawn - 1)]
 		else:
 			food_locs = [tuple(x) for x in product(range(field_size[0]), range(field_size[1]))]
+
+	with open(data_dir / 'configs' / 'q_network_architectures.yaml') as architecture_file:
+		arch_data = yaml.safe_load(architecture_file)
+		if architecture in arch_data.keys():
+			n_layers = arch_data[architecture]['n_layers']
+			layer_sizes = arch_data[architecture]['layer_sizes']
+			n_conv_layers = arch_data[architecture]['n_cnn_layers']
+			cnn_size = arch_data[architecture]['cnn_size']
+			cnn_kernel = [tuple(elem) for elem in arch_data[architecture]['cnn_kernel']]
+			pool_window = [tuple(elem) for elem in arch_data[architecture]['pool_window']]
+			cnn_properties = [n_conv_layers, cnn_size, cnn_kernel, pool_window]
 	
 	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
-	optim_dir = (models_dir / 'lb_coop_legible_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-agents' % n_agents) /
+	optim_dir = (models_dir / 'lb_coop_legible_vdn_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-agents' % n_agents) /
 				 ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / 'best')
 	obj_food = food_locs[0]
-	env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs, food_locs[0],
-							 render_mode=['rgb_array', 'human'], use_encoding=False, agent_center=True, grid_observation=True)
+	env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs,
+	                         use_encoding=True, agent_center=True, grid_observation=use_cnn, use_render=use_render)
 	# env = LBForagingEnv(n_agents, player_level, field_size, n_foods, sight, max_steps, True, render_mode=['rgb_array', 'human'], grid_observation=True)
-	legible_dqn = SingleModelMADQN(n_agents, env.action_space[0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, env.observation_space[0],
-								   use_gpu, dueling_dqn, use_ddqn, use_cnn, False, use_tensorboard, tensorboard_details)
-	legible_dqn.load_model(('food_%dx%d' % (obj_food[0], obj_food[1])), optim_dir, None,
-						   env.observation_space[0].shape if not use_cnn else (1, *env.observation_space[0].shape), False)
-	
+	if isinstance(env.observation_space, MultiBinary):
+		obs_space = MultiBinary([*env.observation_space.shape[1:]])
+	else:
+		obs_space = env.observation_space[0]
+	agent_action_space = env.action_space[0]
+	action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
+	cnn_shape = (0,) if not use_cnn else (*obs_space.shape[1:], obs_space.shape[0])
+	# legible_dqn = SingleModelMADQN(n_agents, env.action_space[0].n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space, obs_space,
+	# 							   use_gpu, dueling_dqn, use_ddqn, use_cnn, False, use_tensorboard, tensorboard_details)
+	# legible_dqn.load_model(('food_%dx%d' % (obj_food[0], obj_food[1])), optim_dir, None,
+	# 					   env.observation_space[0].shape if not use_cnn else (1, *env.observation_space[0].shape))
+
+	legible_dqn = DQNetwork(env.action_space[0].n, n_layers, nn.relu, layer_sizes, gamma, dueling_dqn, use_ddqn, use_cnn, cnn_properties)
+	legible_dqn.load_model('food_%dx%d_single_model.model' % (obj_food[0], obj_food[1]), optim_dir, None, cnn_shape, False)
+
 	# if food_confs is not None:
 	# 	food_conf = food_confs[np.random.choice(range(len(food_confs)))]
 	# 	locs = [food for food in food_locs if food != obj_food]
@@ -91,11 +116,11 @@ def main():
 					else:
 						print('Action ID must be between 0 and 5, you gave ID %d' % action)
 			else:
-				online_params = legible_dqn.agent_dqn.online_state.params
-				if legible_dqn.agent_dqn.cnn_layer:
-					q_values = legible_dqn.agent_dqn.q_network.apply(online_params, obs[a_idx].reshape((1, *obs[a_idx].shape)))[0]
+				online_params = legible_dqn.online_state.params
+				if legible_dqn.cnn_layer:
+					q_values = legible_dqn.q_network.apply(online_params, obs[a_idx].reshape((1, *cnn_shape)))[0]
 				else:
-					q_values = legible_dqn.agent_dqn.q_network.apply(online_params, obs[a_idx])
+					q_values = legible_dqn.q_network.apply(online_params, obs[a_idx])
 				pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
 				pol = pol / pol.sum()
 				print(q_values, pol)

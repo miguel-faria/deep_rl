@@ -96,9 +96,9 @@ class Food:
 		)
 
 	def __hash__(self):
-		return hash((self.position, self.level, self.food_id, self.picked))
+		return hash((self.level, self.food_id))
 
-	def __repr__(self):
+	def __str__(self):
 		return "Food {} with level {} at {} is {}.".format(self.food_id, self.level, self.position, 'picked' if self.picked else 'not picked')
 
 	def to_dict(self):
@@ -204,9 +204,9 @@ class Player:
 		)
 
 	def __hash__(self):
-		return hash((self.position, self.level, self.name, self.reward, self.score, self.player_id))
+		return hash((self.level, self.name, self.player_id))
 
-	def __repr__(self):
+	def __str__(self):
 		return "Agent {} with level {} at {} has score {}.".format(self.name, self.level, self.position, self.score)
 
 	def to_dict(self):
@@ -218,7 +218,7 @@ class Player:
 				"reward": self.reward,
 				"id": self.player_id,
 		}
-		
+
 
 class LBForagingEnv(Env):
 	action_set = [Action.NONE, Action.NORTH, Action.SOUTH, Action.WEST, Action.EAST, Action.LOAD]

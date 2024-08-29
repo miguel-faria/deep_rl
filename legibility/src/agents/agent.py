@@ -41,6 +41,10 @@ class Agent(object):
 	def tasks(self, tasks: List[str]) -> None:
 		self._tasks = tasks.copy()
 
+	@goal_models.setter
+	def goal_models(self, new_models: Dict[str, DQNetwork]) -> None:
+		self._goal_models = new_models
+
 	def add_model(self, task: str, model: DQNetwork) -> None:
 		self._goal_models[task] = model
 
@@ -52,19 +56,19 @@ class Agent(object):
 		self._n_tasks = len(interaction_tasks)
 
 	def get_actions(self, task_id: str, obs: jnp.ndarray) -> int:
-		q = jax.device_get(self._goal_models[task_id].q_network.apply(self._goal_models[task_id].online_state.params, obs))
+		q = jax.device_get(self._goal_models[task_id].q_network.apply(self._goal_models[task_id].online_state.params, obs)[0])
 		pol = jnp.isclose(q, q.max(), rtol=1e-10, atol=1e-10).astype(int)
 		pol = pol / pol.sum()
 
 		self._rng_key, subkey = jax.random.split(self._rng_key)
-		return int(jax.random.choice(subkey, len(q), p=pol[obs, :]))
+		return int(jax.random.choice(subkey, len(q), p=pol))
 
 	def action(self, obs: jnp.ndarray, sample: Tuple[jnp.ndarray, int], conf: float, logger: Logger, task: str = '') -> int:
 		action = self.get_actions(task, obs)
 		return action
 
 	def sub_acting(self, obs: jnp.ndarray, logger: Logger, act_try: int, sample: Tuple[jnp.ndarray, int], conf: float, task: str = '') -> int:
-		q_vals = jax.device_get(self._goal_models[task].q_network.apply(self._goal_models[task].online_state.params, obs))
+		q_vals = jax.device_get(self._goal_models[task].q_network.apply(self._goal_models[task].online_state.params, obs)[0])
 		sorted_q = jnp.copy(q_vals)
 		sorted_q.sort()
 		n_actions = len(sorted_q)
@@ -73,5 +77,5 @@ class Agent(object):
 		if act_try > n_actions:
 			return int(jax.random.choice(subkey, n_actions))
 
-		nth_best = sorted_q[max(-(act_try + 1), -n_actions)]
+		nth_best = sorted_q[max(-act_try, -n_actions)]
 		return int(jax.random.choice(subkey, jnp.where(q_vals == nth_best)[0]))

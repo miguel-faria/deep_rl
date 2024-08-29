@@ -8,17 +8,15 @@ from pathlib import Path
 
 
 tests_dir = Path(__file__).parent.absolute().parent.absolute() / 'tests'
-log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs' / 'lb_foraging'
-data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
-models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
 USE_SHELL = False
 
 # Test parameters
 TEST_MODE = 2
-N_TESTS = 5
+N_TESTS = 10
 USE_GPU = True
 RUN_PARALELL = False
 USE_RENDER = False
+PRECOMP_FRAC = 0.3
 
 # Environemnt parameters
 N_AGENTS = 2
@@ -38,12 +36,40 @@ USE_DUELING = True
 USE_DDQN = True
 USE_VDN = True
 
-args = ('--mode %d --runs %d --models-dir %s --data-dir %s --logs-dir %s --n-agents %d --player-level %d --field-size %d '
-        '--n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --n-leg-agents %d --architecture %s --gamma %f '
-        % (TEST_MODE, N_TESTS, models_dir, data_dir, log_dir, N_AGENTS, PLAYER_LVL, FIELD_LENGTH, MAX_FOODS, FOOD_LEVEL,
-           STEPS_EPISODE, MAX_SPAWN_FOODS, N_LEG_AGENTS, ARCHITECTURE, GAMMA))
-args += ((' --render' if USE_RENDER else '') + (' --paralell' if RUN_PARALELL else '') + (' --use_gpu' if USE_GPU else '') +
-         (' --cnn' if USE_CNN else '') + (' --dueling' if USE_DUELING else '') + (' --ddqn' if USE_DDQN else '') + (' --vdn' if USE_VDN else ''))
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--tests', type=int, default=N_TESTS, help='Number of tests to run')
+parser.add_argument('--data-dir', type=str, default='', help='Data directory')
+parser.add_argument('--models-dir', type=str, default='', help='Model directory')
+parser.add_argument('--logs-dir', type=str, default='', help='Logs directory')
+parser.add_argument('--mode', type=int, default=TEST_MODE, choices=[0, 1, 2, 3],
+						help='Team composition mode:'
+							 '\n\t0 - Optimal agent controls interaction with an optimal follower '
+							 '\n\t1 - Legible agent controls interaction with a legible follower '
+							 '\n\t2 - Legible agent controls interaction with an optimal follower'
+							 '\n\t3 - Optimal agent controls interaction with a legible follower')
+parser.add_argument('--leg-agents', type=int, default=N_LEG_AGENTS, help='Number of legible agents')
+parser.add_argument('--steps', type=int, default=STEPS_EPISODE, help='Maximum number of steps per episode')
+parser.add_argument('--render', action='store_true', help='Flag that denotes the usage of a render')
+parser.add_argument('--paralell', action='store_true', help='Flag that denotes the usage of a render')
+
+input_args = parser.parse_args()
+n_tests = input_args.tests
+data_dir = input_args.data_dir
+models_dir = input_args.models_dir
+logs_dir = input_args.logs_dir
+mode = input_args.mode
+n_leg_agents = input_args.leg_agents
+steps = input_args.steps
+render = input_args.render or USE_RENDER
+paralell = input_args.paralell or RUN_PARALELL
+
+args = (' --mode %d --runs %d --n-agents %d --player-level %d --field-size %d'
+        ' --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --n-leg-agents %d --architecture %s --gamma %f'
+        % (mode, n_tests, N_AGENTS, PLAYER_LVL, FIELD_LENGTH, MAX_FOODS, FOOD_LEVEL, steps, MAX_SPAWN_FOODS, n_leg_agents, ARCHITECTURE, GAMMA))
+args += ((' --render' if render else '') + (' --paralell' if paralell else '') + (' --use_gpu' if USE_GPU else '') + (" --fraction %f" % PRECOMP_FRAC) +
+         (' --cnn' if USE_CNN else '') + (' --dueling' if USE_DUELING else '') + (' --ddqn' if USE_DDQN else '') + (' --vdn' if USE_VDN else '') +
+         (' --models-dir %s' if models_dir != '' else '') + (' --data-dir %s' if data_dir != '' else '') + (' --logs-dir %s' if logs_dir != '' else ''))
 
 command = "python " + str(tests_dir / 'test_legible_collaboration.py') + args
 if not USE_SHELL:

@@ -2,15 +2,12 @@
 
 import numpy as np
 import argparse
-import gymnasium
-import pickle
 import yaml
-import itertools
 import jax
 import logging
 import os
 import multiprocessing as mp
-import threading
+import csv
 
 from pathlib import Path
 from datetime import datetime
@@ -18,8 +15,6 @@ from typing import List, Tuple, Dict, Callable
 from gymnasium.spaces import MultiBinary
 from agents.agent import Agent
 from agents.tom_agent import TomAgent
-from statistics import stdev
-from math import sqrt
 from dl_envs.lb_foraging.lb_foraging_coop import FoodCOOPLBForaging
 from dl_envs.lb_foraging.lb_foraging import Action
 from dl_algos.dqn import DQNetwork
@@ -28,6 +23,26 @@ from flax.linen import relu
 
 RNG_SEED = 20240729
 CONF = 1.0
+
+
+def write_results_file(data_dir: Path, filename: str, results: Dict, logger: logging.Logger) -> None:
+	try:
+		with open(data_dir / (filename + '.csv'), 'w') as results_file:
+			headers = ['test_nr', 'num_steps', 'pred_steps', 'average_pred_steps', 'num_caught_foods', 'food_steps', 'num_deadlocks']
+			writer = csv.DictWriter(results_file, fieldnames=headers, delimiter=',', lineterminator='\n')
+			writer.writeheader()
+			for key in results.keys():
+				row = {'test_nr': key}
+				for header, val in zip(headers[1:], list(results[key])):
+					row[header] = results[key][val]
+				writer.writerow(row)
+
+		# with open(data_dir / (filename + '.json'), 'w') as json_file:
+		# 	for key in results.keys():
+		# 		json_file.write(json.dumps({' '.join([str(x) for x in key]): results[key][-1]}))
+
+	except IOError as e:
+		logger.error("I/O error: " + str(e))
 
 
 def is_deadlock(history: List, new_state: str, last_actions: Tuple) -> bool:
@@ -50,8 +65,47 @@ def is_deadlock(history: List, new_state: str, last_actions: Tuple) -> bool:
 	return deadlock
 
 
-def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, logger: logging.Logger, n_agents: int, player_level: int, field_dims: Tuple[int, int], max_foods: int,
-                       player_sight: int, max_steps: int, foods_lvl: int, rng_seed: int, food_locs: List[Tuple], use_render: bool, use_cnn: bool, max_foods_spawn: int) -> Dict:
+def load_models(logger: logging.Logger, opt_models_dir: Path, leg_models_dir: Path, n_foods_spawn: int, food_locs: List[Tuple], foods_lvl: int, num_layers: int, act_function: Callable,
+                layer_sizes: List[int], gamma: float, use_cnn: bool, use_dueling: bool, use_ddqn: bool, cnn_shape: Tuple, cnn_properties: List = None) -> Tuple[Dict, Dict]:
+	optim_models = {}
+	leg_models = {}
+	opt_model_names = [fname.name for fname in (opt_models_dir / ('%d-foods_%d-food-level' % (n_foods_spawn, foods_lvl)) / 'best').iterdir()]
+	leg_model_names = [fname.name for fname in (leg_models_dir / ('%d-foods_%d-food-level' % (n_foods_spawn, foods_lvl)) / 'best').iterdir()]
+	try:
+		for loc in food_locs:
+			# Find the optimal model name for the food location
+			model_name = ''
+			for name in opt_model_names:
+				if name.find("%sx%s" % (loc[0], loc[1])) != -1:
+					model_name = name
+					break
+			assert model_name != ''
+			opt_dqn = DQNetwork(len(Action), num_layers, act_function, layer_sizes, gamma, use_dueling, use_ddqn, use_cnn, cnn_properties)
+			opt_dqn.load_model(model_name, opt_models_dir / ('%d-foods_%d-food-level' % (n_foods_spawn, foods_lvl)) / 'best', logger, cnn_shape, True)
+			optim_models[str(loc)] = opt_dqn
+
+			# Find the legible model name for the food location
+			model_name = ''
+			for name in leg_model_names:
+				if name.find("%sx%s" % (loc[0], loc[1])) != -1:
+					model_name = name
+					break
+			assert model_name != ''
+			leg_dqn = DQNetwork(len(Action), num_layers, act_function, layer_sizes, gamma, use_dueling, use_ddqn, use_cnn, cnn_properties)
+			leg_dqn.load_model(model_name, leg_models_dir / ('%d-foods_%d-food-level' % (n_foods_spawn, foods_lvl)) / 'best', logger, cnn_shape, True)
+			leg_models[str(loc)] = leg_dqn
+
+		return optim_models, leg_models
+
+	except AssertionError as e:
+		logger.error(e)
+		return {}, {}
+
+
+def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, logger: logging.Logger, test_mode: int, run_n: int, n_agents: int, player_level: int, field_dims: Tuple[int, int],
+                       max_foods: int, player_sight: int, max_steps: int, foods_lvl: int, rng_seed: int, food_locs: List[Tuple], use_render: bool, use_cnn: bool,
+                       max_foods_spawn: int, opt_models_dir: Path, leg_models_dir: Path, gamma: float, num_layers: int, act_function: Callable, layer_sizes: List[int],
+                       use_dueling: bool, use_ddqn: bool, cnn_properties: List = None) -> Dict:
 
 	env = FoodCOOPLBForaging(n_agents, player_level, field_dims, max_foods, player_sight, max_steps, True, foods_lvl, rng_seed, food_locs, use_render=use_render,
 	                         use_encoding=True, agent_center=True, grid_observation=use_cnn)
@@ -101,15 +155,18 @@ def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, logger: logging
 	if use_render:
 		env.render()
 
+	logger.info('Started run number %d:' % (run_n + 1))
 	while n_foods_left > 0 and not timeout:
-
+		logger.info('Run number %d, step %d: remaining %d foods, predicted objective %s and real objective %s from ' % (run_n + 1, n_steps + 1, n_foods_left, tom_agent.predict_task, task) + str(foods_left))
+		# print('Run number %d, step %d: remaining %d foods, predicted objective %s and real objective %s' % (run_n + 1, n_steps + 1, n_foods_left, tom_agent.predict_task, task))
 		n_steps += 1
 		if use_render:
 			env.render()
 		last_leader_sample = (leader_obs, actions[0])
-		if str(start_obj) != tom_agent.task_inference(logger):
+		if task != tom_agent.predict_task:
 			later_error = n_steps
-		obs, _, done, timeout, _ = env.step(actions)
+		# print(env.get_env_log() + '\nAction: ' + str(actions))
+		obs, _, _, timeout, _ = env.step(actions)
 		current_food_count = np.sum([not food.picked for food in env.foods])
 
 		if use_cnn:
@@ -119,22 +176,42 @@ def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, logger: logging
 			leader_obs = obs[0]
 			tom_obs = obs[1]
 
-		if done or timeout:
-			continue
+		if timeout:
+			break
 
 		elif current_food_count < n_foods_left:
-
 			n_foods_left = current_food_count
 			n_pred_steps += [later_error - later_food_step]
 			steps_food += [n_steps - later_food_step]
 			later_food_step = n_steps
 			later_error = n_steps
-			tom_agent.reset_inference(foods_left.copy())
-			next_obj = foods_left.pop(rng_gen.integers(n_foods_left))
-			task = str(next_obj)
-			env.set_objective(next_obj)
-			last_leader_sample = (leader_obs, Action.NONE)
-			recent_states = []
+
+			if current_food_count > 0:
+				# Update tasks remaining and samples
+				tom_agent.reset_inference([str(food) for food in foods_left])
+				last_leader_sample = (leader_obs, Action.NONE)
+				recent_states = []
+
+				# Update decision models
+				optim_models, leg_models = load_models(logger, opt_models_dir, leg_models_dir, n_foods_left, food_locs, foods_lvl, num_layers, act_function, layer_sizes,
+				                                       gamma, use_cnn, use_dueling, use_ddqn, cnn_shape, cnn_properties)
+				if test_mode == 0:
+					leader_agent.goal_models = optim_models
+					tom_agent.goal_models = optim_models
+				elif test_mode == 1:
+					leader_agent.goal_models = optim_models
+					tom_agent.goal_models = leg_models
+				elif test_mode == 2:
+					leader_agent.goal_models = leg_models
+					tom_agent.goal_models = optim_models
+				else:
+					leader_agent.goal_models = leg_models
+					tom_agent.goal_models = leg_models
+
+				# Get next objective
+				next_obj = foods_left.pop(rng_gen.integers(n_foods_left))
+				task = str(next_obj)
+				env.set_objective(next_obj)
 
 		current_state = ''.join([''.join(str(x) for x in p.position) for p in env.players]) + ''.join([''.join(str(x) for x in f.position) for f in env.foods])
 		if is_deadlock(recent_states, current_state, actions):
@@ -142,8 +219,9 @@ def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, logger: logging
 			if current_state not in deadlock_states:
 				deadlock_states.append(current_state)
 			act_try += 1
-			actions = (leader_agent.sub_acting(leader_obs, logger, act_try, last_leader_sample, CONF, task),
-			           tom_agent.sub_acting(tom_obs, logger, act_try, last_leader_sample, CONF))
+			# actions = (leader_agent.sub_acting(leader_obs, logger, act_try, last_leader_sample, CONF, task),
+			#            tom_agent.sub_acting(tom_obs, logger, act_try, last_leader_sample, CONF))
+			actions = (leader_agent.action(leader_obs, last_leader_sample, CONF, logger, task), tom_agent.sub_acting(tom_obs, logger, act_try, last_leader_sample, CONF))
 		else:
 			act_try = 0
 			actions = (leader_agent.action(leader_obs, last_leader_sample, CONF, logger, task), tom_agent.action(tom_obs, last_leader_sample, CONF, logger))
@@ -155,9 +233,10 @@ def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, logger: logging
 	logger.info('Run Over!!')
 	it_results['n_steps'] = n_steps
 	it_results['pred_steps'] = n_pred_steps
-	it_results['avg_pred_steps'] = np.mean(n_pred_steps)
+	it_results['avg_pred_steps'] = np.mean(n_pred_steps) if len(n_pred_steps) > 0 else 0
 	it_results['caught_foods'] = max_foods_spawn - n_foods_left
 	it_results['steps_food'] = steps_food
+	it_results['deadlocks'] = n_deadlocks
 
 	return it_results
 
@@ -174,37 +253,9 @@ def eval_legibility(n_runs: int, test_mode: int, logger: logging.Logger, opt_mod
 	else:
 		obs_space = env.observation_space[0]
 	cnn_shape = (0,) if not use_cnn else (*obs_space.shape[1:], obs_space.shape[0])
-	optim_models = {}
-	leg_models = {}
-	opt_model_names = [fname.name for fname in (opt_models_dir / ('%d-foods_%d-food-level' % (max_foods_spawn, foods_lvl)) / 'best').iterdir()]
-	leg_model_names = [fname.name for fname in (leg_models_dir / ('%d-foods_%d-food-level' % (max_foods_spawn, foods_lvl)) / 'best').iterdir()]
-	try:
-		for loc in food_locs:
-			# Find the optimal model name for the food location
-			model_name = ''
-			for name in opt_model_names:
-				if name.find("%sx%s" % (loc[0], loc[1])) != -1:
-					model_name = name
-					break
-			assert model_name != ''
-			opt_dqn = DQNetwork(len(Action), num_layers, act_function, layer_sizes, gamma, use_dueling, use_ddqn, use_cnn, cnn_properties)
-			opt_dqn.load_model(model_name, opt_models_dir / ('%d-foods_%d-food-level' % (max_foods_spawn, foods_lvl)) / 'best', logger, cnn_shape, True)
-			optim_models[str(loc)] = opt_dqn
 
-			# Find the legible model name for the food location
-			model_name = ''
-			for name in leg_model_names:
-				if name.find("%sx%s" % (loc[0], loc[1])) != -1:
-					model_name = name
-					break
-			assert model_name != ''
-			leg_dqn = DQNetwork(len(Action), num_layers, act_function, layer_sizes, gamma, use_dueling, use_ddqn, use_cnn, cnn_properties)
-			leg_dqn.load_model(model_name, leg_models_dir / ('%d-foods_%d-food-level' % (max_foods_spawn, foods_lvl)) / 'best', logger, cnn_shape, True)
-			leg_models[str(loc)] = leg_dqn
-
-	except AssertionError as e:
-		logger.error(e)
-		return []
+	optim_models, leg_models = load_models(logger, opt_models_dir, leg_models_dir, max_foods_spawn, food_locs, foods_lvl, num_layers, act_function, layer_sizes, gamma, use_cnn,
+	                                       use_dueling, use_ddqn, cnn_shape, cnn_properties)
 
 	if test_mode == 0:
 		leader_agent = Agent(optim_models, RNG_SEED)
@@ -222,16 +273,18 @@ def eval_legibility(n_runs: int, test_mode: int, logger: logging.Logger, opt_mod
 	results = {}
 	if run_paralell:
 		t_pool = mp.Pool(int(0.75 * mp.cpu_count()))
-		pool_results = [t_pool.apply_async(run_test_iteration, args=(leader_agent, follower_agent, logger, n_agents, player_level, field_dims, max_foods, player_sight,
-		                                                             max_steps, foods_lvl, RNG_SEED + run, food_locs, use_render, use_cnn, max_foods_spawn)) for run in range(n_runs)]
+		pool_results = [t_pool.apply_async(run_test_iteration, args=(leader_agent, follower_agent, logger, test_mode, run, n_agents, player_level, field_dims, max_foods, player_sight,
+		                                                             max_steps, foods_lvl, RNG_SEED + run, food_locs, use_render, use_cnn, max_foods_spawn, opt_models_dir,
+		                                                             leg_models_dir, gamma, num_layers, act_function, layer_sizes, use_dueling, use_ddqn, cnn_properties)) for run in range(n_runs)]
 		t_pool.close()
 		for idx in range(len(pool_results)):
 			results[idx] = list(pool_results[idx].get())
 		t_pool.join()
 	else:
 		for run in range(n_runs):
-			results[run] = run_test_iteration(leader_agent, follower_agent, n_agents, player_level, field_dims, max_foods, player_sight,
-			                                  max_steps, foods_lvl, RNG_SEED + run, food_locs, use_render, use_cnn, max_foods_spawn)
+			results[run] = run_test_iteration(leader_agent, follower_agent, logger, test_mode, run, n_agents, player_level, field_dims, max_foods, player_sight, max_steps,
+			                                  foods_lvl, RNG_SEED + run, food_locs, use_render, use_cnn, max_foods_spawn, opt_models_dir, leg_models_dir, gamma, num_layers,
+			                                  act_function, layer_sizes, use_dueling, use_ddqn, cnn_properties)
 
 	return results
 
@@ -248,15 +301,16 @@ def main():
 							 '\n\t2 - Legible agent controls interaction with an optimal follower'
 							 '\n\t3 - Optimal agent controls interaction with a legible follower')
 	parser.add_argument('--runs', dest='nruns', type=int, required=True, help='Number of trial runs to obtain eval')
-	parser.add_argument('--render', dest='render', type=bool, action='store_true', help='Activate the render to see the interaction')
-	parser.add_argument('--paralell', dest='paralell', type=bool, action='store_true',
+	parser.add_argument('--render', dest='render', action='store_true', help='Activate the render to see the interaction')
+	parser.add_argument('--paralell', dest='paralell', action='store_true',
 						help='Use paralell computing to speed the evaluation process. (Can\'t be used with render or gpu active)')
-	parser.add_argument('--use_gpu', dest='gpu', type=bool, action='store_true', help='Use gpu for matrix computations')
+	parser.add_argument('--use_gpu', dest='gpu', action='store_true', help='Use gpu for matrix computations')
 	parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
 						help='Directory to store trained models and load optimal models, if left blank stored in default location')
 	parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
 						help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
 	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
+	parser.add_argument('--fraction', dest='fraction', type=str, default='0.5', help='Fraction of JAX memory pre-compilation')
 
 	# Environment configuration
 	parser.add_argument('--n-agents', dest='n_agents', type=int, required=True, help='Number of agents in the foraging environment')
@@ -300,7 +354,7 @@ def main():
 	gamma = args.gamma
 	use_cnn = args.use_cnn
 	use_dueling_dqn = args.dueling_dqn
-	use_ddqn = args.use_dqn
+	use_ddqn = args.use_ddqn
 	use_vdn = args.use_vdn
 
 	os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = args.fraction
@@ -358,10 +412,12 @@ def main():
 	file_handler.setLevel(logging.INFO)
 	logger.addHandler(file_handler)
 
-	results = eval_legibility(n_runs, mode, logger, opt_models_dir, leg_models_dir, field_lengths, n_agents, player_level, sight, n_foods, n_foods_spawn, food_locs, food_level,
+	results = eval_legibility(n_runs, mode, logger, opt_models_dir, leg_models_dir, field_size, n_agents, player_level, sight, n_foods, n_foods_spawn, food_locs, food_level,
 	                          steps_episode, gamma, n_layers, relu, layer_sizes, use_cnn, use_dueling_dqn, use_ddqn, cnn_properties, use_paralell, use_render)
 
-	print(results)
+	logger.info('Results: ' + str(results))
+	write_results_file(data_dir / 'performances' / 'lb_foraging',
+	                   'test_mode-%d_field_%d-%d_foods-%d_agents-%d' % (mode, field_size[0], field_size[1], n_foods_spawn, n_agents), results, logger)
 
 	return 0
 

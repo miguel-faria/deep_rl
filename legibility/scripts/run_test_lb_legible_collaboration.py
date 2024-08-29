@@ -69,7 +69,8 @@ args = (' --mode %d --runs %d --n-agents %d --player-level %d --field-size %d'
         % (mode, n_tests, N_AGENTS, PLAYER_LVL, FIELD_LENGTH, MAX_FOODS, FOOD_LEVEL, steps, MAX_SPAWN_FOODS, n_leg_agents, ARCHITECTURE, GAMMA))
 args += ((' --render' if render else '') + (' --paralell' if paralell else '') + (' --use_gpu' if USE_GPU else '') + (" --fraction %f" % PRECOMP_FRAC) +
          (' --cnn' if USE_CNN else '') + (' --dueling' if USE_DUELING else '') + (' --ddqn' if USE_DDQN else '') + (' --vdn' if USE_VDN else '') +
-         (' --models-dir %s' if models_dir != '' else '') + (' --data-dir %s' if data_dir != '' else '') + (' --logs-dir %s' if logs_dir != '' else ''))
+         (' --models-dir %s' % models_dir if models_dir != '' else '') + (' --data-dir %s' % data_dir if data_dir != '' else '') +
+         (' --logs-dir %s' % logs_dir if logs_dir != '' else ''))
 
 command = "python " + str(tests_dir / 'test_legible_collaboration.py') + args
 if not USE_SHELL:

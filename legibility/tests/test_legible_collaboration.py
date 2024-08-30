@@ -156,7 +156,7 @@ def run_test_iteration(leader_agent: Agent, tom_agent: TomAgent, logger: logging
 		env.render()
 
 	logger.info('Started run number %d:' % (run_n + 1))
-	while n_foods_left > 0 and not timeout:
+	while n_foods_left > 1 and not timeout:
 		logger.info('Run number %d, step %d: remaining %d foods, predicted objective %s and real objective %s from ' % (run_n + 1, n_steps + 1, n_foods_left, tom_agent.predict_task, task) + str(foods_left))
 		# print('Run number %d, step %d: remaining %d foods, predicted objective %s and real objective %s' % (run_n + 1, n_steps + 1, n_foods_left, tom_agent.predict_task, task))
 		n_steps += 1

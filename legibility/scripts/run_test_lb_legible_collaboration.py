@@ -15,7 +15,7 @@ TEST_MODE = 2
 N_TESTS = 10
 USE_GPU = True
 RUN_PARALELL = False
-USE_RENDER = False
+USE_RENDER = True
 PRECOMP_FRAC = 0.3
 
 # Environemnt parameters

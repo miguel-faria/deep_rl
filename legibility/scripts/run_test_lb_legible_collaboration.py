@@ -12,7 +12,7 @@ USE_SHELL = False
 
 # Test parameters
 TEST_MODE = 2
-N_TESTS = 10
+N_TESTS = 20
 USE_GPU = True
 RUN_PARALELL = False
 USE_RENDER = True
@@ -72,7 +72,7 @@ args += ((' --render' if render else '') + (' --paralell' if paralell else '') +
          (' --models-dir %s' % models_dir if models_dir != '' else '') + (' --data-dir %s' % data_dir if data_dir != '' else '') +
          (' --logs-dir %s' % logs_dir if logs_dir != '' else ''))
 
-command = "python " + str(tests_dir / 'test_legible_collaboration.py') + args
+command = "python " + str(tests_dir / 'test_lb_legible_collaboration.py') + args
 if not USE_SHELL:
 	command = shlex.split(command)
 

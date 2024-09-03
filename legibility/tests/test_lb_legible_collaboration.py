@@ -52,16 +52,16 @@ def is_deadlock(history: List, new_state: str, last_actions: Tuple) -> bool:
 		return False
 	
 	deadlock = True
-	if all([(act == Action.NONE or act == Action.LOAD) for act in last_actions]):
-		return False
-	
-	else:
-		state_repitition = 0
-		for state in history:
-			if new_state == state:
-				state_repitition += 1
-		if state_repitition < 3:
-			deadlock = False
+	# if all([act == Action.NONE for act in last_actions]) or all([act == Action.LOAD for act in last_actions]):
+	# 	return False
+	#
+	# else:
+	state_repitition = 0
+	for state in history:
+		if new_state == state:
+			state_repitition += 1
+	if state_repitition < 3:
+		deadlock = False
 	
 	return deadlock
 
@@ -85,7 +85,7 @@ def coordinate_agents(env: FoodCOOPLBForaging, predict_task: str, actions: Tuple
 		tom_direction = Direction[Action(actions[TOM_ID]).name].value
 		next_lead_pos = (leader_pos[0] + lead_direction[0], leader_pos[1] + lead_direction[1])
 		next_tom_pos = (tom_pos[0] + tom_direction[0], tom_pos[1] + tom_direction[1])
-		if next_lead_pos == next_tom_pos:
+		if next_lead_pos == next_tom_pos or all([act == Action.LOAD for act in actions]):
 			return actions[LEADER_ID], Action.NONE.value
 		else:
 			return actions
@@ -136,16 +136,16 @@ def run_test_iteration(start_optim_models: Dict, start_leg_models: Dict, logger:
 	# Initialize the agents for the interaction
 	if test_mode == 0:
 		leader_agent = Agent(LEADER_ID, start_optim_models, rng_seed)
-		tom_agent = TomAgent(TOM_ID, start_optim_models, rng_seed, 1)
+		tom_agent = TomAgent(TOM_ID, start_optim_models, start_optim_models, rng_seed, 1)
 	elif test_mode == 1:
 		leader_agent = Agent(LEADER_ID, start_optim_models, rng_seed)
-		tom_agent = TomAgent(TOM_ID, start_leg_models, rng_seed, 1)
+		tom_agent = TomAgent(TOM_ID, start_leg_models, start_optim_models, rng_seed, 1)
 	elif test_mode == 2:
 		leader_agent = Agent(LEADER_ID, start_leg_models, rng_seed)
-		tom_agent = TomAgent(TOM_ID, start_optim_models, rng_seed, 1)
+		tom_agent = TomAgent(TOM_ID, start_optim_models, start_leg_models, rng_seed, 1)
 	else:
 		leader_agent = Agent(LEADER_ID, start_leg_models, rng_seed)
-		tom_agent = TomAgent(TOM_ID, start_leg_models, rng_seed, 1)
+		tom_agent = TomAgent(TOM_ID, start_leg_models, start_leg_models, rng_seed, 1)
 	
 	env = FoodCOOPLBForaging(n_agents, player_level, field_dims, max_foods, player_sight, max_steps, True, foods_lvl, rng_seed, food_locs, use_render=use_render,
 	                         use_encoding=True, agent_center=True, grid_observation=use_cnn)
@@ -252,15 +252,19 @@ def run_test_iteration(start_optim_models: Dict, start_leg_models: Dict, logger:
 				if test_mode == 0:
 					leader_agent.goal_models = optim_models
 					tom_agent.goal_models = optim_models
+					tom_agent.sample_models = optim_models
 				elif test_mode == 1:
 					leader_agent.goal_models = optim_models
 					tom_agent.goal_models = leg_models
+					tom_agent.sample_models = optim_models
 				elif test_mode == 2:
 					leader_agent.goal_models = leg_models
 					tom_agent.goal_models = optim_models
+					tom_agent.sample_models = leg_models
 				else:
 					leader_agent.goal_models = leg_models
 					tom_agent.goal_models = leg_models
+					tom_agent.sample_models = leg_models
 				
 				# Get next objective
 				next_obj = foods_left.pop(rng_gen.integers(n_foods_left))
@@ -274,9 +278,9 @@ def run_test_iteration(start_optim_models: Dict, start_leg_models: Dict, logger:
 			if current_state not in deadlock_states:
 				deadlock_states.append(current_state)
 			act_try += 1
-			# actions = (leader_agent.sub_acting(leader_obs, logger, act_try, last_leader_sample, CONF, task),
-			#            tom_agent.sub_acting(tom_obs, logger, act_try, last_leader_sample, CONF))
-			actions = (leader_agent.action(leader_obs, last_leader_sample, CONF, logger, task), tom_agent.sub_acting(tom_obs, logger, act_try, last_leader_sample, CONF))
+			actions = (leader_agent.sub_acting(leader_obs, logger, act_try - 1, last_leader_sample, CONF, task),
+			           tom_agent.sub_acting(tom_obs, logger, act_try, last_leader_sample, CONF))
+			# actions = (leader_agent.action(leader_obs, last_leader_sample, CONF, logger, task), tom_agent.sub_acting(tom_obs, logger, act_try, last_leader_sample, CONF))
 		else:
 			act_try = 0
 			actions = (leader_agent.action(leader_obs, last_leader_sample, CONF, logger, task), tom_agent.action(tom_obs, last_leader_sample, CONF, logger))

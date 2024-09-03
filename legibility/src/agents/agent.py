@@ -65,14 +65,14 @@ class Agent(object):
 		q = jax.device_get(self._goal_models[task_id].q_network.apply(self._goal_models[task_id].online_state.params, obs)[0])
 		pol = jnp.isclose(q, q.max(), rtol=1e-10, atol=1e-10).astype(int)
 		pol = pol / pol.sum()
-		print(self._agent_id, task_id, q, q - q.max(), pol)
+		# print(self._agent_id, task_id, q, q - q.max(), pol)
 		
 		self._rng_key, subkey = jax.random.split(self._rng_key)
 		return int(jax.random.choice(subkey, len(q), p=pol))
 	
 	def action(self, obs: jnp.ndarray, sample: Tuple[jnp.ndarray, int], conf: float, logger: Logger, task: str = '') -> int:
 		action = self.get_actions(task, obs)
-		print(self._agent_id, task, action)
+		# print(self._agent_id, task, action)
 		return action
 	
 	def sub_acting(self, obs: jnp.ndarray, logger: Logger, act_try: int, sample: Tuple[jnp.ndarray, int], conf: float, task: str = '') -> int:

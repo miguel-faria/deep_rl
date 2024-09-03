@@ -11,7 +11,7 @@ from gymnasium.spaces import Box, Space, MultiBinary
 
 
 MOVE_REWARD = 0.000
-REWARD_PICK = 1.0
+REWARD_PICK = 5.0
 ADJ_FOOD_REWARD = 0.002
 WRONG_PICK = 0.0
 RNG_SEED = 27062023

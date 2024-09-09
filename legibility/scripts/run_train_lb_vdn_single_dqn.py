@@ -119,7 +119,7 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f "
 			"--player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d "
 			% (N_AGENTS, ARQUITECTURE, buffer_size, GAMMA,                                                                                                      # DQN parameters
-			   iterations, MAX_CYCLES, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, INIT_EPS, FINAL_EPS, EPS_DECAY, EPS_TYPE, warmup, cycle_eps,  # Train parameters
+			   iterations, MAX_CYCLES, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, INIT_EPS, FINAL_EPS, eps_decay, eps_type, warmup, cycle_eps,  # Train parameters
 			   PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS)) 														                    # Environment parameters
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") +

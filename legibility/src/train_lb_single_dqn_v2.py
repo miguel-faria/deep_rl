@@ -54,7 +54,7 @@ def eps_cycle_schedule(cycle_nr: int, max_cycles: int, init_eps: float, final_ep
 		return max(((final_eps - init_eps) / max_cycles) * cycle_nr / decay_rate + init_eps, final_eps)
 	else:
 		return max(init_eps - decay_rate ** ((max_cycles - 1) / cycle_nr), final_eps)
-	
+
 
 def cycle_foods_spawn(max_foods_spawn: int, cycle: int, rng_gen: np.random.Generator) -> int:
 	if cycle < 2:
@@ -78,23 +78,23 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
                    exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tracker_frequency: int = 1, use_render: bool = False,
                    greedy_action: bool = True, epoch_logging: bool = False, initial_model_path: str = '', use_tracker: bool = False, performance_tracker: Optional[Run] = None,
                    tracker_panel: str = '', debug: bool = False) -> None:
-
+	
 	rng_gen = np.random.default_rng(rng_seed)
-
+	
 	# Setup DQNs for training
 	env.spawn_players([env.max_player_level] * env.n_players)
 	env.spawn_food(n_foods_spawn, env.max_food_level)
 	obs, *_ = env.reset()
 	if not dqn_model.agent_dqn.dqn_initialized:
 		dqn_model.initialize_network(cnn_shape, logger, obs, online_lr, rng_seed, initial_model_path)
-
+	
 	start_time = time.time()
 	epoch = 0
 	sys.stdout.flush()
 	start_record_it = 0
 	start_record_epoch = 0
 	avg_episode_len = []
-
+	
 	for it in range(num_iterations):
 		if use_render:
 			env.render()
@@ -109,13 +109,13 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 		logger.info('Food locations: ' + ', '.join(['(%d, %d)' % pos for pos in ([env.obj_food] + env.food_spawn_pos if n_foods_spawn < env.max_foods else env.food_pos)]))
 		logger.info('Food objective: (%d, %d)' % env.obj_food)
 		while not done:
-
+			
 			# interact with environment
 			if eps_type == 'epoch':
 				eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, epoch, max_timesteps)
 			else:
 				eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
-
+			
 			explore = rng_gen.random() < eps
 			if explore:  # Exploration
 				actions = np.array(env.action_space.sample())
@@ -127,33 +127,33 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 						q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.agent_dqn.online_state.params, cnn_obs)[0]
 					else:
 						q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.agent_dqn.online_state.params, obs[a_idx])
-
+					
 					if greedy_action:
 						action = q_values.argmax()
 					else:
 						pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
 						pol = pol / pol.sum()
 						action = rng_gen.choice(range(env.action_space[0].n), p=pol)
-
+					
 					episode_q_vals += (float(q_values[int(action)]) / dqn_model.num_agents)
 					actions += [action]
 				actions = np.array(actions)
-
+			
 			if debug:
 				logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]) + ' Explored? %r' % explore + '\n')
-
+			
 			next_obs, rewards, terminated, timeout, infos = env.step(actions)
 			if use_render:
 				env.render()
-
+			
 			if len(rewards) == 1:
 				rewards = np.array([rewards] * dqn_model.num_agents)
-
+			
 			if terminated:
 				finished = np.ones(dqn_model.num_agents)
 			else:
 				finished = np.zeros(dqn_model.num_agents)
-
+			
 			# store new samples
 			if dqn_model.use_vdn:
 				dqn_model.replay_buffer.add(obs, next_obs, actions, rewards, finished[0], infos)
@@ -165,7 +165,7 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 			if use_tracker and epoch_logging:
 				performance_tracker.log({tracker_panel + "-charts/performance/reward": sum(rewards)}, step=(epoch + start_record_epoch))
 			obs = next_obs
-
+			
 			# update Q-network and target network
 			if epoch >= warmup:
 				if epoch % train_freq == 0:
@@ -174,13 +174,13 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 						performance_tracker.log({tracker_panel + "-charts/losses/td_loss": loss}, step=epoch)
 					else:
 						avg_loss += [loss]
-
+				
 				if epoch % target_freq == 0:
 					dqn_model.agent_dqn.update_target_model(target_lr)
-
+			
 			epoch += 1
 			sys.stdout.flush()
-
+			
 			# Check if iteration is over
 			if terminated or timeout:
 				episode_len = epoch - episode_start
@@ -224,8 +224,8 @@ def main():
 	parser.add_argument('--cnn', dest='use_cnn', action='store_true', help='Flag that signals the use of a CNN as entry for the DQN architecture')
 	parser.add_argument('--dueling', dest='dueling_dqn', action='store_true', help='Flag that signals the use of a Dueling DQN architecture')
 	parser.add_argument('--tensorboard', dest='use_tensorboard', action='store_true',
-						help='Flag the signals the use of a tensorboard summary writer. Expects argument --tensorboardDetails to be present')
-
+	                    help='Flag the signals the use of a tensorboard summary writer. Expects argument --tensorboardDetails to be present')
+	
 	# Train parameters
 	parser.add_argument('--max-cycles', dest='max_cycles', type=int, required=True, help='Max number of training cycles.')
 	parser.add_argument('--iterations', dest='n_iterations', type=int, required=True, help='Number of iterations to run training')
@@ -239,35 +239,35 @@ def main():
 	parser.add_argument('--eps-decay', dest='eps_decay', type=float, required=False, default=0.5, help='Decay rate for the exploration update')
 	parser.add_argument('--cycle-eps-decay', dest='cycle_eps_decay', type=float, required=False, default=0.95, help='Decay rate for the exploration update')
 	parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, default='log', choices=['linear', 'exp', 'log', 'epoch'],
-						help='Type of exploration rate update to use: linear, exponential (exp), logarithmic (log), epoch based (epoch)')
+	                    help='Type of exploration rate update to use: linear, exponential (exp), logarithmic (log), epoch based (epoch)')
 	parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False, default='log', choices=['linear', 'log'],
-						help='Type of cycle eps update to use: linear, logarithmic (log)')
+	                    help='Type of cycle eps update to use: linear, logarithmic (log)')
 	parser.add_argument('--warmup-steps', dest='warmup', type=int, required=False, default=10000, help='Number of epochs to pass before training starts')
 	parser.add_argument('--tensorboard-freq', dest='tensorboard_freq', type=int, required=False, default=1,
-						help='Number of epochs between each log in tensorboard. Use only in combination with --tensorboard option')
+	                    help='Number of epochs between each log in tensorboard. Use only in combination with --tensorboard option')
 	parser.add_argument('--restart', dest='restart_train', action='store_true',
-						help='Flag that signals that train is suppose to restart from a previously saved point.')
+	                    help='Flag that signals that train is suppose to restart from a previously saved point.')
 	parser.add_argument('--restart-info', dest='restart_info', type=str, nargs='+', required=False, default=None,
-						help='List with the info required to recover previously saved model and restart from same point: '
-							 '<model_dirname: str> <model_filename: str> <last_cycle: int> Use only in combination with --restart option')
+	                    help='List with the info required to recover previously saved model and restart from same point: '
+	                         '<model_dirname: str> <model_filename: str> <last_cycle: int> Use only in combination with --restart option')
 	parser.add_argument('--debug', dest='debug', action='store_true', help='Flag signalling debug mode for model training')
 	parser.add_argument('--fraction', dest='fraction', type=str, default='0.5', help='Fraction of JAX memory pre-compilation')
 	parser.add_argument('--epoch-logging', dest='ep_log', action='store_true', help='')
 	parser.add_argument('--train-tags', dest='tags', type=str, nargs='+', required=False, default=None,
-						help='List of tags for grouping in weights and biases, empty by default signaling not to train under a specific set of tags')
+	                    help='List of tags for grouping in weights and biases, empty by default signaling not to train under a specific set of tags')
 	parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
 	parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
-						help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
+	                    help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
 	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 	parser.add_argument('--tracker-dir', dest='tracker_dir', type=str, default='', help='Path to the directory to store the tracker data')
 	parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
-						help='Flag that signals using curriculum learning using a model with one less food item spawned (when using with only 1 item, defaults to false).')
+	                    help='Flag that signals using curriculum learning using a model with one less food item spawned (when using with only 1 item, defaults to false).')
 	parser.add_argument('--use-higher-model', dest='use_higher_model', action='store_true',
-						help='Flag that signals using curriculum learning using a model with one more food item spawned (when using with only all items, defaults to false).')
+	                    help='Flag that signals using curriculum learning using a model with one more food item spawned (when using with only all items, defaults to false).')
 	parser.add_argument('--buffer-smart-add', dest='buffer_smart_add', action='store_true',
-						help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
+	                    help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
 	parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=False, default='uniform', choices=['uniform', 'weighted'],
-						help='Method of deciding how to add new experience samples when replay buffer is full')
+	                    help='Method of deciding how to add new experience samples when replay buffer is full')
 	
 	# Environment parameters
 	parser.add_argument('--player-level', dest='player_level', type=int, required=True, help='Level of the agents collecting food')
@@ -345,7 +345,7 @@ def main():
 	else:
 		logging.error('[ARGS ERROR] Field size must either be composed of only 1 or 2 arguments; %d were given. Exiting program' % field_dims)
 		return
-
+	
 	now = datetime.now()
 	home_dir = Path(__file__).parent.absolute().parent.absolute()
 	log_dir = Path(args.logs_dir) if args.logs_dir != '' else home_dir / 'logs'
@@ -354,13 +354,13 @@ def main():
 	if tracker_dir == '':
 		tracker_dir = log_dir
 	log_filename = (('train_lb_coop_single_v2_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents,
-																								 n_foods_spawn, food_level)) +
-					'_' + now.strftime("%Y%m%d-%H%M%S"))
+	                                                                                               n_foods_spawn, food_level)) +
+	                '_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / ('lb_coop_single%s_dqn' % ('_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
-				  ('%d-agents' % n_agents) / ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / now.strftime("%Y%m%d-%H%M%S"))
+	              ('%d-agents' % n_agents) / ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / now.strftime("%Y%m%d-%H%M%S"))
 	
 	with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
-			  mode='r+', encoding='utf-8') as train_file:
+	          mode='r+', encoding='utf-8') as train_file:
 		train_performances = yaml.safe_load(train_file)
 		field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 		food_idx = str(n_foods_spawn) + '-food'
@@ -396,7 +396,7 @@ def main():
 			logging.root.removeHandler(handler)
 	
 	logging.basicConfig(filename=(log_dir / (log_filename + '_log.txt')), filemode='w', format='%(name)s %(asctime)s %(levelname)s:\t%(message)s',
-						level=logging.INFO)
+	                    level=logging.INFO)
 	logger = logging.getLogger('INFO')
 	err_logger = logging.getLogger('ERROR')
 	handler = logging.StreamHandler(sys.stderr)
@@ -417,33 +417,34 @@ def main():
 	if len(locs_train) > 0:
 		try:
 			wandb_run = wandb.init(project='lb-foraging-optimal', entity='miguel-faria',
-								   config={
-										   "field": "%dx%d" % (field_size[0], field_size[1]),
-										   "agents": n_agents,
-										   "foods": n_foods,
-										   "online_learing_rate": online_lr,
-										   "target_learning_rate": target_lr,
-										   "discount": gamma,
-										   "eps_decay": eps_type,
-										   "eps_rate": eps_decay,
-										   "dqn_architecture": architecture,
-										   "iterations": n_iterations,
-										   "cycles": 1,
-										   "buffer_size": buffer_size,
-										   "buffer_add": "smart" if args.buffer_smart_add else "plain",
-										   "buffer_add_method": args.buffer_method if args.buffer_smart_add else "fifo",
-										   "batch_size": batch_size
-								   },
-								   dir=tracker_dir,
-								   name=('%ssingle_v2-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
-										 now.strftime("%Y%m%d-%H%M%S")),
-								   sync_tensorboard=True)
+			                       config={
+					                       "field": "%dx%d" % (field_size[0], field_size[1]),
+					                       "agents": n_agents,
+					                       "foods": n_foods,
+					                       "online_learing_rate": online_lr,
+					                       "target_learning_rate": target_lr,
+					                       "discount": gamma,
+					                       "eps_decay": eps_type,
+					                       "eps_rate": eps_decay,
+					                       "dqn_architecture": architecture,
+					                       "iterations": n_iterations,
+					                       "cycles": 1,
+					                       "buffer_size": buffer_size,
+					                       "buffer_add": "smart" if args.buffer_smart_add else "plain",
+					                       "buffer_add_method": args.buffer_method if args.buffer_smart_add else "fifo",
+					                       "batch_size": batch_size,
+					                       "curriculum_learning": 'no' if not (use_higher_model or use_higher_model) else ('lower_model' if use_lower_model else 'higher_model')
+			                       },
+			                       dir=tracker_dir,
+			                       name=('%ssingle_v2-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
+			                             now.strftime("%Y%m%d-%H%M%S")),
+			                       sync_tensorboard=True)
 			logger.info('Starting training for different food locations')
 			for loc in locs_train:
 				logger.info('Training for location: %d, %d' % (loc[0], loc[1]))
 				logger.info('Environment setup')
 				env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs,
-										 use_encoding=True, agent_center=True, grid_observation=use_cnn)
+				                         use_encoding=True, agent_center=True, grid_observation=use_cnn)
 				env.seed(RNG_SEED)
 				env.set_objective(loc)
 				logger.info('Setup multi-agent DQN')
@@ -455,16 +456,16 @@ def main():
 				if use_vdn:
 					action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
 					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space, env.observation_space, use_gpu,
-												   dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
-												   buffer_data=(args.buffer_smart_add, args.buffer_method))
+					                               dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
+					                               buffer_data=(args.buffer_smart_add, args.buffer_method))
 				else:
 					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space, obs_space, use_gpu,
-												   dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
-												   buffer_data=(args.buffer_smart_add, args.buffer_method))
+					                               dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
+					                               buffer_data=(args.buffer_smart_add, args.buffer_method))
 				if restart_train:
 					logger.info('Load trained model')
 					agent_madqn.load_model(restart_info[1], model_path.parent.absolute() / restart_info[0], logger,
-										   env.observation_space[0].shape if not use_cnn else (1, *env.observation_space[0].shape))
+					                       env.observation_space[0].shape if not use_cnn else (1, *env.observation_space[0].shape))
 				else:
 					logger.info('Starting train')
 				
@@ -477,9 +478,9 @@ def main():
 						logger.info('Model with one less food item not found, training from scratch')
 						curriculum_model_path = ''
 				elif use_higher_model and n_foods_spawn < n_foods:
-					next_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (max(n_foods_spawn + 1, n_foods), food_level)) / 'best'
+					next_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (min(n_foods_spawn + 1, n_foods), food_level)) / 'best'
 					if (next_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
-						logger.info('Using model trained with %d foods spawned as a baseline' % (max(n_foods_spawn + 1, n_foods)))
+						logger.info('Using model trained with %d foods spawned as a baseline' % (min(n_foods_spawn + 1, n_foods)))
 						curriculum_model_path = str(next_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
 					else:
 						logger.info('Model with one more food item not found, training from scratch')
@@ -495,7 +496,7 @@ def main():
 				train_lb_model(env, agent_madqn, n_iterations, max_steps * n_iterations, n_foods_spawn, batch_size, online_lr, target_lr, initial_eps, final_eps, eps_type,
 				               RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tracker_frq, use_render, greedy_actions, args.ep_log,
 				               curriculum_model_path, use_tracker, wandb_run, tracker_panel, debug)
-
+				
 				env.close()
 				logger.info('Saving final model')
 				agent_madqn.save_model(('food_%dx%d' % (loc[0], loc[1])), model_path, logger)
@@ -505,7 +506,7 @@ def main():
 				####################
 				logger.info('Testing for location: %dx%d' % (loc[0], loc[1]))
 				env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, TEST_RNG_SEED, food_locs,
-										 use_encoding=True, agent_center=True, grid_observation=use_cnn)
+				                         use_encoding=True, agent_center=True, grid_observation=use_cnn)
 				if isinstance(env.observation_space, MultiBinary):
 					obs_space = MultiBinary([*env.observation_space.shape[1:]])
 				else:
@@ -570,7 +571,7 @@ def main():
 				
 				env.close()
 				logger.info('Passed %d tests out of %d for location %dx%d' % (tests_passed, N_TESTS, loc[0], loc[1]))
-
+				
 				if (tests_passed / N_TESTS) > train_acc['%s, %s' % (loc[0], loc[1])]:
 					logger.info('Updating best model for current loc')
 					Path.mkdir(model_path.parent.absolute() / 'best', parents=True, exist_ok=True)
@@ -579,37 +580,37 @@ def main():
 				
 				agent_madqn = None
 				gc.collect()
-		
+			
 			logger.info('Updating best training performances record')
 			wandb.finish()
 			with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
-					  mode='r+', encoding='utf-8') as train_file:
+			          mode='r+', encoding='utf-8') as train_file:
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 				food_idx = str(n_foods_spawn) + '-food'
 				performance_data[field_idx][food_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(
-					[[sorted_key, performance_data[sorted_key]] for sorted_key in
-					 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+						[[sorted_key, performance_data[sorted_key]] for sorted_key in
+						 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
 				yaml.safe_dump(sorted_data, train_file)
-				
+		
 		
 		except KeyboardInterrupt as ks:
 			logger.info('Caught keyboard interrupt, cleaning up and closing.')
 			wandb.finish()
 			with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
-					  mode='r+', encoding='utf-8') as train_file:
+			          mode='r+', encoding='utf-8') as train_file:
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 				food_idx = str(n_foods) + '-food'
 				performance_data[field_idx][food_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(
-					[[sorted_key, performance_data[sorted_key]] for sorted_key in
-					 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+						[[sorted_key, performance_data[sorted_key]] for sorted_key in
+						 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
 				yaml.safe_dump(sorted_data, train_file)
-	
+
 
 if __name__ == '__main__':
 	main()

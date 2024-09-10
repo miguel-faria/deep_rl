@@ -1,29 +1,59 @@
 #! /usr/bin/env python
+import re
 
-
-from transformers.models.auto import AutoModel, AutoTokenizer
+from transformers import PreTrainedModel, PreTrainedTokenizer
 from typing import Dict, List
 
 
-class TeacherModel:
+class Model:
 	
-	def __init__(self, teacher_model: AutoModel, tokenizer: AutoTokenizer, task: str, max_tokens: int, num_beams: int, samples: List[Dict]):
+	def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, model_name: str, expl_type: str, task: str, max_tokens: int, num_beams: int, samples: List[Dict]):
 		
-		self._teacher_model = teacher_model
+		self._model = model
 		self._tokenizer = tokenizer
 		self._task = task
+		self._model_name = model_name
+		self._expl_type = expl_type
 		self._max_tokens = max_tokens
 		self._num_beams = num_beams
 		self._ic_samples = samples
 	
 	@property
-	def teacher_model(self):
-		return self._teacher_model
+	def model(self) -> PreTrainedModel:
+		return self._model
 	
 	@property
-	def tokenizer(self):
+	def tokenizer(self) -> PreTrainedTokenizer:
 		return self._tokenizer
-	
+
+	@property
+	def expl_type(self) -> str:
+		return self._expl_type
+
+	def rational_context(self, test_sample: Dict) -> str:
+		context = ''
+		if self._task == "strategy_qa":
+			context += "\n\n".join(["Q: %s\nA: %r because %s" % (sample['question'], sample['answer'], sample['explanation']) for sample in self._ic_samples])
+			context += f"\n\nQ: {test_sample['question']}\nA:"
+
+		elif self._task == "ec_qa":
+			context = "\n\n".join(
+					["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: %s because %s" %
+					 (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
+					  sample['options'][4], sample['answer'], sample['explanation'])
+					 for sample in self._ic_samples])
+			context += ("\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA:" %
+			            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
+			            test_sample['options'][3], test_sample['options'][4]))
+
+		elif self._task == "gsm8k":
+			context += "\n\n".join(["Q: %s\nA: %s because %s" % (sample['question'], sample['answer'], sample['explanation']) for sample in self._ic_samples])
+			context += f"\n\nQ: {test_sample['question']}\nA:"
+
+		else:
+			assert False, "Dataset not recognized"
+		return context
+
 	def cot_context(self, test_sample: Dict) -> str:
 		context = ''
 		if self._task == 'strategy_qa':
@@ -35,13 +65,12 @@ class TeacherModel:
 					['Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\n Choice 3: %s\nChoice 4: %s\n Choice 5:%s\nA: %s So the correct choice is %s' %
 					 (ics['question'], ics['options'][0], ics['options'][1], ics['options'][2], ics['options'][3], ics['options'][4], ics['explanation'], ics['answer'])
 					 for ics in self._ic_samples])
-			context = (context + '\n\nQ: %s\nAnswer Choices:\n Choice 1: %s\nChoice 2: %s\n Choice 3: %s\nChoice 4: %s\n Choice 5: %s\nA:' %
-			           (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3], test_sample['options'][4]))
+			context += ('\n\nQ: %s\nAnswer Choices:\n Choice 1: %s\nChoice 2: %s\n Choice 3: %s\nChoice 4: %s\n Choice 5: %s\nA:' %
+			            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
+			            test_sample['options'][3], test_sample['options'][4]))
 		
 		elif self._task == 'gsm8k':
-			context += "\n\n".join([
-					"Q: %s\nA: %s So the answer is %s" % (in_context_sample['question'], in_context_sample['explanation'], in_context_sample['answer'])
-					for in_context_sample in self._ic_samples])
+			context += "\n\n".join(["Q: %s\nA: %s So the answer is %s" % (sample['question'], sample['explanation'], sample['answer']) for sample in self._ic_samples])
 			context += f"\n\nQ: {test_sample['question']}\nA:"
 		
 		else:
@@ -52,85 +81,81 @@ class TeacherModel:
 	def explanation_context(self, test_sample, explanation) -> str:
 		context = ''
 		if self._task == "strategy_qa":
-			context += "\n\n".join(
-					[f"Q: %s\nA: %s So the answer is %s" % (in_context_sample['question'], in_context_sample['explanation'], in_context_sample['answer'])
-					for in_context_sample in self._ic_samples])
+			context += "\n\n".join(["Q: %s\nA: %s So the answer is %r" % (sample['question'], sample['explanation'], sample['answer']) for sample in self._ic_samples])
 			context += f"\n\nQ: %s\nA: %s So the answer is" % (test_sample['question'], explanation)
 		
 		elif self._task == "ec_qa":
 			context += "\n\n".join(
 					["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: %s So the correct choice is %s" %
-					 (in_context_sample['question'], in_context_sample['options'][0], in_context_sample['options'][1], in_context_sample['options'][2], in_context_sample['options'][3],
-					  in_context_sample['options'][4], in_context_sample['explanation'], in_context_sample['answer'])
-					 for in_context_sample in self._ic_samples])
-			context += (context + "\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: %s So the correct choice is" %
+					 (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
+					  sample['options'][4], sample['explanation'], sample['answer'])
+					 for sample in self._ic_samples])
+			context += ("\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: %s So the correct choice is" %
 			            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
 			             test_sample['options'][3], test_sample['options'][4], explanation))
 		
 		elif self._task == 'gsm8k':
-			context += "\n\n".join([
-					"Q: %s\nA: %s So the answer is %s" % (in_context_sample['question'], in_context_sample['explanation'], in_context_sample['answer'])
-					for in_context_sample in self._ic_samples])
+			context += "\n\n".join(["Q: %s\nA: %s So the answer is %s" % (sample['question'], sample['explanation'], sample['answer']) for sample in self._ic_samples])
 			context += "\n\nQ: %s\nA: %s So the answer is" % (test_sample['question'], explanation)
 		
 		else:
 			assert False, "Dataset not recognized"
 		return context
 	
-	def predict_single(self, test_sample):
-		if self.model_name == "human":
-			return None, test_sample["gold_explanation"]
+	def predict(self, test_sample):
+		if self._expl_type == "human":
+			return None, test_sample["explanation"]
 		else:
-			if self.expl_type == "blind_teacher_rationalize":
-				context = self.prepare_context_rational(test_sample=test_sample)
-			elif self.expl_type == "blind_teacher_CoT" or self.expl_type == "useful_teacher":
-				context = self.prepare_context_CoT(test_sample=test_sample)
+			if self.expl_type == "rationalize":
+				context = self.rational_context(test_sample=test_sample)
+			elif self.expl_type == "cot" or self.expl_type == "useful_teacher":
+				context = self.cot_context(test_sample=test_sample)
 			else:
 				assert False, "ToM type not supported"
 			tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-			generated = self.model.generate(**tokens, num_beams=self.num_beams, max_new_tokens=self.max_new_tokens)
+			generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 			output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
 		
-		if "llama" in self.model_name:
+		if "llama" in self._model_name:
 			output = output[len(context):]
 		output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
 		
 		if "The correct choice is " in output:
 			output = output[len("The correct choice is "):].strip()
 		
-		if self.expl_type == "blind_teacher_rationalize":
-			if self.dataset == "ecqa":
+		if self.expl_type == "rationalize":
+			if self._task == "ec_qa":
 				if output not in ["1", "2", "3", "4", "5"]:
 					for i, choice in enumerate(test_sample["options"]):
 						if choice in output:
 							output = str(i + 1)
 							break
 			prediction = output.split(" ")[0]
-			print(f'Teacher Prediction = {prediction}')
+			print('%s prediction = %s' % (self._model_name, prediction))
 			explanation = " ".join(output.split(" ")[2:])
-			print(f'Teacher Explanation = {explanation}')
+			print('%s explanation = %s' % (self._model_name, explanation))
 		else:
 			explanation = output[:output.rfind(".") + 1]
-			print(f'Teacher Explanation = {explanation}')
+			print('%s explanation = %s' % (self._model_name, explanation))
 			prediction = output.split(" ")[-1]
-			if self.dataset == "ecqa":
+			if self._task == "ec_qa":
 				if prediction not in ["1", "2", "3", "4", "5"]:
 					for i, choice in enumerate(test_sample["options"]):
 						if choice in output:
 							prediction = str(i + 1)
 							break
-			elif self.dataset == "strategyQA":
+			elif self._task == "strategy_qa":
 				if prediction not in ["no", "yes"]:
 					print("Regenerating with the explanation")
-					context = self.prepare_context_own_explanation(test_sample, explanation)
+					context = self.explanation_context(test_sample, explanation)
 					tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-					generated = self.model.generate(**tokens, num_beams=self.num_beams, max_new_tokens=self.max_new_tokens)
+					generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 					output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
 					output = output[len(context):] if context in output else output
 					output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
 					prediction = output.split(" ")[0]
-				print(f'Teacher Prediction = {prediction}')
-			elif self.dataset == "gsm8k":
+				print('%s Prediction = %s' % (self._model_name, prediction))
+			elif self._task == "gsm8k":
 				prediction = re.sub(r"[^0-9.]", "", prediction)
 				if prediction == "" or prediction == ".":
 					for word in reversed(explanation.split(" ")):

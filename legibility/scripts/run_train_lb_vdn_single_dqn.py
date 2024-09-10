@@ -79,6 +79,7 @@ parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
 					help='Directory to store trained models and load optimal models, if left blank stored in default location')
 parser.add_argument('--online-lr', dest='online_lr', type=float, default=ONLINE_LR, help='Learning rate for the online model.')
 parser.add_argument('--target-lr', dest='target_lr', type=float, default=TARGET_LR, help='Learning rate for the target model.')
+parser.add_argument('--train-thresh', dest='train_thresh', type=float, required=False, default=None, help='Minimum performance threshold to skip model training.')
 parser.add_argument('--use-lower-curriculum', dest='use_lower_model', action='store_true',
 					help='Flag that signals the use of curriculum learning with a model with one less food item spawned.')
 parser.add_argument('--use-higher-curriculum', dest='use_higher_model', action='store_true',
@@ -107,6 +108,7 @@ online_lr = input_args.online_lr
 smart_add = input_args.buffer_smart_add
 target_lr = input_args.target_lr
 tracker_logs = input_args.logs
+train_thresh = input_args.train_thresh
 train_version = input_args.version
 use_lower_model = input_args.use_lower_model
 use_higher_model = input_args.use_higher_model
@@ -127,7 +129,8 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 			 (" --debug" if DEBUG else "") + (" --vdn" if USE_VDN else "") + (" --fraction %f" % PRECOMP_FRAC) + (" --cycle-type %s" % cycle_type) +
 			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --data-dir %s" % data_dir if data_dir != '' else "") +
 			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") + (" --use-higher-model" if use_higher_model else "") +
-			 (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else "") + (" --tracker-dir %s" % tracker_logs if tracker_logs != '' else ""))
+			 (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else "") + (" --tracker-dir %s" % tracker_logs if tracker_logs != '' else "") +
+			 (" --train-performance %f" % train_thresh if train_thresh is not None else ""))
 	commamd = "python " + str(src_dir / ('train_lb_single_dqn%s.py' % ('_' + train_version if train_version != 'v1' else ''))) + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)

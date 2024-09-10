@@ -29,6 +29,7 @@ from wandb.wandb_run import Run
 RNG_SEED = 13042023
 TEST_RNG_SEED = 4072023
 N_TESTS = 100
+MIN_TRAIN_PERFORMANCE = 0.9
 
 
 def input_callback(env: FoodCOOPLBForaging, stop_flag: bool):
@@ -227,6 +228,7 @@ def main():
 	                    help='Flag the signals the use of a tensorboard summary writer. Expects argument --tensorboardDetails to be present')
 	
 	# Train parameters
+	parser.add_argument('--train-performance', dest='min_train_performance', type=float, default=MIN_TRAIN_PERFORMANCE, help='Minimum performance threshold to skip model train')
 	parser.add_argument('--max-cycles', dest='max_cycles', type=int, required=True, help='Max number of training cycles.')
 	parser.add_argument('--iterations', dest='n_iterations', type=int, required=True, help='Number of iterations to run training')
 	parser.add_argument('--batch', dest='batch_size', type=int, required=True, help='Number of samples in each training batch')
@@ -293,6 +295,7 @@ def main():
 	tracker_dir = args.tracker_dir
 	
 	# Train args
+	train_thresh = args.min_train_performance
 	max_cycles = args.max_cycles
 	n_iterations = args.n_iterations
 	batch_size = args.batch_size
@@ -377,7 +380,7 @@ def main():
 		locs_train = []
 		for loc in food_locs:
 			key = '%s, %s' % (loc[0], loc[1])
-			if key not in trained_keys or (key in trained_keys and train_acc[key] < 0.9):
+			if key not in trained_keys or (key in trained_keys and train_acc[key] < train_thresh):
 				locs_train += [loc]
 	
 	with open(data_dir / 'configs' / 'q_network_architectures.yaml') as architecture_file:

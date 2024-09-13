@@ -33,7 +33,7 @@ class StudentModel(Model):
 			raise UnidentifiedTaskError("Task %s not defined for teacher explanation context" % self._task)
 		
 		return context
-
+	
 	def get_context(self, test_sample: Dict, explanation: Union[List, str] = None, intervene: bool = False):
 		if not self._use_explanations:
 			return self.no_explanation_context(test_sample)
@@ -48,7 +48,7 @@ class StudentModel(Model):
 				self.rational_context(test_sample)
 			else:
 				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._expl_type)
-
+	
 	def predict_confidence(self, test_sample: Dict, with_expl: bool = False, expl: Union[List, str] = None) -> List[float]:
 		context = self.get_context(test_sample, explanation=expl)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
@@ -59,7 +59,7 @@ class StudentModel(Model):
 		if self._task == "strategy_qa":
 			yes_id, no_id = self.tokenizer.encode("yes")[idx], self.tokenizer.encode("no")[idx]
 			answer_id = 0
-
+			
 			if with_expl and not expl:
 				if "llama" in self._model_name:
 					end_id = self.tokenizer.encode("\n")[2]
@@ -74,13 +74,13 @@ class StudentModel(Model):
 				
 				if yes_id in generated_tokens or no_id in generated_tokens:
 					answer_id = generated_tokens.index(yes_id) if yes_id in generated_tokens else generated_tokens.index(no_id)
-
+			
 			scores = softmax(generated['scores'][answer_id], dim=-1)
 			yes_score, no_score = scores[0][yes_id].item(), scores[0][no_id].item()
 			print('Yes score = %s' % yes_score)
 			print('No score = %s' % no_score)
 			class_scores = [yes_score, no_score]
-
+		
 		elif self._task == "ec_qa":
 			option1_id, option2_id, option3_id, option4_id, option5_id = (self.tokenizer.encode("1")[idx], self.tokenizer.encode("2")[idx], self.tokenizer.encode("3")[idx],
 			                                                              self.tokenizer.encode("4")[idx], self.tokenizer.encode("5")[idx])
@@ -143,7 +143,7 @@ class StudentModel(Model):
 			print('Option4 score = %s' % option4_score)
 			print('Option5 score = %s' % option5_score)
 			class_scores = [option1_score, option2_score, option3_score, option4_score, option5_score]
-
+		
 		else:
 			raise UnidentifiedTaskError('Task %s not defined' % self._task)
 		
@@ -162,7 +162,7 @@ class StudentModel(Model):
 		if self._task == "ec_qa" and "The correct choice is " in output:
 			output = output[len("The correct choice is "):].strip()
 		
-		if not self._use_explanations or self.no_intervention_action != "CoT":
+		if not self._use_explanations or self._expl_type != "CoT":
 			if self._task == "ec_qa":
 				if output not in ["1", "2", "3", "4", "5"]:
 					for i, choice in enumerate(test_sample["options"]):
@@ -206,24 +206,18 @@ class StudentModel(Model):
 		
 		return prediction, explanation
 	
-	def predict_batch(self, test_samples: List[Dict], intervention_samples_per_budget: Dict[int, Union[List, str]]) -> Tuple[List, List]:
-		predictions_per_budget = [[] for _ in range(len(intervention_samples_per_budget))]
-		explanations_per_budget = [[] for _ in range(len(intervention_samples_per_budget))]
+	def predict_batch(self, test_samples: List[Dict], intervention_indexes_per_budget: Dict[int, Union[List, str]], teacher: Model) -> Tuple[List, List]:
+		predictions_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]
+		explanations_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]
 		
 		for test_index, test_sample in enumerate(test_samples):
-			print("Using student explanation")
-			prediction_student_expl, explanation_student = self.predict(test_sample=test_sample, tm=tm, intervene=False)
-			
-			print("Using teacher explanation")
-			# This is not actually explanation teacher, but don't care for final student evaluation
-			prediction_teacher_expl, explanation_teacher = self.predict(test_sample=test_sample, tm=tm, intervene=True)
-			
-			for i, intervention_samples in enumerate(intervention_samples_per_budget):
-				if test_index in intervention_samples:
-					predictions_per_budget[i].append(prediction_teacher_expl)
-					explanations_per_budget[i].append(explanation_teacher)
+			for i, intervention_indexes in enumerate(intervention_indexes_per_budget):
+				if test_index in intervention_indexes:
+					_, explanation = teacher.predict(test_sample=test_sample)
+					prediction_student, explanation_student = self.predict(test_sample=test_sample, expl=explanation, intervene=True)
 				else:
-					predictions_per_budget[i].append(prediction_student_expl)
-					explanations_per_budget[i].append(explanation_student)
-			
+					prediction_student, explanation_student = self.predict(test_sample=test_sample, expl='', intervene=False)
+				predictions_per_budget[i].append(prediction_student)
+				explanations_per_budget[i].append(explanation_student)
+		
 		return predictions_per_budget, explanations_per_budget

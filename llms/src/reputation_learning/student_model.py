@@ -49,8 +49,8 @@ class StudentModel(Model):
 			else:
 				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._expl_type)
 	
-	def predict_confidence(self, test_sample: Dict, with_expl: bool = False, expl: Union[List, str] = None) -> List[float]:
-		context = self.get_context(test_sample, explanation=expl)
+	def predict_confidence(self, test_sample: Dict, with_explanation: bool = False, explanation: Union[List, str] = None) -> List[float]:
+		context = self.get_context(test_sample, explanation=explanation)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 		generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
 		output = self.tokenizer.batch_decode(generated[0], skip_special_tokens=True)[0].strip()
@@ -60,7 +60,7 @@ class StudentModel(Model):
 			yes_id, no_id = self.tokenizer.encode("yes")[idx], self.tokenizer.encode("no")[idx]
 			answer_id = 0
 			
-			if with_expl and not expl:
+			if with_explanation and not explanation:
 				if "llama" in self._model_name:
 					end_id = self.tokenizer.encode("\n")[2]
 					answer_id = len(tokens["input_ids"][0])
@@ -91,7 +91,7 @@ class StudentModel(Model):
 			                                                                                       self.tokenizer.encode(test_sample["options"][4].split(" ")[0])[idx])
 			
 			found_text = False
-			if with_expl and not expl:
+			if with_explanation and not explanation:
 				if "llama" in self._model_name:
 					end_id = self.tokenizer.encode("\n")[2]
 					answer_id = len(tokens["input_ids"][0])

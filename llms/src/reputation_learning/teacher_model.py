@@ -4,9 +4,16 @@ import re
 from torch.nn.functional import softmax
 from typing import Dict, List, Tuple
 from model import Model, UnidentifiedTaskError
+from student_model import StudentModel
+from transformers import PreTrainedModel, PreTrainedTokenizer
 
 
 class TeacherModel(Model):
+
+	def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, model_name: str, expl_type: str, task: str, max_tokens: int, num_beams: int, samples: List[Dict],
+	             use_explanations: bool):
+
+		super().__init__(model, tokenizer, model_name, expl_type, task, max_tokens, num_beams, samples, use_explanations)
 
 	def predict_confidence(self, test_sample: Dict, with_expl: bool = False) -> List[float]:
 		context = self.get_context(test_sample)

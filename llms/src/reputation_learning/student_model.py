@@ -40,14 +40,14 @@ class StudentModel(Model):
 		else:
 			if intervene:
 				self.teacher_explanation_context(test_sample, explanation)
-			elif self._expl_type == 'cot':
+			elif self._explanation_type == 'cot':
 				self.cot_context(test_sample)
-			elif self._expl_type.find('expl') != -1:
+			elif self._explanation_type.find('expl') != -1:
 				self.explanation_context(test_sample, explanation)
-			elif self._expl_type.find('rational') != -1:
+			elif self._explanation_type.find('rational') != -1:
 				self.rational_context(test_sample)
 			else:
-				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._expl_type)
+				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 	
 	def predict_confidence(self, test_sample: Dict, with_explanation: bool = False, explanation: Union[List, str] = None) -> List[float]:
 		context = self.get_context(test_sample, explanation=explanation)
@@ -162,7 +162,7 @@ class StudentModel(Model):
 		if self._task == "ec_qa" and "The correct choice is " in output:
 			output = output[len("The correct choice is "):].strip()
 		
-		if not self._use_explanations or self._expl_type != "CoT":
+		if not self._use_explanations or self._explanation_type != "CoT":
 			if self._task == "ec_qa":
 				if output not in ["1", "2", "3", "4", "5"]:
 					for i, choice in enumerate(test_sample["options"]):

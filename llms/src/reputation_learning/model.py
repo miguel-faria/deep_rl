@@ -23,7 +23,7 @@ class Model:
 		self._tokenizer = tokenizer
 		self._task = task
 		self._model_name = model_name
-		self._expl_type = expl_type.lower()
+		self._explanation_type = expl_type.lower()
 		self._use_explanations = use_explanations
 		self._max_tokens = max_tokens
 		self._num_beams = num_beams
@@ -38,13 +38,16 @@ class Model:
 		return self._tokenizer
 	
 	@property
-	def expl_type(self) -> str:
-		return self._expl_type
+	def explanation_type(self) -> str:
+		return self._explanation_type
 	
 	@staticmethod
 	def get_answer_idx(answers: List, answer_id: Union[str, int]) -> int:
 		return len(answers) - answers[-1::-1].index(answer_id) -1
-	
+
+	def set_samples(self, samples: List[Dict]) -> None:
+		self._ic_samples = samples
+
 	def no_explanation_context(self, test_sample) -> str:
 		if self._task == "strategy_qa":
 			context = "\n\n".join(
@@ -130,18 +133,18 @@ class Model:
 
 		return context
 
-	def get_context(self, test_sample: Dict, explanation: Union[List, str] = None):
+	def get_context(self, test_sample: Dict, explanation: Union[List, str] = None) -> str:
 		if not self._use_explanations:
 			return self.no_explanation_context(test_sample)
 		else:
-			if self._expl_type == 'cot':
+			if self._explanation_type == 'cot':
 				self.cot_context(test_sample)
-			elif self._expl_type.find('expl') != -1:
+			elif self._explanation_type.find('expl') != -1:
 				self.explanation_context(test_sample, explanation)
-			elif self._expl_type.find('rational') != -1:
+			elif self._explanation_type.find('rational') != -1:
 				self.rational_context(test_sample)
 			else:
-				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._expl_type)
+				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 
 	def predict_confidence(self, test_sample: Dict, with_expl: bool = False) -> List[float]:
 		raise NotImplementedError("Method 'predict_confidence' is not implemented in the base class, subclasses should implement it.")

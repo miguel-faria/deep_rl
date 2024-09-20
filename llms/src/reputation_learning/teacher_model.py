@@ -90,7 +90,7 @@ class TeacherModel(Model):
 		return class_scores
 	
 	def predict(self, test_sample: Dict) -> Tuple[str, str]:
-		if self._expl_type == "human":
+		if self._explanation_type == "human":
 			return '', str(test_sample["explanation"])
 		else:
 			context = self.cot_context(test_sample)
@@ -105,7 +105,7 @@ class TeacherModel(Model):
 		if "The correct choice is " in output:
 			output = output[len("The correct choice is "):].strip()
 		
-		if self.expl_type == "rationalize":
+		if self.explanation_type == "rationalize":
 			if self._task == "ec_qa":
 				if output not in ["1", "2", "3", "4", "5"]:
 					for i, choice in enumerate(test_sample["options"]):

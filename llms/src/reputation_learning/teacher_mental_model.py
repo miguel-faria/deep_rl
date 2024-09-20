@@ -16,10 +16,10 @@ class UnidentifiedUtilityMetricError(Exception):
 
 class TeacherMentalModel(TeacherModel):
 
-	def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, model_name: str, expl_type: str, task: str, max_tokens: int, num_beams: int, samples: List[Dict],
+	def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, model_name: str, expl_type: str, task: str, max_tokens: int, num_beams: int, intervention_samples: Union[List[Dict], Tuple],
 	             use_explanations: bool, utility_type: str, mm_intervention: str):
 
-		super().__init__(model, tokenizer, model_name, expl_type, task, max_tokens, num_beams, samples, use_explanations)
+		super().__init__(model, tokenizer, model_name, expl_type, task, max_tokens, num_beams, intervention_samples, use_explanations)
 		self._mm_intervention = mm_intervention
 		self._utility_type = utility_type
 
@@ -30,6 +30,100 @@ class TeacherMentalModel(TeacherModel):
 	@property
 	def utility_type(self) -> str:
 		return self._utility_type
+
+	def get_context(self, test_sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, use_answers: bool = False) -> str:
+		context = "Simulate an AI model's answer for the given question.\n\n"
+		if ((self.explanation_type.find('useful') != -1 and self.explanation_type.find('teacher') != -1) or
+			(self.explanation_type.find('mental') != -1 and self.explanation_type.find('model') != -1)):
+			if intervene:
+				intervention_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
+				_, teacher_explanation = self.predict(test_sample)
+				print('Teacher explanation = %s' % teacher_explanation)
+				if self._task == "strategy_qa":
+					if not use_answers:
+						context += "\n\n".join(
+								["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is %s" %
+								 (ic_sample['question'], ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
+								 for ic_sample in intervention_samples])
+						context += ("\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is" %
+						            (test_sample['question'], test_sample['answer'], teacher_explanation))
+					else:
+						context += "\n\n".join(
+								["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is %s" %
+								 (ic_sample['question'], ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
+								 for ic_sample in intervention_samples])
+						context += ("\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is" %
+						            (test_sample['question'], test_sample['answer'], teacher_explanation))
+				elif self._task == "ec_qa":
+					if not use_answers:
+						context += "\n\n".join(
+								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is %s" %
+								 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2], ic_sample['options'][3],
+								  ic_sample['options'][4], ic_sample['teacher_explanation'], ic_sample['prediction'])
+								 for ic_sample in intervention_samples])
+						context += ("\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is" %
+						            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3],
+						             test_sample['options'][4], teacher_explanation))
+					else:
+						context += "\n\n".join(
+								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the correct choice is %s" %
+								 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2], ic_sample['options'][3], ic_sample['options'][4],
+								  ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
+								 for ic_sample in intervention_samples])
+						context += ("\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is" %
+						            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3],
+						             test_sample['options'][4], teacher_explanation))
+				elif self._task == "gsm8k":
+					teacher_explanation_sents = teacher_explanation.split(".")
+					teacher_partial_explanation = teacher_explanation_sents[0] + "."
+					context = "\n\n".join(["Q: %s\nAI Predicted Answer: %s So the answer is %s" % (inter_ic['question'], inter_ic['explanation'], inter_ic['answer'])
+					                       for inter_ic in intervention_samples])
+					context += f"\n\nQ: {test_sample['question']}\nAI Predicted Answer: {teacher_partial_explanation}"
+				else:
+					raise UnidentifiedTaskError('Task %s not defined' % self._task)
+
+			else:
+				no_intervention_samples = self._ic_samples[1] if isinstance(self._ic_samples, tuple) else self._ic_samples
+				context = "Simulate an AI model's answer for the given question.\n\n"
+				if self._task == "strategy_qa":
+					if use_answers:
+						context += "\n\n".join(
+								["Q: %s\nAI Predicted Answer: %s" % (ic_sample['question'], ic_sample['prediction'])
+								 for ic_sample in no_intervention_samples])
+						context += "\n\nQ: %s\nAI Predicted Answer:" % test_sample['question']
+					else:
+						context += "\n\n".join(
+								["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s" % (ic_sample['question'], ic_sample['answer'], ic_sample['prediction'])
+								 for ic_sample in no_intervention_samples])
+						context += "\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer:" % (test_sample['question'], test_sample['answer'])
+				elif self._task == "ec_qa":
+					if use_answers:
+						context += "\n\n".join(
+								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s" %
+								 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2],
+								  ic_sample['options'][3], ic_sample['options'][4], ic_sample['prediction'])
+								 for ic_sample in no_intervention_samples])
+						context += (f"\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer:" %
+						            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
+						             test_sample['options'][3], test_sample['options'][4]))
+					else:
+						context += "\n\n".join(
+								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s" %
+								 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2],
+								  ic_sample['options'][3], ic_sample['options'][4], ic_sample['prediction'])
+								 for ic_sample in no_intervention_samples])
+						context += (f"\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer:" %
+						            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
+						             test_sample['options'][3], test_sample['options'][4]))
+				elif self._task == "gsm8k":
+					context = "\n\n".join(["Q: %s\nAI Predicted Answer: %s" % (ic_sample['question'], ic_sample['answer']) for ic_sample in no_intervention_samples])
+					context += "\n\nQ: %s\nAI Predicted Answer:" % test_sample['question']
+				else:
+					raise UnidentifiedTaskError('Task %s not defined' % self._task)
+		else:
+			context += super().get_context(test_sample, explanation)
+
+		return context
 
 	def intervention_utility(self, test_sample: Dict, student: StudentModel) -> float:
 
@@ -96,8 +190,6 @@ class TeacherMentalModel(TeacherModel):
 		
 		else:
 			raise UnidentifiedUtilityMetricError('Utility metric %s not defined' % self._utility_type)
-	
-	
 	
 	def simulate_utility(self, test_sample: Dict, use_answers: bool):
 		no_inter_predictions, inter_predictions = [], []

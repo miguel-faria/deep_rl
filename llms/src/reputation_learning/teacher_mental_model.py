@@ -15,26 +15,26 @@ class UnidentifiedUtilityMetricError(Exception):
 
 
 class TeacherMentalModel(TeacherModel):
-
+	
 	def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, model_name: str, expl_type: str, task: str, max_tokens: int, num_beams: int, intervention_samples: Union[List[Dict], Tuple],
 	             use_explanations: bool, utility_type: str, mm_intervention: str):
-
+		
 		super().__init__(model, tokenizer, model_name, expl_type, task, max_tokens, num_beams, intervention_samples, use_explanations)
 		self._mm_intervention = mm_intervention
 		self._utility_type = utility_type
-
+	
 	@property
 	def mm_intervention(self) -> str:
 		return self._mm_intervention
-
+	
 	@property
 	def utility_type(self) -> str:
 		return self._utility_type
-
+	
 	def get_context(self, test_sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, use_answers: bool = False) -> str:
 		context = "Simulate an AI model's answer for the given question.\n\n"
 		if ((self.explanation_type.find('useful') != -1 and self.explanation_type.find('teacher') != -1) or
-			(self.explanation_type.find('mental') != -1 and self.explanation_type.find('model') != -1)):
+				(self.explanation_type.find('mental') != -1 and self.explanation_type.find('model') != -1)):
 			if intervene:
 				intervention_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
 				_, teacher_explanation = self.predict(test_sample)
@@ -81,7 +81,7 @@ class TeacherMentalModel(TeacherModel):
 					context += f"\n\nQ: {test_sample['question']}\nAI Predicted Answer: {teacher_partial_explanation}"
 				else:
 					raise UnidentifiedTaskError('Task %s not defined' % self._task)
-
+			
 			else:
 				no_intervention_samples = self._ic_samples[1] if isinstance(self._ic_samples, tuple) else self._ic_samples
 				context = "Simulate an AI model's answer for the given question.\n\n"
@@ -122,11 +122,11 @@ class TeacherMentalModel(TeacherModel):
 					raise UnidentifiedTaskError('Task %s not defined' % self._task)
 		else:
 			context += super().get_context(test_sample, explanation)
-
+		
 		return context
-
+	
 	def intervention_utility(self, test_sample: Dict, student: StudentModel) -> float:
-
+		
 		if self._utility_type.find('student') != -1 and self._utility_type.find('confidence') != -1:
 			if self._utility_type.find('intervention') != -1:
 				if self._utility_type.find('no') != -1:
@@ -167,15 +167,15 @@ class TeacherMentalModel(TeacherModel):
 				raise UnidentifiedUtilityMetricError('Utility metric %s not defined' % self._utility_type)
 		
 		elif self._utility_type.find('teacher') != -1 and self._utility_type.find('confidence') != -1:
-				class_scores = self.predict_confidence(test_sample, with_explanation=True)
-				if self._task == "strategyQA":
-					return class_scores[0] if test_sample["answer"] == "yes" else class_scores[1]
-				elif self._task == "ecqa":
-					return class_scores[int(test_sample["answer"]) - 1]
-				elif self._task == 'gsm8k':
-					pass
-				else:
-					raise UnidentifiedTaskError('Task %s not defined' % self._task)
+			class_scores = self.predict_confidence(test_sample, with_explanation=True)
+			if self._task == "strategyQA":
+				return class_scores[0] if test_sample["answer"] == "yes" else class_scores[1]
+			elif self._task == "ecqa":
+				return class_scores[int(test_sample["answer"]) - 1]
+			elif self._task == 'gsm8k':
+				pass
+			else:
+				raise UnidentifiedTaskError('Task %s not defined' % self._task)
 		
 		elif (self._utility_type.find('mental') != -1 and self._utility_type.find('model') != -1) or self._utility_type.find('mm') != -1:
 			

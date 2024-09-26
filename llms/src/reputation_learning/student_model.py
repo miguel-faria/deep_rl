@@ -3,7 +3,7 @@ import re
 
 from torch.nn.functional import softmax
 from typing import Dict, List, Union, Tuple
-from model import Model, UnidentifiedExplanationError, UnidentifiedTaskError
+from reputation_learning.model import Model, UnidentifiedExplanationError, UnidentifiedTaskError
 
 
 class StudentModel(Model):
@@ -52,7 +52,7 @@ class StudentModel(Model):
 	def predict_confidence(self, test_sample: Dict, with_explanation: bool = False, explanation: Union[List, str] = None) -> List[float]:
 		context = self.get_context(test_sample, explanation=explanation)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-		generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
+		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
 		output = self.tokenizer.batch_decode(generated[0], skip_special_tokens=True)[0].strip()
 		
 		idx = 1 if "llama" in self._model_name else 0
@@ -152,7 +152,7 @@ class StudentModel(Model):
 	def predict(self, test_sample: Dict, expl: Union[List, str] = None, intervene: bool = False):
 		context = self.get_context(test_sample=test_sample, explanation=expl, intervene=intervene)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-		generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
+		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 		output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
 		
 		if "llama" in self._model_name:
@@ -188,7 +188,7 @@ class StudentModel(Model):
 					print("Regenerating with the explanation")
 					context = self.teacher_explanation_context(test_sample, explanation)
 					tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-					generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
+					generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 					output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
 					output = output[len(context):] if context in output else output
 					output = output[:output.index('\n')].strip() if '\n' in output else output.strip()

@@ -3,22 +3,21 @@ import re
 
 from torch.nn.functional import softmax
 from typing import Dict, List, Tuple
-from model import Model, UnidentifiedTaskError
-from student_model import StudentModel
+from reputation_learning.model import Model, UnidentifiedTaskError
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
 
 class TeacherModel(Model):
 	
-	def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, model_name: str, expl_type: str, task: str, max_tokens: int, num_beams: int, samples: List[Dict],
-	             use_explanations: bool):
+	def __init__(self, model_name: str, samples: List[Dict] = None, gen_model: PreTrainedModel = None, tokenizer: PreTrainedTokenizer = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
+	             use_explanations: bool = True):
 		
-		super().__init__(model, tokenizer, model_name, expl_type, task, max_tokens, num_beams, samples, use_explanations)
+		super().__init__(model_name, samples, gen_model, tokenizer, expl_type, task, max_tokens, num_beams, use_explanations)
 	
 	def predict_confidence(self, test_sample: Dict, with_explanation: bool = False) -> List[float]:
 		context = self.get_context(test_sample)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-		generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
+		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
 		
 		idx = 1 if "llama" in self._model_name else 0
 		if self._task == "strategy_qa":
@@ -91,11 +90,11 @@ class TeacherModel(Model):
 	
 	def predict(self, test_sample: Dict) -> Tuple[str, str]:
 		if self._explanation_type == "human":
-			return '', str(test_sample["explanation"])
+			return str(test_sample["answer"]), str(test_sample["explanation"])
 		else:
 			context = self.cot_context(test_sample)
 			tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-			generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
+			generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 			output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
 		
 		if "llama" in self._model_name:
@@ -133,7 +132,7 @@ class TeacherModel(Model):
 					print("Regenerating with the explanation")
 					context = self.explanation_context(test_sample, explanation)
 					tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-					generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
+					generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 					output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
 					output = output[len(context):] if context in output else output
 					output = output[:output.index('\n')].strip() if '\n' in output else output.strip()

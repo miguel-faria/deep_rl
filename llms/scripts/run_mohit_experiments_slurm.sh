@@ -27,7 +27,7 @@ eval set -- "$options"
 while [ $# -gt 0 ]
 do
   case $1 in
-    -d)  dataset=${2}; shift ;;
+    -d) dataset=${2}; shift ;;
     -s) student_model=${2}; shift ;;
     -t) teacher_model=${2}; shift ;;
     -mm) mental_model=${2}; shift ;;
@@ -46,27 +46,27 @@ if [ -z "$dataset" ]; then
 fi
 
 if [ -z "$student_model" ]; then
-  dataset="google/flan-t5-large"
+  student_model="google/flan-t5-large"
 fi
 
 if [ -z "$teacher_model" ]; then
-  dataset="google/flan-t5-xl"
+  teacher_model="google/flan-t5-xl"
 fi
 
 if [ -z "$mental_model" ]; then
-  dataset="mm_both"
+  mental_model="mm_both"
 fi
 
 if [ -z "$utility" ]; then
-  dataset="mm_both"
+  utility="mm_both"
 fi
 
 if [ -z "$student_expl" ]; then
-  dataset="cot"
+  student_expl="cot"
 fi
 
 if [ -z "$teacher_expl" ]; then
-  dataset="useful_teacher"
+  teacher_expl="useful_teacher"
 fi
 
 if [ -n "${SLURM_JOB_ID:-}" ] ; then

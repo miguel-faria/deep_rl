@@ -161,11 +161,14 @@ class StudentModel(Model):
 		if "llama" in self._model_name:
 			output = output[len(context):]
 		output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
+		# print(test_sample['question'])
+		# print(context)
+		# print(output)
 		
 		if self._task == "ec_qa" and "The correct choice is " in output:
 			output = output[len("The correct choice is "):].strip()
 		
-		if not self._use_explanations or self._explanation_type != "CoT":
+		if not self._use_explanations or (self._explanation_type.find("cot") == -1 and (self._explanation_type.find("chain") == -1 and self._explanation_type.find("thought") == -1)):
 			if self._task == "ec_qa":
 				if output not in ["1", "2", "3", "4", "5"]:
 					for i, choice in enumerate(test_sample["options"]):
@@ -178,7 +181,7 @@ class StudentModel(Model):
 			print('Student Explanation = %s' % explanation)
 		else:
 			explanation = output[:output.rfind(".") + 1] if self._task != "gsm8k" else output
-			print(f'Student Explanation = {explanation}')
+			print('Student Explanation = %s' % explanation)
 			prediction = output.split(" ")[-1]
 			if self._task == "ec_qa":
 				if prediction not in ["1", "2", "3", "4", "5"]:
@@ -186,6 +189,7 @@ class StudentModel(Model):
 						if choice in output:
 							prediction = str(i + 1)
 							break
+			
 			elif self._task == "strategy_qa":
 				if prediction not in ["no", "yes"]:
 					print("Regenerating with the explanation")

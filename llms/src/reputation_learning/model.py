@@ -17,8 +17,8 @@ class UnidentifiedExplanationError(Exception):
 
 class Model:
 	
-	def __init__(self, model_name: str, samples: Union[List[Dict], Tuple] = None, gen_model: PreTrainedModel = None, tokenizer: PreTrainedTokenizer = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
-				 use_explanations: bool = True):
+	def __init__(self, model_name: str, samples: Union[List[Dict], Tuple] = None, gen_model: PreTrainedModel = None, tokenizer: PreTrainedTokenizer = None, expl_type: str = '',
+				 task: str = '', max_tokens: int = 10, num_beams: int = 1, use_explanations: bool = True):
 		
 		self._gen_model = gen_model
 		self._tokenizer = tokenizer
@@ -28,7 +28,7 @@ class Model:
 		self._max_tokens = max_tokens
 		self._num_beams = num_beams
 		self._ic_samples = samples
-		self._explanation_type = expl_type
+		self._explanation_type = expl_type.lower()
 	
 	@property
 	def gen_model(self) -> PreTrainedModel:

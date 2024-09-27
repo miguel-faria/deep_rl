@@ -351,6 +351,7 @@ def compute_accuracy(labels, predictions):
 def main( ):
 	parser = argparse.ArgumentParser(description='Machine teaching with Theory of Mind based mental models experiments from Mohit Bensal')
 	parser.add_argument('--data-dir', dest='data_dir', default='', type=str, help='Path to the directory with the datasets')
+	parser.add_argument('--cache-dir', dest='cache_dir', default='', type=str, help='Path to the cache directory, where downladed models are stored')
 	parser.add_argument('--train-filename', dest='train_filename', default='', type=str, help='Filename of the training data')
 	parser.add_argument('--test-filename', dest='test_filename', default='', type=str, help='Filename of the testing data')
 	parser.add_argument('--val-filename', dest='val_filename', default='', type=str, help='Filename of the validation data')
@@ -361,7 +362,6 @@ def main( ):
 						help='Local or hugging face path to use for the teacher model')
 	
 	parser.add_argument('--max-new-tokens', dest='max_new_tokens', default=100, type=int, help='Maximum number of new tokens when generating answers')
-	parser.add_argument('--cache-dir', dest='cache_dir', default='', type=str, help='Path to the cache directory, where downladed models are stored')
 	parser.add_argument('--n-beams', dest='n_beams', default=1, type=int, help='Number of beams to use in answer generation beam search')
 	parser.add_argument('--n-ic-samples', dest='n_ics', default=4, type=int, help='Number of in-context samples to use for context in the student answers')
 	parser.add_argument('--use-explanations', dest='use_explanations', action='store_true',

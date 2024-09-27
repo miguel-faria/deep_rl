@@ -47,6 +47,8 @@ class StudentModel(Model):
 				return self.explanation_context(test_sample, explanation)
 			elif self._explanation_type.find('rational') != -1:
 				return self.rational_context(test_sample)
+			elif self._explanation_type.find('no') != -1:
+				return self.no_explanation_context(test_sample)
 			else:
 				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 	

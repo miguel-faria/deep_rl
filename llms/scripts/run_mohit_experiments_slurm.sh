@@ -45,6 +45,30 @@ if [ -z "$dataset" ]; then
   dataset="strategy_qa"
 fi
 
+if [ -z "$student_model" ]; then
+  dataset="google/flan-t5-large"
+fi
+
+if [ -z "$teacher_model" ]; then
+  dataset="google/flan-t5-xl"
+fi
+
+if [ -z "$mental_model" ]; then
+  dataset="mm_both"
+fi
+
+if [ -z "$utility" ]; then
+  dataset="mm_both"
+fi
+
+if [ -z "$student_expl" ]; then
+  dataset="cot"
+fi
+
+if [ -z "$teacher_expl" ]; then
+  dataset="useful_teacher"
+fi
+
 if [ -n "${SLURM_JOB_ID:-}" ] ; then
   script_path=$(dirname "$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}' | head -n 1)")
 else

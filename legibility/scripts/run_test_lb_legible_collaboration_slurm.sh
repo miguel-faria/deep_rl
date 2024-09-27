@@ -7,9 +7,9 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
-#SBATCH --time=5-00:00:00
+#SBATCH --time=2-00:00:00
 #SBATCH --mem=4G
-#SBATCH --qos=gpu-long
+#SBATCH --qos=gpu-medium
 #SBATCH --output="job-%x-%j.out"
 date;hostname;pwd
 
@@ -25,7 +25,7 @@ fi
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   source "$HOME"/miniconda3/bin/activate deep_rl_env
-  python "$script_path"/run_test_lb_legible_collaboration.py --tests 250 --mode 0 --logs-dir /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
+  python "$script_path"/run_test_lb_legible_collaboration.py --tests 250 --mode 2 --logs-dir /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
 else
   source "$HOME"/miniconda3/bin/activate drl_env
   python "$script_path"/run_test_lb_legible_collaboration.py --tests 250 --mode 2

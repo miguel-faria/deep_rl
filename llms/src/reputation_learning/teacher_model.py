@@ -1,9 +1,10 @@
 #! /usr/bin/env python
 import re
 
+from pandas import DataFrame
 from torch.nn.functional import softmax
-from typing import Dict, List, Tuple
-from reputation_learning.model import Model, UnidentifiedTaskError
+from typing import Dict, List, Tuple, Union
+from reputation_learning.model import Model, UnidentifiedTaskError, UnidentifiedExplanationError
 from transformers import PreTrainedModel, PreTrainedTokenizer
 
 
@@ -13,6 +14,22 @@ class TeacherModel(Model):
 	             use_explanations: bool = True):
 		
 		super().__init__(model_name, samples, gen_model, tokenizer, expl_type, task, max_tokens, num_beams, use_explanations)
+	
+	def get_context(self, test_sample: Dict, explanation: Union[List, str] = None) -> str:
+		if not self._use_explanations:
+			return self.no_explanation_context(test_sample)
+		else:
+			if self._explanation_type.find('blind') != -1:
+				if self._explanation_type.find('rational') != -1:
+					return self.rational_context(test_sample)
+				elif self._explanation_type.find('cot') != -1 or (self._explanation_type.find('chain') != -1 and self._explanation_type.find('thought') != -1):
+					return self.cot_context(test_sample)
+			elif self._explanation_type.find('useful') != -1:
+				return self.cot_context(test_sample)
+			elif self._explanation_type.find('expl') != -1:
+				return self.explanation_context(test_sample, explanation)
+			else:
+				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 	
 	def predict_confidence(self, test_sample: Dict, with_explanation: bool = False) -> List[float]:
 		context = self.get_context(test_sample)
@@ -89,67 +106,68 @@ class TeacherModel(Model):
 		return class_scores
 	
 	def predict(self, test_sample: Dict) -> Tuple[str, str]:
-		if self._explanation_type == "human":
+		if self._explanation_type.find("human") != -1:
 			return str(test_sample["answer"]), str(test_sample["explanation"])
+		
 		else:
 			context = self.cot_context(test_sample)
 			tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 			generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 			output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
-		
-		if "llama" in self._model_name:
-			output = output[len(context):]
-		output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
-		
-		if "The correct choice is " in output:
-			output = output[len("The correct choice is "):].strip()
-		
-		if self.explanation_type == "rationalize":
-			if self._task == "ec_qa":
-				if output not in ["1", "2", "3", "4", "5"]:
-					for i, choice in enumerate(test_sample["options"]):
-						if choice in output:
-							output = str(i + 1)
-							break
-			prediction = output.split(" ")[0]
-			print('%s prediction = %s' % (self._model_name, prediction))
-			explanation = " ".join(output.split(" ")[2:])
-			print('%s explanation = %s' % (self._model_name, explanation))
-		
-		else:
-			explanation = output[:output.rfind(".") + 1]
-			print('%s explanation = %s' % (self._model_name, explanation))
-			prediction = output.split(" ")[-1]
-			if self._task == "ec_qa":
-				if prediction not in ["1", "2", "3", "4", "5"]:
-					for i, choice in enumerate(test_sample["options"]):
-						if choice in output:
-							prediction = str(i + 1)
-							break
 			
-			elif self._task == "strategy_qa":
-				if prediction not in ["no", "yes"]:
-					print("Regenerating with the explanation")
-					context = self.explanation_context(test_sample, explanation)
-					tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-					generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
-					output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
-					output = output[len(context):] if context in output else output
-					output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
-					prediction = output.split(" ")[0]
-				print('%s Prediction = %s' % (self._model_name, prediction))
+			if "llama" in self._model_name:
+				output = output[len(context):]
+			output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
 			
-			elif self._task == "gsm8k":
-				prediction = re.sub(r"[^0-9.]", "", prediction)
-				if prediction == "" or prediction == ".":
-					for word in reversed(explanation.split(" ")):
-						if bool(re.search(r"\d", word)):
-							prediction = re.sub(r"[^0-9.]", "", word)
-							break
-		
-		return prediction, explanation
+			if "The correct choice is " in output:
+				output = output[len("The correct choice is "):].strip()
+			
+			if self._explanation_type.find('rationalize') != -1:
+				if self._task == "ec_qa":
+					if output not in ["1", "2", "3", "4", "5"]:
+						for i, choice in enumerate(test_sample["options"]):
+							if choice in output:
+								output = str(i + 1)
+								break
+				prediction = output.split(" ")[0]
+				print('%s prediction = %s' % (self._model_name, prediction))
+				explanation = " ".join(output.split(" ")[2:])
+				print('%s explanation = %s' % (self._model_name, explanation))
+			
+			else:
+				explanation = output[:output.rfind(".") + 1]
+				print('%s explanation = %s' % (self._model_name, explanation))
+				prediction = output.split(" ")[-1]
+				if self._task == "ec_qa":
+					if prediction not in ["1", "2", "3", "4", "5"]:
+						for i, choice in enumerate(test_sample["options"]):
+							if choice in output:
+								prediction = str(i + 1)
+								break
+				
+				elif self._task == "strategy_qa":
+					if prediction not in ["no", "yes"]:
+						print("Regenerating with the explanation")
+						context = self.explanation_context(test_sample, explanation)
+						tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
+						generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
+						output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
+						output = output[len(context):] if context in output else output
+						output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
+						prediction = output.split(" ")[0]
+					print('%s Prediction = %s' % (self._model_name, prediction))
+				
+				elif self._task == "gsm8k":
+					prediction = re.sub(r"[^0-9.]", "", prediction)
+					if prediction == "" or prediction == ".":
+						for word in reversed(explanation.split(" ")):
+							if bool(re.search(r"\d", word)):
+								prediction = re.sub(r"[^0-9.]", "", word)
+								break
+			
+			return prediction, explanation
 	
-	def predict_batch(self, test_samples: List[Dict]) -> Tuple[List, List]:
+	def predict_batch(self, test_samples: DataFrame) -> Tuple[List, List]:
 		predictions = []
 		explanations = []
 		for test_sample in test_samples:

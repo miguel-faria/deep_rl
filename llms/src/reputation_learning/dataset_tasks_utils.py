@@ -16,22 +16,22 @@ class Dataset:
     def get_samples(file_path: Path):
         raise NotImplementedError('This method needs to be implemented by the class specific for the dataset to be used.')
 
-    def get_train_samples(self):
+    def get_train_samples(self) -> pd.DataFrame:
         assert self._train_file != '', 'Training data file cannot be empty.'
         train_path = self._data_dir / self._train_file
-        assert train_path.exists(), 'Training data path does not exist.'
+        assert train_path.exists(), 'Training data path %s does not exist.' % train_path
         return self.get_samples(train_path)
 
-    def get_test_samples(self):
+    def get_test_samples(self) -> pd.DataFrame:
         assert self._test_file != '', 'Testing data file cannot be empty.'
         test_path = self._data_dir / self._test_file
-        assert test_path.exists(), 'Testing data path does not exist.'
+        assert test_path.exists(), 'Testing data path %s does not exist.' % test_path
         return self.get_samples(test_path)
 
-    def get_validation_samples(self):
+    def get_validation_samples(self) -> pd.DataFrame:
         assert self._validation_file != '', 'Validation data file cannot be empty.'
         validation_path = self._data_dir / self._validation_file
-        assert validation_path.exists(), 'Validation data path does not exist.'
+        assert validation_path.exists(), 'Validation data path %s does not exist.' % validation_path
         return self.get_samples(validation_path)
 
 

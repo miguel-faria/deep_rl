@@ -16,16 +16,16 @@ class UnidentifiedUtilityMetricError(Exception):
 
 class TeacherMentalModel(TeacherModel):
 	
-	def __init__(self, model_name: str, intervention_samples: List[Dict] = None, gen_model: PreTrainedModel = None, tokenizer: PreTrainedTokenizer = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
-	             use_explanations: bool = True, utility_type: str = '', mm_intervention: str = 'mm_both'):
+	def __init__(self, model_name: str, intervention_samples: Union[List[Dict], Tuple] = None, gen_model: PreTrainedModel = None, tokenizer: PreTrainedTokenizer = None, expl_type: str = '', task: str = '',
+	             max_tokens: int = 10, num_beams: int = 1, use_explanations: bool = True, utility_type: str = '', mm_type: str = 'mm_both'):
 		
 		super().__init__(model_name, intervention_samples, gen_model, tokenizer, expl_type, task, max_tokens, num_beams, use_explanations)
-		self._mm_intervention = mm_intervention
+		self._mm_type = mm_type
 		self._utility_type = utility_type
 	
 	@property
-	def mm_intervention(self) -> str:
-		return self._mm_intervention
+	def mm_type(self) -> str:
+		return self._mm_type
 	
 	@property
 	def utility_type(self) -> str:
@@ -46,14 +46,14 @@ class TeacherMentalModel(TeacherModel):
 								 (ic_sample['question'], ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
 								 for ic_sample in intervention_samples])
 						context += ("\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is" %
-						            (test_sample['question'], test_sample['answer'], teacher_explanation))
+									(test_sample['question'], test_sample['answer'], teacher_explanation))
 					else:
 						context += "\n\n".join(
 								["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is %s" %
 								 (ic_sample['question'], ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
 								 for ic_sample in intervention_samples])
 						context += ("\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is" %
-						            (test_sample['question'], test_sample['answer'], teacher_explanation))
+									(test_sample['question'], test_sample['answer'], teacher_explanation))
 				elif self._task == "ec_qa":
 					if not use_answers:
 						context += "\n\n".join(
@@ -62,8 +62,8 @@ class TeacherMentalModel(TeacherModel):
 								  ic_sample['options'][4], ic_sample['teacher_explanation'], ic_sample['prediction'])
 								 for ic_sample in intervention_samples])
 						context += ("\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is" %
-						            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3],
-						             test_sample['options'][4], teacher_explanation))
+									(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3],
+									 test_sample['options'][4], teacher_explanation))
 					else:
 						context += "\n\n".join(
 								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the correct choice is %s" %
@@ -71,13 +71,13 @@ class TeacherMentalModel(TeacherModel):
 								  ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
 								 for ic_sample in intervention_samples])
 						context += ("\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is" %
-						            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3],
-						             test_sample['options'][4], teacher_explanation))
+									(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3],
+									 test_sample['options'][4], teacher_explanation))
 				elif self._task == "gsm8k":
 					teacher_explanation_sents = teacher_explanation.split(".")
 					teacher_partial_explanation = teacher_explanation_sents[0] + "."
 					context = "\n\n".join(["Q: %s\nAI Predicted Answer: %s So the answer is %s" % (inter_ic['question'], inter_ic['explanation'], inter_ic['answer'])
-					                       for inter_ic in intervention_samples])
+										   for inter_ic in intervention_samples])
 					context += f"\n\nQ: {test_sample['question']}\nAI Predicted Answer: {teacher_partial_explanation}"
 				else:
 					raise UnidentifiedTaskError('Task %s not defined' % self._task)
@@ -104,8 +104,8 @@ class TeacherMentalModel(TeacherModel):
 								  ic_sample['options'][3], ic_sample['options'][4], ic_sample['prediction'])
 								 for ic_sample in no_intervention_samples])
 						context += (f"\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer:" %
-						            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
-						             test_sample['options'][3], test_sample['options'][4]))
+									(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
+									 test_sample['options'][3], test_sample['options'][4]))
 					else:
 						context += "\n\n".join(
 								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s" %
@@ -113,8 +113,8 @@ class TeacherMentalModel(TeacherModel):
 								  ic_sample['options'][3], ic_sample['options'][4], ic_sample['prediction'])
 								 for ic_sample in no_intervention_samples])
 						context += (f"\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer:" %
-						            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
-						             test_sample['options'][3], test_sample['options'][4]))
+									(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
+									 test_sample['options'][3], test_sample['options'][4]))
 				elif self._task == "gsm8k":
 					context = "\n\n".join(["Q: %s\nAI Predicted Answer: %s" % (ic_sample['question'], ic_sample['answer']) for ic_sample in no_intervention_samples])
 					context += "\n\nQ: %s\nAI Predicted Answer:" % test_sample['question']
@@ -146,11 +146,11 @@ class TeacherMentalModel(TeacherModel):
 
 		elif self._task == "ec_qa":
 			option1_id, option2_id, option3_id, option4_id, option5_id = (self.tokenizer.encode("1")[idx], self.tokenizer.encode("2")[idx],
-			                                                              self.tokenizer.encode("3")[idx], self.tokenizer.encode("4")[idx],
-			                                                              self.tokenizer.encode("5")[idx])
+																		  self.tokenizer.encode("3")[idx], self.tokenizer.encode("4")[idx],
+																		  self.tokenizer.encode("5")[idx])
 			option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_id].item(), scores[0][option2_id].item(),
-			                                                                             scores[0][option3_id].item(), scores[0][option4_id].item(),
-			                                                                             scores[0][option5_id].item())
+																						 scores[0][option3_id].item(), scores[0][option4_id].item(),
+																						 scores[0][option5_id].item())
 
 			if output not in ["1", "2", "3", "4", "5"]:
 				option1_text_id, option2_text_id, option3_text_id, option4_text_id, option5_text_id = (
@@ -161,8 +161,8 @@ class TeacherMentalModel(TeacherModel):
 						self.tokenizer.encode(test_sample["options"][4].split(" ")[0])[idx])
 
 				option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_text_id].item(), scores[0][option2_text_id].item(),
-				                                                                             scores[0][option3_text_id].item(), scores[0][option4_text_id].item(),
-				                                                                             scores[0][option5_text_id].item())
+																							 scores[0][option3_text_id].item(), scores[0][option4_text_id].item(),
+																							 scores[0][option5_text_id].item())
 
 			# print(f'Option1 score = {option1_score}')
 			# print(f'Option2 score = {option2_score}')
@@ -200,7 +200,7 @@ class TeacherMentalModel(TeacherModel):
 			teacher_prediction, _ = self.predict(test_sample)
 			correct_answer = teacher_prediction
 
-		if self._mm_intervention.find('both') != -1:
+		if self._mm_type.find('both') != -1:
 			no_inter_context = self.get_context(test_sample, None, False, use_answers)
 			no_inter_scores, no_inter_output = self.predict_prompt(no_inter_context, test_sample)
 
@@ -213,30 +213,30 @@ class TeacherMentalModel(TeacherModel):
 
 			if self._task == "strategy_qa":
 				if correct_answer == "yes":
-					return [no_inter_scores, inter_output], [no_inter_scores[0], inter_scores[0]]
+					return [no_inter_output, inter_output], [no_inter_scores[0], inter_scores[0]]
 				else:
-					return [no_inter_scores, inter_output], [no_inter_scores[0], inter_scores[0]]
+					return [no_inter_output, inter_output], [no_inter_scores[1], inter_scores[1]]
 
 			elif self._task == "ec_qa":
 				if correct_answer == "1":
-					return [no_inter_scores, inter_output], [no_inter_scores[0], inter_scores[0]]
+					return [no_inter_output, inter_output], [no_inter_scores[0], inter_scores[0]]
 				elif correct_answer == "2":
-					return [no_inter_scores, inter_output], [no_inter_scores[1], inter_scores[1]]
+					return [no_inter_output, inter_output], [no_inter_scores[1], inter_scores[1]]
 				elif correct_answer == "3":
-					return [no_inter_scores, inter_output], [no_inter_scores[2], inter_scores[2]]
+					return [no_inter_output, inter_output], [no_inter_scores[2], inter_scores[2]]
 				elif correct_answer == "4":
-					return [no_inter_scores, inter_output], [no_inter_scores[3], inter_scores[3]]
+					return [no_inter_output, inter_output], [no_inter_scores[3], inter_scores[3]]
 				else:
-					return [no_inter_scores, inter_output], [no_inter_scores[4], inter_scores[4]]
+					return [no_inter_output, inter_output], [no_inter_scores[4], inter_scores[4]]
 
 			elif self._task == "gsm8k":
-				return [no_inter_scores, inter_output], [no_inter_scores[0], inter_scores[0]]
+				return [no_inter_output, inter_output], [no_inter_scores[0], inter_scores[0]]
 
 			else:
 				raise UnidentifiedTaskError('Task %s not defined' % self._task)
 
 		else:
-			if self._mm_intervention.find('no') != -1:
+			if self._mm_type.find('no') != -1:
 				context = self.get_context(test_sample, None, False, use_answers)
 			else:
 				context = self.get_context(test_sample, None, True, use_answers)

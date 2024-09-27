@@ -75,7 +75,7 @@ else
   script_path="$( cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 ; pwd -P )"
 fi
 
-results_path="$data_dir"_"$mental_model"_"$utility"
+results_path="$data_dir"/results/mohit_"$mental_model"_"$utility".txt
 
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
@@ -103,7 +103,7 @@ fi
 
 python src/mohit_mm_experiments.py --data-dir "$data_dir""$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" --val-filename "$val_file" \
 --results-path "$results_path" --task "$dataset" --student-model "$student_model" --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4 --n-ic-samples 5 --mm-type "$mental_model" \
---intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl"
+--intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" > mohit_"$mental_model"_"$utility".out
 
 source "$HOME"/miniconda3/bin/deactivate
 date

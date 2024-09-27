@@ -1,5 +1,6 @@
 #! /usr/bin/env python
 
+from pandas import DataFrame
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from typing import Dict, List, Union, Tuple
 
@@ -16,22 +17,22 @@ class UnidentifiedExplanationError(Exception):
 
 class Model:
 	
-	def __init__(self, model: PreTrainedModel, tokenizer: PreTrainedTokenizer, model_name: str, expl_type: str, task: str, max_tokens: int, num_beams: int, samples: List[Dict],
-	             use_explanations: bool):
+	def __init__(self, model_name: str, samples: Union[List[Dict], Tuple] = None, gen_model: PreTrainedModel = None, tokenizer: PreTrainedTokenizer = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
+				 use_explanations: bool = True):
 		
-		self._model = model
+		self._gen_model = gen_model
 		self._tokenizer = tokenizer
 		self._task = task
 		self._model_name = model_name
-		self._explanation_type = expl_type.lower()
 		self._use_explanations = use_explanations
 		self._max_tokens = max_tokens
 		self._num_beams = num_beams
 		self._ic_samples = samples
+		self._explanation_type = expl_type
 	
 	@property
-	def model(self) -> PreTrainedModel:
-		return self._model
+	def gen_model(self) -> PreTrainedModel:
+		return self._gen_model
 	
 	@property
 	def tokenizer(self) -> PreTrainedTokenizer:
@@ -44,10 +45,10 @@ class Model:
 	@staticmethod
 	def get_answer_idx(answers: List, answer_id: Union[str, int]) -> int:
 		return len(answers) - answers[-1::-1].index(answer_id) -1
-
-	def set_samples(self, samples: List[Dict]) -> None:
+	
+	def set_samples(self, samples: Union[List[Dict], Tuple]) -> None:
 		self._ic_samples = samples
-
+	
 	def no_explanation_context(self, test_sample) -> str:
 		if self._task == "strategy_qa":
 			context = "\n\n".join(
@@ -60,7 +61,7 @@ class Model:
 					 (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3], sample['options'][4], sample['answer'])
 					 for sample in self._ic_samples])
 			context += ("\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: The correct choice is" %
-			            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3], test_sample['options'][4]))
+						(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3], test_sample['options'][4]))
 		
 		elif self._task == "gsm8k":
 			context = "\n\n".join(["Q: %s\nA: The answer is %s" % (sample['question'], sample['answer']) for sample in self._ic_samples])
@@ -84,12 +85,12 @@ class Model:
 					  sample['options'][4], sample['answer'], sample['explanation'])
 					 for sample in self._ic_samples])
 			context += ("\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA:" %
-			            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
-			             test_sample['options'][3], test_sample['options'][4]))
+						(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
+						 test_sample['options'][3], test_sample['options'][4]))
 		
 		else:
 			raise UnidentifiedTaskError("Task %s not recognized for rational context" % self._task)
-
+		
 		return context
 	
 	def cot_context(self, test_sample: Dict) -> str:
@@ -104,8 +105,8 @@ class Model:
 					 (ics['question'], ics['options'][0], ics['options'][1], ics['options'][2], ics['options'][3], ics['options'][4], ics['explanation'], ics['answer'])
 					 for ics in self._ic_samples])
 			context += ('\n\nQ: %s\nAnswer Choices:\n Choice 1: %s\nChoice 2: %s\n Choice 3: %s\nChoice 4: %s\n Choice 5: %s\nA:' %
-			            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
-			             test_sample['options'][3], test_sample['options'][4]))
+						(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
+						 test_sample['options'][3], test_sample['options'][4]))
 		
 		else:
 			raise UnidentifiedTaskError("Task %s not recognized for chain of thought context" % self._task)
@@ -125,32 +126,22 @@ class Model:
 					  sample['options'][4], sample['explanation'], sample['answer'])
 					 for sample in self._ic_samples])
 			context += ("\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: %s So the correct choice is" %
-			            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
-			             test_sample['options'][3], test_sample['options'][4], explanation))
+						(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
+						 test_sample['options'][3], test_sample['options'][4], explanation))
 		
 		else:
 			raise UnidentifiedTaskError("Task %s not recognized for simple explanation context" % self._task)
-
+		
 		return context
-
+	
 	def get_context(self, test_sample: Dict, explanation: Union[List, str] = None) -> str:
-		if not self._use_explanations:
-			return self.no_explanation_context(test_sample)
-		else:
-			if self._explanation_type == 'cot':
-				self.cot_context(test_sample)
-			elif self._explanation_type.find('expl') != -1:
-				self.explanation_context(test_sample, explanation)
-			elif self._explanation_type.find('rational') != -1:
-				self.rational_context(test_sample)
-			else:
-				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
-
+		raise NotImplementedError("Method 'get_context' is not implemented in base class, subclasses should implement it.")
+	
 	def predict_confidence(self, test_sample: Dict, with_expl: bool = False) -> List[float]:
 		raise NotImplementedError("Method 'predict_confidence' is not implemented in the base class, subclasses should implement it.")
 	
 	def predict(self, test_sample: Dict) -> Tuple[str, str]:
 		raise NotImplementedError("Method 'predict' is not implemented in the base class, subclasses should implement it.")
-
-	def predict_batch(self, test_samples: List[Dict]) -> Tuple[List, List]:
+	
+	def predict_batch(self, test_samples: DataFrame) -> Tuple[List, List]:
 		raise NotImplementedError("Method 'predict_batch' is not implemented in the base class, subclasses should implement it.")

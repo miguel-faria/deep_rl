@@ -3,7 +3,8 @@ import re
 
 from torch.nn.functional import softmax
 from typing import Dict, List, Union, Tuple
-from model import Model, UnidentifiedExplanationError, UnidentifiedTaskError
+from reputation_learning.model import Model, UnidentifiedExplanationError, UnidentifiedTaskError
+from pandas import DataFrame
 
 
 class StudentModel(Model):
@@ -20,7 +21,7 @@ class StudentModel(Model):
 					 (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3], sample['options'][4], sample['explanation'], sample['answer'])
 					 for sample in self._ic_samples])
 			context += ("\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: %s So the correct choice is" %
-			            (test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3], test_sample['options'][4], teacher_explanation))
+						(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3], test_sample['options'][4], teacher_explanation))
 		
 		elif self._task == "gsm8k":
 			context = "\n\n".join(["Q: %s\nA: %s So the answer is %s" % (sample['question'], sample['explanation'], sample['answer']) for sample in self._ic_samples])
@@ -39,20 +40,20 @@ class StudentModel(Model):
 			return self.no_explanation_context(test_sample)
 		else:
 			if intervene:
-				self.teacher_explanation_context(test_sample, explanation)
-			elif self._explanation_type == 'cot':
-				self.cot_context(test_sample)
+				return self.teacher_explanation_context(test_sample, explanation)
+			elif self._explanation_type.find('cot') != -1 or (self._explanation_type.find('chain') != -1 and self._explanation_type.find('thought') != -1):
+				return self.cot_context(test_sample)
 			elif self._explanation_type.find('expl') != -1:
-				self.explanation_context(test_sample, explanation)
+				return self.explanation_context(test_sample, explanation)
 			elif self._explanation_type.find('rational') != -1:
-				self.rational_context(test_sample)
+				return self.rational_context(test_sample)
 			else:
 				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 	
 	def predict_confidence(self, test_sample: Dict, with_explanation: bool = False, explanation: Union[List, str] = None) -> List[float]:
 		context = self.get_context(test_sample, explanation=explanation)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-		generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
+		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
 		output = self.tokenizer.batch_decode(generated[0], skip_special_tokens=True)[0].strip()
 		
 		idx = 1 if "llama" in self._model_name else 0
@@ -83,12 +84,12 @@ class StudentModel(Model):
 		
 		elif self._task == "ec_qa":
 			option1_id, option2_id, option3_id, option4_id, option5_id = (self.tokenizer.encode("1")[idx], self.tokenizer.encode("2")[idx], self.tokenizer.encode("3")[idx],
-			                                                              self.tokenizer.encode("4")[idx], self.tokenizer.encode("5")[idx])
+																		  self.tokenizer.encode("4")[idx], self.tokenizer.encode("5")[idx])
 			option1_text_id, option2_text_id, option3_text_id, option4_text_id, option5_text_id = (self.tokenizer.encode(test_sample["options"][0].split(" ")[0])[idx],
-			                                                                                       self.tokenizer.encode(test_sample["options"][1].split(" ")[0])[idx],
-			                                                                                       self.tokenizer.encode(test_sample["options"][2].split(" ")[0])[idx],
-			                                                                                       self.tokenizer.encode(test_sample["options"][3].split(" ")[0])[idx],
-			                                                                                       self.tokenizer.encode(test_sample["options"][4].split(" ")[0])[idx])
+																								   self.tokenizer.encode(test_sample["options"][1].split(" ")[0])[idx],
+																								   self.tokenizer.encode(test_sample["options"][2].split(" ")[0])[idx],
+																								   self.tokenizer.encode(test_sample["options"][3].split(" ")[0])[idx],
+																								   self.tokenizer.encode(test_sample["options"][4].split(" ")[0])[idx])
 			
 			found_text = False
 			if with_explanation and not explanation:
@@ -133,10 +134,10 @@ class StudentModel(Model):
 			scores = softmax(generated['scores'][answer_id], dim=-1)
 			if found_text:
 				option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_text_id].item(), scores[0][option2_text_id].item(), scores[0][option3_text_id].item(),
-				                                                                             scores[0][option4_text_id].item(), scores[0][option5_text_id].item())
+																							 scores[0][option4_text_id].item(), scores[0][option5_text_id].item())
 			else:
 				option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_id].item(), scores[0][option2_id].item(), scores[0][option3_id].item(),
-				                                                                             scores[0][option4_id].item(), scores[0][option5_id].item())
+																							 scores[0][option4_id].item(), scores[0][option5_id].item())
 			print('Option1 score = %s' % option1_score)
 			print('Option2 score = %s' % option2_score)
 			print('Option3 score = %s' % option3_score)
@@ -152,7 +153,7 @@ class StudentModel(Model):
 	def predict(self, test_sample: Dict, expl: Union[List, str] = None, intervene: bool = False):
 		context = self.get_context(test_sample=test_sample, explanation=expl, intervene=intervene)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-		generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
+		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 		output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
 		
 		if "llama" in self._model_name:
@@ -188,7 +189,7 @@ class StudentModel(Model):
 					print("Regenerating with the explanation")
 					context = self.teacher_explanation_context(test_sample, explanation)
 					tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-					generated = self.model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
+					generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 					output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
 					output = output[len(context):] if context in output else output
 					output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
@@ -206,18 +207,20 @@ class StudentModel(Model):
 		
 		return prediction, explanation
 	
-	def predict_batch(self, test_samples: List[Dict], intervention_indexes_per_budget: Dict[int, Union[List, str]], teacher: Model) -> Tuple[List, List]:
+	def predict_batch(self, test_samples: DataFrame, intervention_indexes_per_budget: List[List[int]], teacher: Model) -> Tuple[List, List, List]:
+		labels = []
 		predictions_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]
 		explanations_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]
 		
-		for test_index, test_sample in enumerate(test_samples):
+		for test_index, test_sample in test_samples.iterrows():
 			for i, intervention_indexes in enumerate(intervention_indexes_per_budget):
 				if test_index in intervention_indexes:
-					_, explanation = teacher.predict(test_sample=test_sample)
-					prediction_student, explanation_student = self.predict(test_sample=test_sample, expl=explanation, intervene=True)
+					_, explanation = teacher.predict(test_sample=test_sample.to_dict())
+					prediction_student, explanation_student = self.predict(test_sample=test_sample.to_dict(), expl=explanation, intervene=True)
 				else:
-					prediction_student, explanation_student = self.predict(test_sample=test_sample, expl='', intervene=False)
+					prediction_student, explanation_student = self.predict(test_sample=test_sample.to_dict(), expl='', intervene=False)
 				predictions_per_budget[i].append(prediction_student)
 				explanations_per_budget[i].append(explanation_student)
+			labels.append(test_sample['answer'])
 		
-		return predictions_per_budget, explanations_per_budget
+		return predictions_per_budget, explanations_per_budget, labels

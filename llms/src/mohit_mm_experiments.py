@@ -32,6 +32,7 @@ def get_teacher_model_samples(rng_gen: Generator, train_data: pd.DataFrame, stud
 		while len(teacher_samples) < num_samples:
 			
 			sample = shuffle_train.iloc[idx].to_dict()
+			
 			student_prediction_no_intervene, _ = student_model.predict(sample, '', False)  # get student prediction without teacher intervention
 			
 			teacher_expl = sample['explanation'] if teacher_model is None else teacher_model.predict(sample)[0]
@@ -224,6 +225,8 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 				teacher_expl_type: str, mental_model_type: str, intervene_behaviour: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path) -> Tuple[StudentModel, Optional[TeacherModel], Optional[TeacherMentalModel]]:
 	
 	rng_gen = default_rng(rng_seed)
+	
+	print('Setting up the Student Model')
 	train_idxs = rng_gen.choice(train_data.shape[0], num_samples, replace=False)
 	student_samples = [train_data.iloc[idx].to_dict() for idx in train_idxs]
 	
@@ -238,6 +241,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 	student_model = StudentModel(student_model_path, student_samples, student_gen_model, student_tokenizer, student_expl_type, task, max_tokens, num_beams, use_explanations)
 	
 	if use_explanations:
+		print('Setting up the Teacher Model')
 		if student_expl_type.find('human') != -1:
 			teacher_model = TeacherModel(teacher_model_path)
 			mental_model = None
@@ -248,11 +252,16 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 			else:
 				teacher_gen_model = AutoModelForSeq2SeqLM.from_pretrained(teacher_model_path, device_map="auto", cache_dir=cache_dir)
 			
+			print('Getting teacher samples')
 			teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
+			print('Creating Teacher Model')
 			teacher_model = TeacherModel(teacher_model_path, teacher_samples, teacher_gen_model, teacher_tokenizer, teacher_expl_type, task, max_tokens, num_beams, use_explanations)
 			
 			if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
+				print('Setting up the Teacher Mental Model')
+				print('Getting mental models samples')
 				mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
+				print('Creating Teacher Mental Model')
 				mental_model = TeacherMentalModel(teacher_model_path, mm_samples, teacher_gen_model, teacher_tokenizer, teacher_expl_type, task, max_tokens, num_beams, use_explanations,
 												  intervention_utility, mental_model_type)
 			

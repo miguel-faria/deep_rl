@@ -37,18 +37,18 @@ class StudentModel(Model):
 	
 	def get_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False):
 		if not self._use_explanations:
-			return self.no_explanation_context(sample)
+			return self.no_explanation_context(sample, self._ic_samples)
 		else:
 			if intervene:
 				return self.teacher_explanation_context(sample, explanation)
 			elif self._explanation_type.find('cot') != -1 or (self._explanation_type.find('chain') != -1 and self._explanation_type.find('thought') != -1):
-				return self.cot_context(sample)
+				return self.cot_context(sample, self._ic_samples)
 			elif self._explanation_type.find('expl') != -1:
-				return self.explanation_context(sample, explanation)
+				return self.explanation_context(sample, self._ic_samples, explanation)
 			elif self._explanation_type.find('rational') != -1:
-				return self.rational_context(sample)
+				return self.rational_context(sample, self._ic_samples)
 			elif self._explanation_type.find('no') != -1:
-				return self.no_explanation_context(sample)
+				return self.no_explanation_context(sample, self._ic_samples)
 			else:
 				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 	

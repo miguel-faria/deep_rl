@@ -16,18 +16,19 @@ class TeacherModel(Model):
 		super().__init__(model_name, samples, gen_model, tokenizer, expl_type, task, max_tokens, num_beams, use_explanations)
 	
 	def get_context(self, sample: Dict, explanation: Union[List, str] = None) -> str:
+		ic_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
 		if not self._use_explanations:
-			return self.no_explanation_context(sample)
+			return self.no_explanation_context(sample, ic_samples)
 		else:
 			if self._explanation_type.find('blind') != -1:
 				if self._explanation_type.find('rational') != -1:
-					return self.rational_context(sample)
+					return self.rational_context(sample, ic_samples)
 				elif self._explanation_type.find('cot') != -1 or (self._explanation_type.find('chain') != -1 and self._explanation_type.find('thought') != -1):
-					return self.cot_context(sample)
+					return self.cot_context(sample, ic_samples)
 			elif self._explanation_type.find('useful') != -1:
-				return self.cot_context(sample)
+				return self.cot_context(sample, ic_samples)
 			elif self._explanation_type.find('expl') != -1:
-				return self.explanation_context(sample, explanation)
+				return self.explanation_context(sample, ic_samples, explanation)
 			else:
 				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 	

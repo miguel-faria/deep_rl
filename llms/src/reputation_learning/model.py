@@ -53,22 +53,22 @@ class Model:
 	def set_samples(self, samples: Union[List[Dict], Tuple]) -> None:
 		self._ic_samples = samples
 	
-	def no_explanation_context(self, test_sample) -> str:
+	def no_explanation_context(self, test_sample, ic_samples: List[Dict]) -> str:
 		if self._task == "strategy_qa":
 			context = "\n\n".join(
-					["Q: %s\nA: The answer is %s" % (sample['question'], sample['answer']) for sample in self._ic_samples])
+					["Q: %s\nA: The answer is %s" % (sample['question'], sample['answer']) for sample in ic_samples])
 			context += "\n\nQ: %s\nA: The answer is" % test_sample['question']
 		
 		elif self._task == "ec_qa":
 			context = "\n\n".join(
 					["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: The correct choice is %s" %
 					 (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3], sample['options'][4], sample['answer'])
-					 for sample in self._ic_samples])
+					 for sample in ic_samples])
 			context += ("\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: The correct choice is" %
 						(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2], test_sample['options'][3], test_sample['options'][4]))
 		
 		elif self._task == "gsm8k":
-			context = "\n\n".join(["Q: %s\nA: The answer is %s" % (sample['question'], sample['answer']) for sample in self._ic_samples])
+			context = "\n\n".join(["Q: %s\nA: The answer is %s" % (sample['question'], sample['answer']) for sample in ic_samples])
 			context += "\n\nQ: %s\nA:" % test_sample['question']
 		
 		else:
@@ -76,10 +76,10 @@ class Model:
 		
 		return context
 	
-	def rational_context(self, test_sample: Dict) -> str:
+	def rational_context(self, test_sample: Dict, ic_samples: List[Dict]) -> str:
 		context = ''
 		if self._task == "strategy_qa":
-			context += "\n\n".join(["Q: %s\nA: %r because %s" % (sample['question'], sample['answer'], sample['explanation']) for sample in self._ic_samples])
+			context += "\n\n".join(["Q: %s\nA: %r because %s" % (sample['question'], sample['answer'], sample['explanation']) for sample in ic_samples])
 			context += f"\n\nQ: {test_sample['question']}\nA:"
 		
 		elif self._task == "ec_qa":
@@ -87,7 +87,7 @@ class Model:
 					["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: %s because %s" %
 					 (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
 					  sample['options'][4], sample['answer'], sample['explanation'])
-					 for sample in self._ic_samples])
+					 for sample in ic_samples])
 			context += ("\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA:" %
 						(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
 						 test_sample['options'][3], test_sample['options'][4]))
@@ -97,18 +97,17 @@ class Model:
 		
 		return context
 	
-	def cot_context(self, test_sample: Dict) -> str:
+	def cot_context(self, test_sample: Dict, ic_samples: List[Dict]) -> str:
 		context = ''
-		print(self._ic_samples)
 		if self._task == 'strategy_qa':
-			context += '\n\n'.join(["Q: %s\nA: %s So the answer is %s" % (ics['question'], ics['explanation'], ics['answer']) for ics in self._ic_samples])
+			context += '\n\n'.join(["Q: %s\nA: %s So the answer is %s" % (ics['question'], ics['explanation'], ics['answer']) for ics in ic_samples])
 			context += '\n\nQ: %s\nA:' % test_sample['question']
 		
 		elif self._task == 'ec_qa':
 			context += "\n\n".join(
 					['Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\n Choice 3: %s\nChoice 4: %s\n Choice 5:%s\nA: %s So the correct choice is %s' %
 					 (ics['question'], ics['options'][0], ics['options'][1], ics['options'][2], ics['options'][3], ics['options'][4], ics['explanation'], ics['answer'])
-					 for ics in self._ic_samples])
+					 for ics in ic_samples])
 			context += ('\n\nQ: %s\nAnswer Choices:\n Choice 1: %s\nChoice 2: %s\n Choice 3: %s\nChoice 4: %s\n Choice 5: %s\nA:' %
 						(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
 						 test_sample['options'][3], test_sample['options'][4]))
@@ -118,10 +117,10 @@ class Model:
 		
 		return context
 	
-	def explanation_context(self, test_sample: Dict, explanation: str) -> str:
+	def explanation_context(self, test_sample: Dict, ic_samples: List[Dict], explanation: str) -> str:
 		context = ''
 		if self._task == "strategy_qa":
-			context += "\n\n".join(["Q: %s\nA: %s So the answer is %s" % (sample['question'], sample['explanation'], sample['answer']) for sample in self._ic_samples])
+			context += "\n\n".join(["Q: %s\nA: %s So the answer is %s" % (sample['question'], sample['explanation'], sample['answer']) for sample in ic_samples])
 			context += f"\n\nQ: %s\nA: %s So the answer is" % (test_sample['question'], explanation)
 		
 		elif self._task == "ec_qa":
@@ -129,7 +128,7 @@ class Model:
 					["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: %s So the correct choice is %s" %
 					 (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
 					  sample['options'][4], sample['explanation'], sample['answer'])
-					 for sample in self._ic_samples])
+					 for sample in ic_samples])
 			context += ("\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA: %s So the correct choice is" %
 						(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
 						 test_sample['options'][3], test_sample['options'][4], explanation))

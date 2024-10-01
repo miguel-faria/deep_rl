@@ -99,6 +99,7 @@ class Model:
 	
 	def cot_context(self, test_sample: Dict) -> str:
 		context = ''
+		print(self._ic_samples)
 		if self._task == 'strategy_qa':
 			context += '\n\n'.join(["Q: %s\nA: %s So the answer is %s" % (ics['question'], ics['explanation'], ics['answer']) for ics in self._ic_samples])
 			context += '\n\nQ: %s\nA:' % test_sample['question']

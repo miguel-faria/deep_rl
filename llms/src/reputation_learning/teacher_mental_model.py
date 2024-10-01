@@ -46,14 +46,14 @@ class TeacherMentalModel(TeacherModel):
 								 (ic_sample['question'], ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
 								 for ic_sample in intervention_samples])
 						context += ("\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is" %
-						            (sample['question'], sample['answer'], teacher_explanation))
+									(sample['question'], sample['answer'], teacher_explanation))
 					else:
 						context += "\n\n".join(
 								["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is %s" %
 								 (ic_sample['question'], ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
 								 for ic_sample in intervention_samples])
 						context += ("\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is" %
-						            (sample['question'], sample['answer'], teacher_explanation))
+									(sample['question'], sample['answer'], teacher_explanation))
 				elif self._task == "ec_qa":
 					if not use_answers:
 						context += "\n\n".join(
@@ -62,8 +62,8 @@ class TeacherMentalModel(TeacherModel):
 								  ic_sample['options'][4], ic_sample['teacher_explanation'], ic_sample['prediction'])
 								 for ic_sample in intervention_samples])
 						context += ("\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is" %
-						            (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
-						             sample['options'][4], teacher_explanation))
+									(sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
+									 sample['options'][4], teacher_explanation))
 					else:
 						context += "\n\n".join(
 								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the correct choice is %s" %
@@ -71,8 +71,8 @@ class TeacherMentalModel(TeacherModel):
 								  ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
 								 for ic_sample in intervention_samples])
 						context += ("\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is" %
-						            (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
-						             sample['options'][4], teacher_explanation))
+									(sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
+									 sample['options'][4], teacher_explanation))
 				elif self._task == "gsm8k":
 					teacher_explanation_sents = teacher_explanation.split(".")
 					teacher_partial_explanation = teacher_explanation_sents[0] + "."
@@ -104,8 +104,8 @@ class TeacherMentalModel(TeacherModel):
 								  ic_sample['options'][3], ic_sample['options'][4], ic_sample['prediction'])
 								 for ic_sample in no_intervention_samples])
 						context += (f"\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer:" %
-						            (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2],
-						             sample['options'][3], sample['options'][4]))
+									(sample['question'], sample['options'][0], sample['options'][1], sample['options'][2],
+									 sample['options'][3], sample['options'][4]))
 					else:
 						context += "\n\n".join(
 								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s" %
@@ -113,8 +113,8 @@ class TeacherMentalModel(TeacherModel):
 								  ic_sample['options'][3], ic_sample['options'][4], ic_sample['prediction'])
 								 for ic_sample in no_intervention_samples])
 						context += (f"\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer:" %
-						            (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2],
-						             sample['options'][3], sample['options'][4]))
+									(sample['question'], sample['options'][0], sample['options'][1], sample['options'][2],
+									 sample['options'][3], sample['options'][4]))
 				elif self._task == "gsm8k":
 					context = "\n\n".join(["Q: %s\nAI Predicted Answer: %s" % (ic_sample['question'], ic_sample['answer']) for ic_sample in no_intervention_samples])
 					context += "\n\nQ: %s\nAI Predicted Answer:" % sample['question']

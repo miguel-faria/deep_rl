@@ -11,7 +11,7 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 class TeacherModel(Model):
 	
 	def __init__(self, model_name: str, samples: List[Dict] = None, gen_model: PreTrainedModel = None, tokenizer: PreTrainedTokenizer = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
-	             use_explanations: bool = True):
+				 use_explanations: bool = True):
 		
 		super().__init__(model_name, samples, gen_model, tokenizer, expl_type, task, max_tokens, num_beams, use_explanations)
 	
@@ -54,7 +54,7 @@ class TeacherModel(Model):
 		
 		elif self._task == "ec_qa":
 			option1_id, option2_id, option3_id, option4_id, option5_id = (self.tokenizer.encode("1")[idx], self.tokenizer.encode("2")[idx], self.tokenizer.encode("3")[idx],
-			                                                              self.tokenizer.encode("4")[idx], self.tokenizer.encode("5")[idx])
+																		  self.tokenizer.encode("4")[idx], self.tokenizer.encode("5")[idx])
 			option1_text_id = self.tokenizer.encode(sample["options"][0].split(" ")[0])[idx]
 			option2_text_id = self.tokenizer.encode(sample["options"][1].split(" ")[0])[idx]
 			option3_text_id = self.tokenizer.encode(sample["options"][2].split(" ")[0])[idx]
@@ -90,10 +90,10 @@ class TeacherModel(Model):
 			scores = softmax(generated['scores'][answer_id], dim=-1)
 			if found_text:
 				option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_text_id].item(), scores[0][option2_text_id].item(), scores[0][option3_text_id].item(),
-				                                                                             scores[0][option4_text_id].item(), scores[0][option5_text_id].item())
+																							 scores[0][option4_text_id].item(), scores[0][option5_text_id].item())
 			else:
 				option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_id].item(), scores[0][option2_id].item(), scores[0][option3_id].item(),
-				                                                                             scores[0][option4_id].item(), scores[0][option5_id].item())
+																							 scores[0][option4_id].item(), scores[0][option5_id].item())
 			print('Option1 score = %s' % option1_score)
 			print('Option2 score = %s' % option2_score)
 			print('Option3 score = %s' % option3_score)
@@ -149,7 +149,8 @@ class TeacherModel(Model):
 				elif self._task == "strategy_qa":
 					if prediction not in ["no", "yes"]:
 						print("Regenerating with the explanation")
-						context = self.explanation_context(sample, explanation)
+						context_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
+						context = self.explanation_context(sample, context_samples, explanation)
 						tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 						generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 						output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()

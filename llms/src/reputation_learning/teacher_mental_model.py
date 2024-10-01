@@ -128,9 +128,8 @@ class TeacherMentalModel(TeacherModel):
 	def predict_prompt(self, prompt: str, test_sample: Dict) -> Tuple:
 		tokens = self.tokenizer([prompt], return_tensors="pt").to("cuda")
 		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
-		print(generated)
 		scores = softmax(generated['scores'][0], dim=-1)
-		output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
+		output = self.tokenizer.batch_decode(generated['sequences'], skip_special_tokens=True)[0].strip()
 
 		if "llama" in self._model_name:
 			output = output[len(prompt):]

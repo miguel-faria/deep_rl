@@ -104,7 +104,7 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 						"answer":              sample['answer'],
 						"gold_explanation":    sample['explanation'],
 						"prediction":          student_prediction,
-						"student_explanation": student_explanation
+						"teacher_explanation": teacher_explanation
 				}
 				
 				if student_prediction == 'yes':
@@ -162,7 +162,7 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 						"options":              sample['options'],
 						"explanation":          sample['explanation'],
 						"prediction":           student_prediction,
-						"student_explanation":  student_explanation
+						"teacher_explanation":  teacher_explanation
 				}
 				
 				intervention_samples.append(intervention_sample)
@@ -209,7 +209,7 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 						"answer":               sample['answer'],
 						"explanation":          sample['explanation'],
 						"prediction":           student_prediction,
-						"student_explanation":  student_explanation
+						"teacher_explanation":  teacher_explanation
 				}
 				
 				intervention_samples.append(intervention_sample)

@@ -76,11 +76,11 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 					continue
 				
 				no_intervention_sample = {
-						"question":            sample['question'],
-						"answer":              sample['answer'],
-						"gold_explanation":    sample['explanation'],
-						"prediction":          student_prediction,
-						"student_explanation": student_explanation
+						"question":            	sample['question'],
+						"answer":              	sample['answer'],
+						"explanation":    		sample['explanation'],
+						"prediction":          	student_prediction,
+						"student_explanation": 	student_explanation
 				}
 				
 				if student_prediction == 'yes':
@@ -100,11 +100,11 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 					continue
 				
 				intervention_sample = {
-						"question":            sample['question'],
-						"answer":              sample['answer'],
-						"gold_explanation":    sample['explanation'],
-						"prediction":          student_prediction,
-						"teacher_explanation": teacher_explanation
+						"question":            	sample['question'],
+						"answer":              	sample['answer'],
+						"explanation":			sample['explanation'],
+						"prediction":          	student_prediction,
+						"teacher_explanation": 	teacher_explanation
 				}
 				
 				if student_prediction == 'yes':

@@ -36,7 +36,7 @@ class TeacherMentalModel(TeacherModel):
 		if ((self.explanation_type.find('useful') != -1 and self.explanation_type.find('teacher') != -1) or
 				(self.explanation_type.find('mental') != -1 and self.explanation_type.find('model') != -1)):
 			if intervene:
-				intervention_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
+				intervention_samples = self._ic_samples[1] if isinstance(self._ic_samples, tuple) else self._ic_samples
 				_, teacher_explanation = self.predict(sample)
 				print('Teacher explanation = %s' % teacher_explanation)
 				if self._task == "strategy_qa":
@@ -83,7 +83,7 @@ class TeacherMentalModel(TeacherModel):
 					raise UnidentifiedTaskError('Task %s not defined' % self._task)
 			
 			else:
-				no_intervention_samples = self._ic_samples[1] if isinstance(self._ic_samples, tuple) else self._ic_samples
+				no_intervention_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
 				context = "Simulate an AI model's answer for the given question.\n\n"
 				if self._task == "strategy_qa":
 					if use_answers:

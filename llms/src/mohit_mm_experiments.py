@@ -70,7 +70,7 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 			
 			# When you have either no intervention or both intervention modes mental model add no intervention samples
 			if mental_model_type.find('no') != -1 or mental_model_type.find('both') != -1:
-				student_prediction, student_explanation = student_model.predict(test_sample=sample, expl='', intervene=False)
+				student_prediction, student_explanation = student_model.predict(sample=sample, expl='', intervene=False)
 				if ((student_prediction == 'yes' and num_no_intervention_samples[0] == max_samples // 2) or
 						(student_prediction == 'no' and num_no_intervention_samples[1] == max_samples // 2)):      # keep number of yes and no ansewers balanced
 					continue
@@ -93,8 +93,8 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 			# When you have either intervention or both intervention modes mental model add intervention samples
 			if mental_model_type.find('inter') != -1 or mental_model_type.find('both') != -1:
 				
-				_, teacher_explanation = teacher_model.predict(test_sample=sample)
-				student_prediction, student_explanation = student_model.predict(test_sample=sample, expl=teacher_explanation, intervene=True)
+				_, teacher_explanation = teacher_model.predict(sample=sample)
+				student_prediction, student_explanation = student_model.predict(sample=sample, expl=teacher_explanation, intervene=True)
 				if ((student_prediction == 'yes' and num_intervention_samples[0] == max_samples // 2) or
 						(student_prediction == 'no' and num_intervention_samples[1] == max_samples // 2)):  # keep number of yes and no ansewers balanced
 					continue
@@ -136,7 +136,7 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 			
 			# When you have either no intervention or both intervention modes mental model add no intervention samples
 			if mental_model_type.find('no') != -1 or mental_model_type.find('both') != -1:
-				student_prediction, student_explanation = student_model.predict(test_sample=sample, expl='', intervene=False)
+				student_prediction, student_explanation = student_model.predict(sample=sample, expl='', intervene=False)
 				
 				no_intervention_sample = {
 						"question":             sample['question'],
@@ -153,8 +153,8 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 			# When you have either intervention or both intervention modes mental model add intervention samples
 			if mental_model_type.find('inter') != -1 or mental_model_type.find('both') != -1:
 				
-				_, teacher_explanation = teacher_model.predict(test_sample=sample)
-				student_prediction, student_explanation = student_model.predict(test_sample=sample, expl=teacher_explanation, intervene=True)
+				_, teacher_explanation = teacher_model.predict(sample=sample)
+				student_prediction, student_explanation = student_model.predict(sample=sample, expl=teacher_explanation, intervene=True)
 				
 				intervention_sample = {
 						"question":             sample['question'],
@@ -185,7 +185,7 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 			
 			# When you have either no intervention or both intervention modes mental model add no intervention samples
 			if mental_model_type.find('no') != -1 or mental_model_type.find('both') != -1:
-				student_prediction, student_explanation = student_model.predict(test_sample=sample, expl='', intervene=False)
+				student_prediction, student_explanation = student_model.predict(sample=sample, expl='', intervene=False)
 				
 				no_intervention_sample = {
 						"question":             sample['question'],
@@ -201,8 +201,8 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 			# When you have either intervention or both intervention modes mental model add intervention samples
 			if mental_model_type.find('inter') != -1 or mental_model_type.find('both') != -1:
 				
-				_, teacher_explanation = teacher_model.predict(test_sample=sample)
-				student_prediction, student_explanation = student_model.predict(test_sample=sample, expl=teacher_explanation, intervene=True)
+				_, teacher_explanation = teacher_model.predict(sample=sample)
+				student_prediction, student_explanation = student_model.predict(sample=sample, expl=teacher_explanation, intervene=True)
 				
 				intervention_sample = {
 						"question":             sample['question'],
@@ -290,7 +290,7 @@ def get_intervention_idx_budget(student_model: StudentModel, mental_model: Teach
 			sample_indexes = []
 			for row in test_samples.iterrows():
 				idx, sample = row
-				prediction, _ = student_model.predict(test_sample=sample.to_dict(), expl='', intervene=False)
+				prediction, _ = student_model.predict(sample=sample.to_dict(), expl='', intervene=False)
 				if prediction != sample['answer']:
 					sample_indexes.append(idx)
 			for _ in budgets:

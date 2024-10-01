@@ -29,7 +29,11 @@ class Model:
 		self._num_beams = num_beams
 		self._ic_samples = samples
 		self._explanation_type = expl_type.lower()
-	
+
+	@property
+	def model_name(self) -> str:
+		return self._model_name
+
 	@property
 	def gen_model(self) -> PreTrainedModel:
 		return self._gen_model
@@ -134,14 +138,14 @@ class Model:
 		
 		return context
 	
-	def get_context(self, test_sample: Dict, explanation: Union[List, str] = None) -> str:
+	def get_context(self, sample: Dict, explanation: Union[List, str] = None) -> str:
 		raise NotImplementedError("Method 'get_context' is not implemented in base class, subclasses should implement it.")
 	
-	def predict_confidence(self, test_sample: Dict, with_expl: bool = False) -> List[float]:
+	def predict_confidence(self, sample: Dict, with_expl: bool = False) -> List[float]:
 		raise NotImplementedError("Method 'predict_confidence' is not implemented in the base class, subclasses should implement it.")
 	
-	def predict(self, test_sample: Dict) -> Tuple[str, str]:
+	def predict(self, sample: Dict) -> Tuple[str, str]:
 		raise NotImplementedError("Method 'predict' is not implemented in the base class, subclasses should implement it.")
 	
-	def predict_batch(self, test_samples: DataFrame) -> Tuple[List, List]:
+	def predict_batch(self, samples: DataFrame) -> Tuple[List, List]:
 		raise NotImplementedError("Method 'predict_batch' is not implemented in the base class, subclasses should implement it.")

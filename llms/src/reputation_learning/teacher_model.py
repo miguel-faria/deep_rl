@@ -111,7 +111,7 @@ class TeacherModel(Model):
 			return str(sample["answer"]), str(sample["explanation"])
 		
 		else:
-			context = self.cot_context(sample)
+			context = self.get_context(sample, '')
 			tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 			generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 			output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()

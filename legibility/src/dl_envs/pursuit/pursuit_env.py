@@ -306,7 +306,7 @@ class PursuitEnv(Env):
 	####################
 	### MAIN METHODS ###
 	####################
-	def get_env_log(self) -> str:
+	def get_full_env_log(self) -> str:
 	
 		log = 'Environment state:\nPlayer\'s states:\n'
 		for hunter_id in self.hunter_ids:
@@ -319,6 +319,22 @@ class PursuitEnv(Env):
 			log += '\t- prey %s at (%d, %d) is %s\n' % (prey_id, prey.pos[0], prey.pos[1], "alive" if prey.alive else "dead")
 		
 		log += 'Field state:\n%s\n' % str(self.field)
+		log += 'Current timestep: %d\nGame is finished: %r\nGame has timed out: %r\n' % (self._env_timestep, self.env_finished(), self.timeout())
+		
+		return log
+	
+	def get_env_log(self) -> str:
+		
+		log = 'Environment state:\nPlayer\'s states:\n'
+		for hunter_id in self.hunter_ids:
+			hunter = self._agents[hunter_id]
+			log += '\t- hunter %s at (%d, %d) is %s\n' % (hunter_id, hunter.pos[0], hunter.pos[1], "alive" if hunter.alive else "dead")
+		
+		log += 'Food\'s states:\n'
+		for prey_id in self.prey_ids:
+			prey = self._agents[prey_id]
+			log += '\t- prey %s at (%d, %d) is %s\n' % (prey_id, prey.pos[0], prey.pos[1], "alive" if prey.alive else "dead")
+		
 		log += 'Current timestep: %d\nGame is finished: %r\nGame has timed out: %r\n' % (self._env_timestep, self.env_finished(), self.timeout())
 		
 		return log
@@ -645,7 +661,7 @@ class TargetPursuitEnv(PursuitEnv):
 	####################
 	### MAIN METHODS ###
 	####################
-	def get_env_log(self) -> str:
+	def get_full_env_log(self) -> str:
 	
 		log = 'Environment state:\nPlayer\'s states:\n'
 		for hunter_id in self.hunter_ids:
@@ -659,6 +675,23 @@ class TargetPursuitEnv(PursuitEnv):
 		
 		log += 'Hunter\'s current target: %s\n' % str(self._target_id)
 		log += 'Field state:\n%s\n' % str(self.field)
+		log += 'Current timestep: %d\nGame is finished: %r\nGame has timed out: %r\n' % (self._env_timestep, self.env_finished(), self.timeout())
+		
+		return log
+	
+	def get_env_log(self) -> str:
+		
+		log = 'Environment state:\nPlayer\'s states:\n'
+		for hunter_id in self.hunter_ids:
+			hunter = self._agents[hunter_id]
+			log += '\t- hunter %s at (%d, %d) is %s\n' % (hunter_id, hunter.pos[0], hunter.pos[1], "alive" if hunter.alive else "dead")
+		
+		log += 'Food\'s states:\n'
+		for prey_id in self.prey_ids:
+			prey = self._agents[prey_id]
+			log += '\t- prey %s at (%d, %d) is %s\n' % (prey_id, prey.pos[0], prey.pos[1], "alive" if prey.alive else "dead")
+		
+		log += 'Hunter\'s current target: %s\n' % str(self._target_id)
 		log += 'Current timestep: %d\nGame is finished: %r\nGame has timed out: %r\n' % (self._env_timestep, self.env_finished(), self.timeout())
 		
 		return log

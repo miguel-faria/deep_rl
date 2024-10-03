@@ -15,11 +15,12 @@ import gc
 
 from dl_algos.single_model_madqn import SingleModelMADQN
 from dl_algos.dqn import DQNetwork, EPS_TYPE
-from dl_envs.pursuit.pursuit_env import PursuitEnv, TargetPursuitEnv
+from dl_envs.pursuit.pursuit_env import PursuitEnv, TargetPursuitEnv, Action
 from pathlib import Path
 from itertools import permutations
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 from datetime import datetime
+from wandb.wandb_run import Run
 
 
 RNG_SEED = 6102023
@@ -73,10 +74,10 @@ def get_target_seqs(targets: List[str]) -> List[Tuple[str]]:
 def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float,
 					  tau: float, initial_eps: float, final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
 					  exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1,
-					  use_render: bool = False, cycle: int = 0, greedy_action: bool = True) -> List:
+					  use_render: bool = False, cycle: int = 0, greedy_action: bool = True, epoch_logging: bool = False, initial_model_path: str = '',
+					  use_tracker: bool = False, performance_tracker: Optional[Run] = None, tracker_panel: str = '', debug: bool = False) -> None:
 	rng_gen = np.random.default_rng(rng_seed)
 	
-	history = []
 	# Setup DQNs for training
 	obs, *_ = env.reset()
 	if not dqn_model.agent_dqn.dqn_initialized:
@@ -94,16 +95,19 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 	start_record_epoch = cycle * max_timesteps * env.n_preys
 	epoch = start_record_epoch
 	eps = initial_eps
-	avg_loss = []
+	avg_episode_len = []
 	
 	for it in range(num_iterations):
-		if use_render and eps <= final_eps:
+		if use_render:
 			env.render()
 		done = False
 		episode_rewards = 0
 		episode_q_vals = 0
 		episode_start = epoch
-		episode_history = []
+		avg_loss = []
+		logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
+		logger.info('Agents: ' + ', '.join(['%s @ (%d, %d)' % (env.agents[hunter].agent_id, *env.agents[hunter].position) for hunter in env.hunter_ids]))
+		logger.info('Preys: ' + ', '.join(['%s @ (%d, %d)' % (env.agents[prey].agent_id, *env.agents[prey].position) for prey in env.prey_alive_ids]))
 		while not done:
 			
 			# interact with environment
@@ -112,9 +116,9 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 			else:
 				eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
 			
-			if rng_gen.random() < eps:
+			explore = rng_gen.random() < eps
+			if explore:
 				actions = np.hstack((env.action_space.sample()[:env.n_hunters], np.array([env.agents[prey].act(env) for prey in env.prey_alive_ids])))
-				# actions = env.action_space.sample()
 			else:
 				actions = []
 				for a_idx in range(env.n_hunters):
@@ -137,10 +141,12 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 				for prey_id in env.prey_alive_ids:
 					actions += [env.agents[prey_id].act(env)]
 				actions = np.array(actions)
-			episode_history += [dqn_model.get_history_entry(obs, actions)]
-			logger.info(env.get_env_log())
+			
+			if debug:
+				logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]) + ' Explored? %r' % explore + '\n')
+			
 			next_obs, rewards, terminated, timeout, infos = env.step(actions)
-			if use_render and eps <= final_eps:
+			if use_render:
 				env.render()
 			
 			if len(rewards) == 1:
@@ -159,8 +165,8 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 				for a_idx in range(env.n_hunters):
 					dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], rewards[a_idx], finished[a_idx], [])
 			episode_rewards += (sum(rewards[:env.n_hunters]) / env.n_hunters)
-			if dqn_model.agent_dqn.use_tracker:
-				dqn_model.agent_dqn.summary_writer.add_scalar("charts/reward", sum(rewards[:env.n_hunters]) / env.n_hunters, epoch + start_record_epoch)
+			if use_tracker and epoch_logging:
+				performance_tracker.log({tracker_panel + "-charts/performance/reward": sum(rewards)}, step=(epoch + start_record_epoch))
 			obs = next_obs
 			
 			# update Q-network and target network
@@ -168,10 +174,10 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 				if epoch % train_freq == 0:
 					loss = jax.device_get(dqn_model.update_model(batch_size, epoch - start_record_epoch, start_time,
 																 tensorboard_frequency, logger, cnn_shape=cnn_shape))
-					# if dqn_model.write_tensorboard:
-					# 	dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", loss, epoch)
-					# 	dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), epoch)
-					avg_loss += [loss]
+					if use_tracker and epoch_logging:
+						performance_tracker.log({tracker_panel + "-charts/losses/td_loss": loss}, step=epoch)
+					else:
+						avg_loss += [loss]
 				
 				if epoch % target_freq == 0:
 					dqn_model.agent_dqn.update_target_model(tau)
@@ -181,24 +187,27 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 			
 			# Check if iteration is over
 			if terminated or timeout:
-				if dqn_model.write_tensorboard:
-					episode_len = epoch - episode_start
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_q_vals", episode_q_vals / episode_len, epoch)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_return", episode_rewards, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/episodic_length", episode_len, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/epsilon", eps, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/iteration", it, it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("charts/SPS", int(epoch / (time.time() - start_time)), it + start_record_it)
-					dqn_model.agent_dqn.summary_writer.add_scalar("losses/td_loss", sum(avg_loss) / max(len(avg_loss), 1), epoch)
+				episode_len = epoch - episode_start
+				avg_episode_len += [episode_len]
+				if use_tracker:
+					performance_tracker.log({
+							tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
+							tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
+							tracker_panel + "-charts/performance/episodic_length":     episode_len,
+							tracker_panel + "-charts/performance/avg_episode_length":  np.mean(avg_episode_len),
+							tracker_panel + "-charts/control/iteration":               it,
+							tracker_panel + "-charts/control/exploration":             eps,
+					},
+							step=(it + start_record_it))
+					if not epoch_logging:
+						performance_tracker.log({tracker_panel + "-charts/losses/td_loss": sum(avg_loss) / max(len(avg_loss), 1)},
+												step=(it + start_record_it))
+				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 				env.reset_init_pos()
 				obs, *_ = env.reset()
 				done = True
-				history += [episode_history]
 				episode_rewards = 0
 				episode_start = epoch
-				avg_loss = []
-					
-	return history
 
 
 # noinspection DuplicatedCode
@@ -331,7 +340,7 @@ def main():
 	else:
 		print('[ARGS ERROR] Field size must either be composed of only 1 or 2 arguments; %d were given. Exiting program' % field_dims)
 		return
-
+	
 	now = datetime.now()
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
 	models_dir = Path(args.models_dir) / 'models' if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
@@ -381,17 +390,17 @@ def main():
 		try:
 			wandb.init(project='pursuit-optimal', entity='miguel-faria',
 					   config={
-						   "field": "%dx%d" % (field_size[0], field_size[1]),
-						   "agents": n_agents,
-						   "preys": n_preys,
-						   "hunters": n_hunters,
-						   "online_learing_rate": learn_rate,
-						   "target_learning_rate": target_update_rate,
-						   "discount": gamma,
-						   "eps_decay": eps_type,
-						   "dqn_architecture": architecture,
-						   "iterations": n_iterations,
-						   "tags": tags
+							   "field": "%dx%d" % (field_size[0], field_size[1]),
+							   "agents": n_agents,
+							   "preys": n_preys,
+							   "hunters": n_hunters,
+							   "online_learing_rate": learn_rate,
+							   "target_learning_rate": target_update_rate,
+							   "discount": gamma,
+							   "eps_decay": eps_type,
+							   "dqn_architecture": architecture,
+							   "iterations": n_iterations,
+							   "tags": tags
 					   },
 					   dir=tensorboard_details[0],
 					   name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_preys, prey_type) +
@@ -437,14 +446,14 @@ def main():
 				logger.info('Starting exploration: %d with decay of %f' % (cycle_init_eps, eps_decay))
 				cycle_warmup = warmup * 0.5 ** min(cycle, 1)
 				cnn_shape = (0,) if not dqn_model.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
-				history = train_pursuit_dqn(dqn_model, env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
-											final_eps, eps_type, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-											use_render, cycle)
-				
+				train_pursuit_dqn(dqn_model, env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
+								  final_eps, eps_type, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
+								  use_render, cycle)
+			
 			logger.info('Saving final model')
 			dqn_model.save_model(('preys_%d' % n_preys), model_path, logger)
 			sys.stdout.flush()
-		
+			
 			####################
 			## Testing Model ##
 			####################
@@ -525,10 +534,10 @@ def main():
 				performance_data[field_idx][hunter_idx][prey_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(
-					[[sorted_key, performance_data[sorted_key]] for sorted_key in
-					 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+						[[sorted_key, performance_data[sorted_key]] for sorted_key in
+						 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
 				yaml.safe_dump(sorted_data, train_file)
-			
+		
 		except KeyboardInterrupt as ks:
 			logger.info('Caught keyboard interrupt, cleaning up and closing.')
 			wandb.finish()
@@ -541,8 +550,8 @@ def main():
 				performance_data[field_idx][hunter_idx][prey_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(
-					[[sorted_key, performance_data[sorted_key]] for sorted_key in
-					 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+						[[sorted_key, performance_data[sorted_key]] for sorted_key in
+						 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
 				yaml.safe_dump(sorted_data, train_file)
 
 

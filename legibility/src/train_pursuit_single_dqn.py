@@ -26,6 +26,7 @@ from wandb.wandb_run import Run
 RNG_SEED = 6102023
 TEST_RNG_SEED = 4072023
 N_TESTS = 100
+MIN_TRAIN_PERFORMANCE = 0.9
 PREY_TYPES = {'idle': 0, 'greedy': 1, 'random': 2}
 
 
@@ -74,7 +75,7 @@ def get_target_seqs(targets: List[str]) -> List[Tuple[str]]:
 def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iterations: int, max_timesteps: int, batch_size: int, optim_learn_rate: float,
 					  tau: float, initial_eps: float, final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
 					  exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1,
-					  use_render: bool = False, cycle: int = 0, greedy_action: bool = True, epoch_logging: bool = False, initial_model_path: str = '',
+					  use_render: bool = False, greedy_action: bool = True, epoch_logging: bool = False, initial_model_path: str = '',
 					  use_tracker: bool = False, performance_tracker: Optional[Run] = None, tracker_panel: str = '', debug: bool = False) -> None:
 	rng_gen = np.random.default_rng(rng_seed)
 	
@@ -226,9 +227,6 @@ def main():
 	parser.add_argument('--dueling', dest='dueling_dqn', action='store_true', help='Flag that signals the use of a Dueling DQN architecture')
 	parser.add_argument('--tensorboard', dest='use_tensorboard', action='store_true',
 						help='Flag the signals the use of a tensorboard summary writer. Expects argument --tensorboardDetails to be present')
-	parser.add_argument('--tensorboardDetails', dest='tensorboard_details', nargs='+', required=False, default=None,
-						help='List with the details for the tensorboard summary writer: <log_dirname: str>, <queue_size :int>, <flush_time: int>, <suffix: str>'
-							 ' Use only in combination with --tensorboard option')
 	
 	# Train parameters
 	parser.add_argument('--cycles', dest='n_cycles', type=int, default=1,
@@ -261,6 +259,22 @@ def main():
 	parser.add_argument('--train-tags', dest='tags', type=str, nargs='+', required=False, default=None,
 						help='List of tags for grouping in weights and biases, empty by default signaling not to train under a specific set of tags')
 	parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
+	parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
+	                    help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
+	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
+	parser.add_argument('--tracker-dir', dest='tracker_dir', type=str, default='', help='Path to the directory to store the tracker data')
+	parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
+	                    help='Flag that signals using curriculum learning using a model with one less food item spawned (when using with only 1 item, defaults to false).')
+	parser.add_argument('--use-higher-model', dest='use_higher_model', action='store_true',
+	                    help='Flag that signals using curriculum learning using a model with one more food item spawned (when using with only all items, defaults to false).')
+	parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
+	parser.add_argument('--train-performance', dest='min_train_performance', type=float, default=MIN_TRAIN_PERFORMANCE,
+	                    help='Minimum performance threshold to skip model train')
+	parser.add_argument('--epoch-logging', dest='ep_log', action='store_true', help='')
+	parser.add_argument('--buffer-smart-add', dest='buffer_smart_add', action='store_true',
+	                    help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
+	parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=False, default='uniform', choices=['uniform', 'weighted'],
+	                    help='Method of deciding how to add new experience samples when replay buffer is full')
 	
 	# Environment parameters
 	parser.add_argument('--hunter-ids', dest='hunter_ids', type=str, nargs='+', required=True, help='List with the hunter ids in the environment')
@@ -273,6 +287,7 @@ def main():
 	parser.add_argument('--n-hunters-catch', dest='require_catch', type=int, required=True, help='Minimum number of hunters required to catch a prey')
 	parser.add_argument('--render', dest='use_render', action='store_true', help='Flag that signals the use of the field render while training')
 	parser.add_argument('--catch-reward', dest='catch_reward', type=float, required=False, default=5.0, help='Catch reward for catching a prey')
+	parser.add_argument('--n-spawn-preys', dest='n_spawn_preys', type=int, required=True, help='Number of preys to spawn')
 	
 	args = parser.parse_args()
 	# DQN args
@@ -285,8 +300,8 @@ def main():
 	use_ddqn = args.use_ddqn
 	use_vdn = args.use_vdn
 	use_cnn = args.use_cnn
-	use_tensorboard = args.use_tensorboard
-	tensorboard_details = args.tensorboard_details
+	use_tracker = args.use_tensorboard
+	tracker_dir = args.tracker_dir
 	
 	# Train args
 	n_iterations = args.n_iterations
@@ -304,6 +319,9 @@ def main():
 	debug = args.debug
 	cycle_decay = args.cycle_eps_decay
 	tags = args.tags if args.tags is not None else ''
+	use_lower_model = args.use_lower_model
+	use_higher_model = args.use_higher_model
+	train_thresh = args.min_train_performance
 	
 	# Pursuit environment args
 	hunter_ids = args.hunter_ids
@@ -314,14 +332,16 @@ def main():
 	require_catch = args.require_catch
 	hunter_class = args.hunter_class
 	prey_type = args.prey_type
+	n_spawn_preys = args.n_spawn_preys
 	
 	hunters = []
 	preys = []
 	n_hunters = len(hunter_ids)
-	n_preys = len(prey_ids)
+	max_n_preys = len(prey_ids)
+	assert n_spawn_preys <= max_n_preys, 'Can\'t spawn more preys that provided maximum number of preys'
 	for idx in range(n_hunters):
 		hunters += [(hunter_ids[idx], hunter_class)]
-	for idx in range(n_preys):
+	for idx in range(max_n_preys):
 		preys += [(prey_ids[idx], PREY_TYPES[prey_type])]
 	
 	os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = args.fraction
@@ -342,21 +362,24 @@ def main():
 		return
 	
 	now = datetime.now()
-	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
-	models_dir = Path(args.models_dir) / 'models' if args.models_dir != '' else Path(__file__).parent.absolute().parent.absolute() / 'models'
-	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
+	home_dir = Path(__file__).parent.absolute().parent.absolute()
+	log_dir = Path(args.logs_dir) if args.logs_dir != '' else home_dir / 'logs'
+	data_dir = Path(args.data_dir) if args.data_dir != '' else home_dir / 'data'
+	models_dir = Path(args.models_dir) if args.models_dir != '' else home_dir / 'models'
+	if tracker_dir == '':
+		tracker_dir = log_dir
 	log_filename = (('train_pursuit_single%s_dqn_%dx%d-field_%d-hunters_%d-preys' %
-					 ('_vdn' if use_vdn else '', field_size[0], field_size[1], n_hunters, n_preys)) +
+					 ('_vdn' if use_vdn else '', field_size[0], field_size[1], n_hunters, n_spawn_preys)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / 'pursuit_single_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-hunters' % n_hunters) /
-				  ('%d-preys' % n_preys) / now.strftime("%Y%m%d-%H%M%S"))
+				  ('%d-preys' % n_spawn_preys) / now.strftime("%Y%m%d-%H%M%S"))
 	
 	with open(data_dir / 'performances' / 'pursuit' / ('train_performances%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
 			  mode='r+', encoding='utf-8') as train_file:
 		train_performances = yaml.safe_load(train_file)
 		field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 		hunter_idx = str(n_hunters) + '-hunters'
-		prey_idx = str(n_preys) + '-preys'
+		prey_idx = str(n_spawn_preys) + '-preys'
 		train_acc = train_performances[field_idx][hunter_idx][prey_idx]
 	
 	with open(data_dir / 'configs' / 'q_network_architectures.yaml') as architecture_file:
@@ -386,32 +409,30 @@ def main():
 	#####################
 	## Training Models ##
 	#####################
-	if train_acc <= 0.9:
+	if train_acc <= train_thresh:
 		try:
-			wandb.init(project='pursuit-optimal', entity='miguel-faria',
-					   config={
-							   "field": "%dx%d" % (field_size[0], field_size[1]),
-							   "agents": n_agents,
-							   "preys": n_preys,
-							   "hunters": n_hunters,
-							   "online_learing_rate": learn_rate,
-							   "target_learning_rate": target_update_rate,
-							   "discount": gamma,
-							   "eps_decay": eps_type,
-							   "dqn_architecture": architecture,
-							   "iterations": n_iterations,
-							   "tags": tags
-					   },
-					   dir=tensorboard_details[0],
-					   name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_preys, prey_type) +
-							 now.strftime("%Y%m%d-%H%M%S")),
-					   sync_tensorboard=True)
+			wandb_run = wandb.init(project='pursuit-optimal', entity='miguel-faria',
+								   config={
+										   "field": "%dx%d" % (field_size[0], field_size[1]),
+										   "agents": n_agents,
+										   "preys": max_n_preys,
+										   "hunters": n_hunters,
+										   "online_learing_rate": learn_rate,
+										   "target_learning_rate": target_update_rate,
+										   "discount": gamma,
+										   "eps_decay": eps_type,
+										   "dqn_architecture": architecture,
+										   "iterations": n_iterations,
+										   "tags": tags
+								   },
+								   dir=tracker_dir,
+								   name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, max_n_preys, prey_type) +
+										 now.strftime("%Y%m%d-%H%M%S")),
+								   sync_tensorboard=True)
 			logger.info('##########################')
 			logger.info('Starting Pursuit DQN Train')
 			logger.info('##########################')
-			n_cycles = n_preys * args.n_cycles
-			logger.info('Number of cycles: %d' % n_cycles)
-			logger.info('Number of iterations per cycle: %d' % n_iterations)
+			logger.info('Number of iterations: %d' % n_iterations)
 			logger.info('Environment setup')
 			env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids[0], require_catch, max_steps, use_layer_obs=True, agent_centered=True,
 								   catch_reward=args.catch_reward)
@@ -425,33 +446,46 @@ def main():
 			agent_action_space = gymnasium.spaces.MultiDiscrete([action_dim] * env.n_hunters)
 			if use_vdn:
 				dqn_model = SingleModelMADQN(n_agents, action_dim, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space,
-											 env.observation_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
-											 tensorboard_details + ['%dh-%dp-%dc' % (n_hunters, n_preys, require_catch)], cnn_properties=cnn_properties)
+											 env.observation_space, use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False,
+											 cnn_properties=cnn_properties, buffer_data=(args.buffer_smart_add, args.buffer_method))
 			else:
 				dqn_model = SingleModelMADQN(n_agents, action_dim, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space, obs_space,
-											 use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, use_tensorboard,
-											 tensorboard_details + ['%dh-%dp-%dc' % (n_hunters, n_preys, require_catch)], cnn_properties=cnn_properties)
-			random.seed(RNG_SEED)
-			preys_list = [random.choice(prey_ids) for _ in range(n_cycles)]
-			logger.info('Starting training')
-			for cycle in range(n_cycles):
-				logger.info('Cycle %d of %d' % (cycle+1, n_cycles))
-				env.seed(RNG_SEED)
-				sys.stdout.flush()
-				if cycle == 0:
-					cycle_init_eps = initial_eps
+											 use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
+											 buffer_data=(args.buffer_smart_add, args.buffer_method))
+
+			if use_lower_model and max_n_preys > 1:
+				prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (max(max_n_preys - 1, 1), food_level)) / 'best'
+				if (prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
+					logger.info('Using model trained with %d foods spawned as a baseline' % (max(n_foods_spawn - 1, 1)))
+					curriculum_model_path = str(prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
 				else:
-					cycle_init_eps = eps_cycle_schedule('exp', cycle, n_cycles, initial_eps, final_eps, cycle_decay)
-				env.target = preys_list[cycle]
-				logger.info('Starting exploration: %d with decay of %f' % (cycle_init_eps, eps_decay))
-				cycle_warmup = warmup * 0.5 ** min(cycle, 1)
-				cnn_shape = (0,) if not dqn_model.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
-				train_pursuit_dqn(dqn_model, env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, cycle_init_eps,
-								  final_eps, eps_type, RNG_SEED, logger, cnn_shape, eps_decay, cycle_warmup, train_freq, target_freq, tensorboard_freq,
-								  use_render, cycle)
+					logger.info('Model with one less food item not found, training from scratch')
+					curriculum_model_path = ''
+			elif use_higher_model and max_n_preys < :
+				next_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (min(n_foods_spawn + 1, n_foods), food_level)) / 'best'
+				if (next_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
+					logger.info('Using model trained with %d foods spawned as a baseline' % (min(n_foods_spawn + 1, n_foods)))
+					curriculum_model_path = str(next_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
+				else:
+					logger.info('Model with one more food item not found, training from scratch')
+					curriculum_model_path = ''
+			else:
+				logger.info('Training model from scratch')
+				curriculum_model_path = ''
+
+			random.seed(RNG_SEED)
+			logger.info('Starting training')
+			env.seed(RNG_SEED)
+			sys.stdout.flush()
+			cnn_shape = (0,) if not dqn_model.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
+			tracker_panel = 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])
+			greedy_actions = False
+			train_pursuit_dqn(dqn_model, env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, initial_eps,
+							  final_eps, eps_type, RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tensorboard_freq,
+							  use_render, greedy_actions, args.ep_log, curriculum_model_path, use_tracker, wandb_run, tracker_panel, debug)
 			
 			logger.info('Saving final model')
-			dqn_model.save_model(('preys_%d' % n_preys), model_path, logger)
+			dqn_model.save_model(('preys_%d' % max_n_preys), model_path, logger)
 			sys.stdout.flush()
 			
 			####################
@@ -530,7 +564,7 @@ def main():
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 				hunter_idx = str(n_hunters) + '-hunters'
-				prey_idx = str(n_preys) + '-preys'
+				prey_idx = str(max_n_preys) + '-preys'
 				performance_data[field_idx][hunter_idx][prey_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(
@@ -546,7 +580,7 @@ def main():
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 				hunter_idx = str(n_hunters) + '-hunters'
-				prey_idx = str(n_preys) + '-preys'
+				prey_idx = str(max_n_preys) + '-preys'
 				performance_data[field_idx][hunter_idx][prey_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(

@@ -114,7 +114,7 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: PursuitEnv, nu
 					actions += [env.agents[prey_id].act(env)]
 				actions = np.array(actions)
 			episode_history += [dqn_model.get_history_entry(obs, actions)]
-			logger.info(env.get_env_log())
+			logger.info(env.get_full_env_log())
 			next_obs, rewards, terminated, timeout, infos = env.step(actions)
 			if use_render:
 				env.render()

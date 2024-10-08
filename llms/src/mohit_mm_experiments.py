@@ -222,7 +222,7 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 
 
 def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, student_model_path: str, teacher_model_path: str, task: str, use_explanations: bool, student_expl_type: str,
-				teacher_expl_type: str, mental_model_type: str, intervene_behaviour: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path) -> Tuple[StudentModel, Optional[TeacherModel], Optional[TeacherMentalModel]]:
+				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path) -> Tuple[StudentModel, Optional[TeacherModel], Optional[TeacherMentalModel]]:
 	
 	rng_gen = default_rng(rng_seed)
 	
@@ -247,7 +247,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 			mental_model = None
 		
 		else:
-			if "llama" in student_model_path:
+			if "llama" in teacher_model_path:
 				teacher_gen_model = AutoModelForCausalLM.from_pretrained(teacher_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
 			else:
 				teacher_gen_model = AutoModelForSeq2SeqLM.from_pretrained(teacher_model_path, device_map="auto", cache_dir=cache_dir)
@@ -414,7 +414,7 @@ def main( ):
 		print('Loading models')
 		if not student_model:
 			student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
-																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type, args.intervene_behaviour,
+																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
 																	 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir)
 		
 		else:

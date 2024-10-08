@@ -91,7 +91,7 @@ data_dir = input_args.data_dir
 eps_decay = input_args.eps_decay
 eps_type = input_args.eps_type
 field_len = input_args.field_len
-n_iterations = input_args.max_iterations
+n_iterations = input_args.n_iterations
 limits = input_args.limits
 logs_dir = input_args.logs_dir
 models_dir = input_args.models_dir
@@ -107,16 +107,16 @@ use_higher_model = input_args.use_higher_model
 warmup = input_args.warmup
 
 for i in range(limits[0], limits[1] + 1):
-	n_preys = i
+	n_spawn_preys = i
 	HUNTER_IDS = [('h%d' % (idx + 1)) for idx in range(n_hunters)]
-	PREY_IDS = [('p%d' % (idx + 1)) for idx in range(n_preys)]
+	PREY_IDS = [('p%d' % (idx + 1)) for idx in range(MAX_PREYS)]
 	prey_type = input_args.prey_type
-	args = (" --nagents %d --architecture %s --buffer %d --gamma %f --iterations %d --batch %d --train-freq %d "
-			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f "
-			"--hunter-ids %s --prey-ids %s --hunter-classes %d --prey-type %s --field-size %d --n-hunters-catch %d --steps-episode %d --catch-reward %f"
-			% (n_hunters, ARQUITECTURE, buffer_size, GAMMA,                                                                                             # DQN parameters
-			   n_iterations, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, INIT_EPS, FINAL_EPS, eps_decay, eps_type, warmup, CYCLE_EPS,    # Train parameters
-			   ' '.join(HUNTER_IDS), ' '.join(PREY_IDS), HUNTER_CLASSES, prey_type, field_len, N_REQUIRED_HUNTER, max_steps, catch_reward))             # Environment parameters
+	args = (" --n-agents %d --architecture %s --buffer %d --gamma %f --iterations %d --batch %d --train-freq %d "
+			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d "
+			"--hunter-ids %s --prey-ids %s --hunter-classes %d --prey-type %s --field-size %d --n-hunters-catch %d --steps-episode %d --catch-reward %f --n-spawn-preys %d"
+			% (n_hunters, ARQUITECTURE, buffer_size, GAMMA,                                                                                                 # DQN parameters
+			   n_iterations, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, INIT_EPS, FINAL_EPS, eps_decay, eps_type, warmup,                   # Train parameters
+			   ' '.join(HUNTER_IDS), ' '.join(PREY_IDS), HUNTER_CLASSES, prey_type, field_len, N_REQUIRED_HUNTER, max_steps, catch_reward, n_spawn_preys))  # Environment parameters
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") + (" --vdn" if USE_VDN else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
@@ -138,6 +138,7 @@ for i in range(limits[0], limits[1] + 1):
 		
 	except KeyboardInterrupt as ki:
 		print('Caught keyboard interrupt by user: %s Exiting....' % ki)
+		break
 		
 	except Exception as e:
 		print('Caught general exception: %s' % e)

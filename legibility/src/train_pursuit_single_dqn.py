@@ -100,8 +100,8 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 		episode_start = epoch
 		avg_loss = []
 		logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
-		logger.info('Agents: ' + ', '.join(['%s @ (%d, %d)' % (env.agents[hunter].agent_id, *env.agents[hunter].position) for hunter in env.hunter_ids]))
-		logger.info('Preys: ' + ', '.join(['%s @ (%d, %d)' % (env.agents[prey].agent_id, *env.agents[prey].position) for prey in env.prey_alive_ids]))
+		logger.info('Agents: ' + ', '.join(['%s @ (%d, %d)' % (env.agents[hunter].agent_id, *env.agents[hunter].pos) for hunter in env.hunter_ids]))
+		logger.info('Preys: ' + ', '.join(['%s @ (%d, %d)' % (env.agents[prey].agent_id, *env.agents[prey].pos) for prey in env.prey_alive_ids]))
 		while not done:
 			
 			# interact with environment
@@ -209,79 +209,75 @@ def main():
 	parser = argparse.ArgumentParser(description='Train DQN for LB Foraging with fixed foods in environment')
 	
 	# Multi-agent DQN params
-	parser.add_argument('--nagents', dest='n_agents', type=int, required=True, help='Number of agents in the environment')
 	parser.add_argument('--architecture', dest='architecture', type=str, required=True, help='DQN architecture to use from the architectures yaml')
 	parser.add_argument('--buffer', dest='buffer_size', type=int, required=True, help='Size of the replay buffer in the DQN')
+	parser.add_argument('--cnn', dest='use_cnn', action='store_true', help='Flag that signals the use of a CNN as entry for the DQN architecture')
+	parser.add_argument('--ddqn', dest='use_ddqn', action='store_true', help='Flag that signals the use of a Double DQN')
+	parser.add_argument('--dueling', dest='dueling_dqn', action='store_true', help='Flag that signals the use of a Dueling DQN architecture')
 	parser.add_argument('--gamma', dest='gamma', type=float, required=False, default=0.99, help='Discount factor for agent\'s future rewards')
 	parser.add_argument('--gpu', dest='use_gpu', action='store_true', help='Flag that signals the use of gpu for the training')
-	parser.add_argument('--ddqn', dest='use_ddqn', action='store_true', help='Flag that signals the use of a Double DQN')
-	parser.add_argument('--vdn', dest='use_vdn', action='store_true', help='Flag that signals the use of a VDN DQN architecture')
-	parser.add_argument('--cnn', dest='use_cnn', action='store_true', help='Flag that signals the use of a CNN as entry for the DQN architecture')
-	parser.add_argument('--dueling', dest='dueling_dqn', action='store_true', help='Flag that signals the use of a Dueling DQN architecture')
+	parser.add_argument('--n-agents', dest='n_agents', type=int, required=True, help='Number of agents in the environment')
 	parser.add_argument('--tensorboard', dest='use_tensorboard', action='store_true',
 						help='Flag the signals the use of a tensorboard summary writer. Expects argument --tensorboardDetails to be present')
-	
+	parser.add_argument('--vdn', dest='use_vdn', action='store_true', help='Flag that signals the use of a VDN DQN architecture')
+
 	# Train parameters
+	parser.add_argument('--alpha', dest='learn_rate', type=float, required=False, default=2.5e-4, help='Learn rate for DQN\'s Q network')
+	parser.add_argument('--batch', dest='batch_size', type=int, required=True, help='Number of samples in each training batch')
+	parser.add_argument('--buffer-smart-add', dest='buffer_smart_add', action='store_true',
+	                    help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
+	parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=False, default='uniform', choices=['uniform', 'weighted'],
+	                    help='Method of deciding how to add new experience samples when replay buffer is full')
 	parser.add_argument('--cycles', dest='n_cycles', type=int, default=1,
 						help='Number of training cycles, each cycle spawns the field with a different food items configurations.')
-	parser.add_argument('--iterations', dest='n_iterations', type=int, required=True, help='Number of iterations to run training')
-	parser.add_argument('--batch', dest='batch_size', type=int, required=True, help='Number of samples in each training batch')
-	parser.add_argument('--train-freq', dest='train_freq', type=int, required=True, help='Number of epochs between each training update')
-	parser.add_argument('--target-freq', dest='target_freq', type=int, required=True, help='Number of epochs between updates to target network')
-	parser.add_argument('--alpha', dest='learn_rate', type=float, required=False, default=2.5e-4, help='Learn rate for DQN\'s Q network')
-	parser.add_argument('--tau', dest='target_learn_rate', type=float, required=False, default=2.5e-6, help='Learn rate for the target network')
-	parser.add_argument('--init-eps', dest='initial_eps', type=float, required=False, default=1., help='Exploration rate when training starts')
-	parser.add_argument('--final-eps', dest='final_eps', type=float, required=False, default=0.05, help='Minimum exploration rate for training')
+	parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
+	                    help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
+	parser.add_argument('--debug', dest='debug', action='store_true', help='Flag signalling debug mode for model training')
+	parser.add_argument('--epoch-logging', dest='ep_log', action='store_true', help='')
 	parser.add_argument('--eps-decay', dest='eps_decay', type=float, required=False, default=0.5, help='Decay rate for the exploration update')
-	parser.add_argument('--cycle-eps-decay', dest='cycle_eps_decay', type=float, required=False, default=0.95, help='Decay rate for the exploration update')
 	parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, default='log', choices=['linear', 'exp', 'log', 'epoch'],
 						help='Type of exploration rate update to use: linear, exponential (exp), logarithmic (log), epoch based (epoch)')
-	parser.add_argument('--warmup-steps', dest='warmup', type=int, required=False, default=10000, help='Number of epochs to pass before training starts')
-	parser.add_argument('--tensorboard-freq', dest='tensorboard_freq', type=int, required=False, default=1,
-						help='Number of epochs between each log in tensorboard. Use only in combination with --tensorboard option')
+	parser.add_argument('--final-eps', dest='final_eps', type=float, required=False, default=0.05, help='Minimum exploration rate for training')
+	parser.add_argument('--fraction', dest='fraction', type=str, default='0.5', help='Fraction of JAX memory pre-compilation')
+	parser.add_argument('--init-eps', dest='initial_eps', type=float, required=False, default=1., help='Exploration rate when training starts')
+	parser.add_argument('--iterations', dest='n_iterations', type=int, required=True, help='Number of iterations to run training')
+	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
+	parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
 	parser.add_argument('--restart', dest='restart_train', action='store_true',
 						help='Flag that signals that train is suppose to restart from a previously saved point.')
 	parser.add_argument('--restart-info', dest='restart_info', type=str, nargs='+', required=False, default=None,
 						help='List with the info required to recover previously saved model and restart from same point: '
 							 '<model_dirname: str> <model_filename: str> <last_cycle: int> Use only in combination with --restart option')
-	parser.add_argument('--debug', dest='debug', action='store_true', help='Flag signalling debug mode for model training')
+	parser.add_argument('--target-freq', dest='target_freq', type=int, required=True, help='Number of epochs between updates to target network')
+	parser.add_argument('--tau', dest='target_learn_rate', type=float, required=False, default=2.5e-6, help='Learn rate for the target network')
+	parser.add_argument('--tensorboard-freq', dest='tensorboard_freq', type=int, required=False, default=1,
+						help='Number of epochs between each log in tensorboard. Use only in combination with --tensorboard option')
+	parser.add_argument('--train-freq', dest='train_freq', type=int, required=True, help='Number of epochs between each training update')
+	# parser.add_argument('--cycle-eps-decay', dest='cycle_eps_decay', type=float, required=False, default=0.95, help='Decay rate for the exploration update')
+	parser.add_argument('--train-performance', dest='min_train_performance', type=float, default=MIN_TRAIN_PERFORMANCE,
+	                    help='Minimum performance threshold to skip model train')
+	parser.add_argument('--tracker-dir', dest='tracker_dir', type=str, default='', help='Path to the directory to store the tracker data')
 	parser.add_argument('--train-targets', dest='train_targets', type=str, nargs='+', required=False, default=None,
 						help='List with the prey ids to train to catch')
-	parser.add_argument('--fraction', dest='fraction', type=str, default='0.5', help='Fraction of JAX memory pre-compilation')
-	parser.add_argument('--epoch-logging', dest='ep_log', action='store_true', help='')
-	parser.add_argument('--train-tags', dest='tags', type=str, nargs='+', required=False, default=None,
-						help='List of tags for grouping in weights and biases, empty by default signaling not to train under a specific set of tags')
-	parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
-	parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
-	                    help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
-	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
-	parser.add_argument('--tracker-dir', dest='tracker_dir', type=str, default='', help='Path to the directory to store the tracker data')
 	parser.add_argument('--use-lower-model', dest='use_lower_model', action='store_true',
 	                    help='Flag that signals using curriculum learning using a model with one less food item spawned (when using with only 1 item, defaults to false).')
 	parser.add_argument('--use-higher-model', dest='use_higher_model', action='store_true',
 	                    help='Flag that signals using curriculum learning using a model with one more food item spawned (when using with only all items, defaults to false).')
-	parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
-	parser.add_argument('--train-performance', dest='min_train_performance', type=float, default=MIN_TRAIN_PERFORMANCE,
-	                    help='Minimum performance threshold to skip model train')
-	parser.add_argument('--epoch-logging', dest='ep_log', action='store_true', help='')
-	parser.add_argument('--buffer-smart-add', dest='buffer_smart_add', action='store_true',
-	                    help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
-	parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=False, default='uniform', choices=['uniform', 'weighted'],
-	                    help='Method of deciding how to add new experience samples when replay buffer is full')
-	
+	parser.add_argument('--warmup-steps', dest='warmup', type=int, required=False, default=10000, help='Number of epochs to pass before training starts')
+
 	# Environment parameters
-	parser.add_argument('--hunter-ids', dest='hunter_ids', type=str, nargs='+', required=True, help='List with the hunter ids in the environment')
-	parser.add_argument('--prey-ids', dest='prey_ids', type=str, nargs='+', required=True, help='List with the prey ids in the environment')
+	parser.add_argument('--catch-reward', dest='catch_reward', type=float, required=False, default=5.0, help='Catch reward for catching a prey')
 	parser.add_argument('--field-size', dest='field_lengths', type=int, nargs='+', required=True, help='Length and width of the field')
-	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
 	parser.add_argument('--hunter-classes', dest='hunter_class', type=int, required=True, help='Class of agent to use for the hunters')
+	parser.add_argument('--hunter-ids', dest='hunter_ids', type=str, nargs='+', required=True, help='List with the hunter ids in the environment')
+	parser.add_argument('--n-hunters-catch', dest='require_catch', type=int, required=True, help='Minimum number of hunters required to catch a prey')
+	parser.add_argument('--n-spawn-preys', dest='n_spawn_preys', type=int, required=True, help='Number of preys to spawn')
+	parser.add_argument('--prey-ids', dest='prey_ids', type=str, nargs='+', required=True, help='List with the prey ids in the environment')
 	parser.add_argument('--prey-type', dest='prey_type', type=str, required=True, choices=['idle', 'greedy', 'random'],
 						help='Type of prey in the environment, possible types: idle, greedy or random')
-	parser.add_argument('--n-hunters-catch', dest='require_catch', type=int, required=True, help='Minimum number of hunters required to catch a prey')
 	parser.add_argument('--render', dest='use_render', action='store_true', help='Flag that signals the use of the field render while training')
-	parser.add_argument('--catch-reward', dest='catch_reward', type=float, required=False, default=5.0, help='Catch reward for catching a prey')
-	parser.add_argument('--n-spawn-preys', dest='n_spawn_preys', type=int, required=True, help='Number of preys to spawn')
-	
+	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
+
 	args = parser.parse_args()
 	# DQN args
 	n_agents = args.n_agents

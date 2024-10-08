@@ -68,7 +68,8 @@ parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False,
 parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
 					help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
 parser.add_argument('--eps-decay', dest='eps_decay', type=float, required=False, default=EPS_DECAY, help='Epsilon decay.')
-parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, default=EPS_TYPE, help='Type of epsilon decay.')
+parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, choices=['linear', 'log', 'exp', 'epoch'], default=EPS_TYPE,
+                    help='Type of epsilon decay.')
 parser.add_argument('--episode-steps', dest='max_steps', type=int, required=False, default=STEPS_EPISODE, help='Maximum number of steps per episode.')
 parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH, help='Length of the field.')
 parser.add_argument('--iterations', dest='max_iterations', type=int, required=False, default=N_ITERATIONS, help='Number of iterations to train.')

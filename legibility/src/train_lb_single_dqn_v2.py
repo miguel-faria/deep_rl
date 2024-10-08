@@ -7,7 +7,6 @@ import numpy as np
 import flax.linen as nn
 import yaml
 import jax
-import json
 import math
 import logging
 import time
@@ -296,7 +295,6 @@ def main():
 	
 	# Train args
 	train_thresh = args.min_train_performance
-	max_cycles = args.max_cycles
 	n_iterations = args.n_iterations
 	batch_size = args.batch_size
 	train_freq = args.train_freq
@@ -306,14 +304,12 @@ def main():
 	initial_eps = args.initial_eps
 	final_eps = args.final_eps
 	eps_decay = args.eps_decay
-	cycle_eps_decay = args.cycle_eps_decay
 	eps_type = args.eps_type
 	warmup = args.warmup
 	tracker_frq = args.tensorboard_freq
 	restart_train = args.restart_train
 	restart_info = args.restart_info
 	debug = args.debug
-	tags = args.tags if args.tags is not None else ''
 	use_lower_model = args.use_lower_model
 	use_higher_model = args.use_higher_model
 	
@@ -419,29 +415,30 @@ def main():
 	####################
 	if len(locs_train) > 0:
 		try:
-			wandb_run = wandb.init(project='lb-foraging-optimal', entity='miguel-faria',
-			                       config={
-					                       "field": "%dx%d" % (field_size[0], field_size[1]),
-					                       "agents": n_agents,
-					                       "foods": n_foods,
-					                       "online_learing_rate": online_lr,
-					                       "target_learning_rate": target_lr,
-					                       "discount": gamma,
-					                       "eps_decay": eps_type,
-					                       "eps_rate": eps_decay,
-					                       "dqn_architecture": architecture,
-					                       "iterations": n_iterations,
-					                       "cycles": 1,
-					                       "buffer_size": buffer_size,
-					                       "buffer_add": "smart" if args.buffer_smart_add else "plain",
-					                       "buffer_add_method": args.buffer_method if args.buffer_smart_add else "fifo",
-					                       "batch_size": batch_size,
-					                       "curriculum_learning": 'no' if not (use_higher_model or use_lower_model) else ('lower_model' if use_lower_model else 'higher_model')
-			                       },
-			                       dir=tracker_dir,
-			                       name=('%ssingle_v2-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
-			                             now.strftime("%Y%m%d-%H%M%S")),
-			                       sync_tensorboard=True)
+			wandb_run = wandb.init(
+					project='lb-foraging-optimal', entity='miguel-faria',
+					config={
+	                       "field": "%dx%d" % (field_size[0], field_size[1]),
+	                       "agents": n_agents,
+	                       "foods": n_foods,
+	                       "online_learing_rate": online_lr,
+	                       "target_learning_rate": target_lr,
+	                       "discount": gamma,
+	                       "eps_decay": eps_type,
+	                       "eps_rate": eps_decay,
+	                       "dqn_architecture": architecture,
+	                       "iterations": n_iterations,
+	                       "cycles": 1,
+	                       "buffer_size": buffer_size,
+	                       "buffer_add": "smart" if args.buffer_smart_add else "plain",
+	                       "buffer_add_method": args.buffer_method if args.buffer_smart_add else "fifo",
+	                       "batch_size": batch_size,
+	                       "curriculum_learning": 'no' if not (use_higher_model or use_lower_model) else ('lower_model' if use_lower_model else 'higher_model')
+					},
+					dir=tracker_dir,
+					name=('%ssingle_v2-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
+					      now.strftime("%Y%m%d-%H%M%S")),
+					sync_tensorboard=True)
 			logger.info('Starting training for different food locations')
 			for loc in locs_train:
 				logger.info('Training for location: %d, %d' % (loc[0], loc[1]))

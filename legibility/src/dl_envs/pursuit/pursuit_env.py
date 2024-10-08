@@ -4,11 +4,11 @@ import numpy as np
 import gymnasium
 
 from gymnasium import Env
-from typing import Tuple, List, Dict, Any, TypeVar
+from typing import Tuple, List, Dict, Any, TypeVar, Union
 from enum import IntEnum, Enum
 from collections import defaultdict, namedtuple
 from gymnasium.utils import seeding
-from gymnasium.spaces import Space, Box, MultiBinary
+from gymnasium.spaces import Space, Box, MultiBinary, MultiDiscrete
 from dl_envs.pursuit.agents.target_agent import TargetAgent
 from dl_envs.pursuit.agents.greedy_prey import GreedyPrey
 from dl_envs.pursuit.agents.random_prey import RandomPrey
@@ -42,6 +42,8 @@ class Action(IntEnum):
 class PursuitEnv(Env):
 	
 	Rewards = namedtuple('Reward', ['catch', 'touch', 'catch_all', 'evade', 'caught', 'move'])
+	action_space: MultiDiscrete
+	observation_space: Union[MultiBinary, gymnasium.spaces.Tuple]
 	
 	_n_hunters: int
 	_n_preys: int
@@ -98,7 +100,7 @@ class PursuitEnv(Env):
 				self._agents[p_id] = Agent(p_id, AgentType.PREY, rank)
 		
 		n_actions = len(Action)
-		self.action_space = gymnasium.spaces.MultiDiscrete([n_actions] * (self._n_hunters + self._n_preys))
+		self.action_space = MultiDiscrete([n_actions] * (self._n_hunters + self._n_preys))
 		self.observation_space = self._get_observation_space()
 		self.reward_space = self.Rewards(catch=catch_reward, touch=(catch_reward / max_steps), catch_all=(catch_reward * CATCH_ALL_FACTOR),
 										 evade=(catch_reward * CATCH_ALL_FACTOR), caught=(-1 * catch_reward), move=0.0)
@@ -167,7 +169,7 @@ class PursuitEnv(Env):
 	#######################
 	### UTILITY METHODS ###
 	#######################
-	def _get_observation_space(self) -> Space:
+	def _get_observation_space(self) -> Union[MultiBinary, gymnasium.spaces.Tuple]:
 		if self._use_layer_obs:
 			# grid observation space
 			grid_shape = (1 + 2 * self._hunter_sight, 1 + 2 * self._hunter_sight)
@@ -615,32 +617,11 @@ class TargetPursuitEnv(PursuitEnv):
 	#######################
 	### UTILITY METHODS ###
 	#######################
-	def _get_observation_space(self) -> Space:
+	def _get_observation_space(self) -> Union[MultiBinary, gymnasium.spaces.Tuple]:
 		if self._use_layer_obs:
 			# grid observation space
 			grid_shape = (1 + 2 * self._hunter_sight, 1 + 2 * self._hunter_sight)
 			
-			# hunters layer: hunters positions
-			# hunters_min = np.zeros(grid_shape, dtype=np.int32)
-			# hunters_max = np.ones(grid_shape, dtype=np.int32)
-			
-			# preys layer: preys positions
-			# preys_min = np.zeros(grid_shape, dtype=np.int32)
-			# preys_max = np.ones(grid_shape, dtype=np.int32)
-			
-			# access layer: i the cell available
-			# occupancy_min = np.zeros(grid_shape, dtype=np.int32)
-			# occupancy_max = np.ones(grid_shape, dtype=np.int32)
-			
-			# target layer: marks the target position
-			# target_min = np.zeros(grid_shape, dtype=np.int32)
-			# target_max = np.ones(grid_shape, dtype=np.int32)
-			
-			# total layer
-			# min_obs = np.stack([hunters_min, preys_min, occupancy_min, target_min])
-			# max_obs = np.stack([hunters_max, preys_max, occupancy_max, target_max])
-			
-			# return MultiDiscrete(np.array([max_obs - min_obs + 1] * self._n_hunters), dtype=np.int32)
 			return MultiBinary([self._n_hunters, 4, *grid_shape])
 		
 		else:

@@ -436,7 +436,7 @@ def main():
 					                       "buffer_add": "smart" if args.buffer_smart_add else "plain",
 					                       "buffer_add_method": args.buffer_method if args.buffer_smart_add else "fifo",
 					                       "batch_size": batch_size,
-					                       "curriculum_learning": 'no' if not (use_higher_model or use_higher_model) else ('lower_model' if use_lower_model else 'higher_model')
+					                       "curriculum_learning": 'no' if not (use_higher_model or use_lower_model) else ('lower_model' if use_lower_model else 'higher_model')
 			                       },
 			                       dir=tracker_dir,
 			                       name=('%ssingle_v2-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +

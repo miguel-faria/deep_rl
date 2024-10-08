@@ -38,7 +38,10 @@ USE_VDN = True
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument('--field-len', dest='field_len', type=int, default=FIELD_LENGTH, help='Length of the field.')
 parser.add_argument('--tests', type=int, default=N_TESTS, help='Number of tests to run')
+parser.add_argument('--max-foods', type=int, default=MAX_FOODS, help='Maximum number of foods.')
+parser.add_argument('--spawn-foods', type=int, default=MAX_SPAWN_FOODS, help='Number of foods to spawn')
 parser.add_argument('--data-dir', type=str, default='', help='Data directory')
 parser.add_argument('--models-dir', type=str, default='', help='Model directory')
 parser.add_argument('--logs-dir', type=str, default='', help='Logs directory')
@@ -54,7 +57,10 @@ parser.add_argument('--render', action='store_true', help='Flag that denotes the
 parser.add_argument('--paralell', action='store_true', help='Flag that denotes the usage of a render')
 
 input_args = parser.parse_args()
+field_len = input_args.field_len
 n_tests = input_args.tests
+max_foods = input_args.max_foods
+max_spawn_foods = input_args.max_spawn_foods
 data_dir = input_args.data_dir
 models_dir = input_args.models_dir
 logs_dir = input_args.logs_dir
@@ -66,7 +72,7 @@ paralell = input_args.paralell or RUN_PARALELL
 
 args = (' --mode %d --runs %d --n-agents %d --player-level %d --field-size %d'
         ' --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --n-leg-agents %d --architecture %s --gamma %f'
-        % (mode, n_tests, N_AGENTS, PLAYER_LVL, FIELD_LENGTH, MAX_FOODS, FOOD_LEVEL, steps, MAX_SPAWN_FOODS, n_leg_agents, ARCHITECTURE, GAMMA))
+        % (mode, n_tests, N_AGENTS, PLAYER_LVL, field_len, max_foods, FOOD_LEVEL, steps, max_spawn_foods, n_leg_agents, ARCHITECTURE, GAMMA))
 args += ((' --render' if render else '') + (' --paralell' if paralell else '') + (' --use_gpu' if USE_GPU else '') + (" --fraction %f" % PRECOMP_FRAC) +
          (' --cnn' if USE_CNN else '') + (' --dueling' if USE_DUELING else '') + (' --ddqn' if USE_DDQN else '') + (' --vdn' if USE_VDN else '') +
          (' --models-dir %s' % models_dir if models_dir != '' else '') + (' --data-dir %s' % data_dir if data_dir != '' else '') +

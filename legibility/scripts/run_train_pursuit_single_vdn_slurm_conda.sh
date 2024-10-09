@@ -25,7 +25,7 @@ fi
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   source "$HOME"/miniconda3/bin/activate deep_rl_env
-  python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 15 --hunters 2 --batch-size 64 --buffer-size 5000 --iterations 5000 --episode-steps 800 --limits 1 3 --eps-type log --eps-decay 0.1 --use-lower-curriculum --logs-dir /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
+  python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 15 --hunters 2 --batch-size 64 --buffer-size 5000 --iterations 5000 --episode-steps 800 --limits 1 3 --eps-type log --eps-decay 0.1 --use-lower-curriculum --logs-dir /mnt/scratch-artemis/miguelfaria/logs/pursuit --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
 else
   source "$HOME"/miniconda3/bin/activate drl_env
   python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 15 --hunters 2 --batch-size 64 --buffer-size 5000 --iterations 5000 --episode-steps 800 --limits 1 3 --eps-type log --eps-decay 0.1 --use-lower-curriculum

@@ -4,7 +4,7 @@ import numpy as np
 import gymnasium
 
 from gymnasium import Env
-from typing import Tuple, List, Dict, Any, TypeVar, Union
+from typing import Tuple, List, Dict, Any, TypeVar, Union, Optional
 from enum import IntEnum, Enum
 from collections import defaultdict, namedtuple
 from gymnasium.utils import seeding
@@ -47,7 +47,8 @@ class PursuitEnv(Env):
 	
 	_n_hunters: int
 	_n_preys: int
-	_n_preys_alive : int
+	_n_preys_alive: int
+	_n_spawn_preys: int
 	_field_size: Tuple[int, int]
 	_hunter_ids: List[str]
 	_prey_ids: List[str]
@@ -59,11 +60,13 @@ class PursuitEnv(Env):
 	_env_timestep: int
 	_max_timesteps: int
 	_n_catch: int
+	_freeze_pos: bool
+	
 	metadata = {'render.modes': ['human', 'rgb_array']}
 	
 	def __init__(self, hunters: List[Tuple[str, int]], preys: List[Tuple[str, int]], field_size: Tuple[int, int], hunter_sight: int, n_catch: int = 4,
 				 max_steps: int = 250, use_encoding: bool = False, dead_preys: List[bool] = None, use_layer_obs: bool = False, agent_centered: bool = False,
-				 catch_reward: float = 1.0, render_mode: List[str] = None):
+				 catch_reward: float = 1.0, render_mode: List[str] = None, n_spawn_preys: Optional[int] = None, freeze_pos: bool = False):
 		
 		self._prey_ids = [prey[0] for prey in preys]
 		self._hunter_ids = [hunter[0] for hunter in hunters]
@@ -71,16 +74,17 @@ class PursuitEnv(Env):
 		self._n_hunters = int(len(hunters))
 		self._n_preys = int(len(preys))
 		self._n_preys_alive = 0
+		self._n_spawn_preys = n_spawn_preys if not n_spawn_preys is None else self._n_preys
 		self._field_size = field_size
 		self._field = np.zeros(field_size)
 		self._hunter_sight = hunter_sight
-		self._initial_pos = [{} for _ in range(len(AgentType))]
 		self._max_timesteps = max_steps
 		self._n_catch = n_catch
 		self._dead_preys = [dead_preys.copy() if dead_preys is not None else [False] * self._n_preys_alive]
 		self._use_encoding = use_encoding
 		self._center_agent = agent_centered
 		self._use_layer_obs = use_layer_obs
+		self._freeze_pos = freeze_pos
 		
 		self._agents = {}
 		rank = 1
@@ -162,10 +166,6 @@ class PursuitEnv(Env):
 	def max_timesteps(self) -> int:
 		return self._max_timesteps
 	
-	@property
-	def init_pos(self) -> List:
-		return self._initial_pos
-	
 	#######################
 	### UTILITY METHODS ###
 	#######################
@@ -188,7 +188,7 @@ class PursuitEnv(Env):
 		
 			return gymnasium.spaces.Tuple([Box(np.array(min_obs), np.array(max_obs), dtype=np.int32)] * self._n_hunters)
 	
-	def sample_action(self) -> int:
+	def sample_action(self) -> np.ndarray:
 		return self.action_space.sample()
 	
 	def seed(self, seed=None):
@@ -209,7 +209,7 @@ class PursuitEnv(Env):
 		return list({(max(pos[0] - 1, 0), pos[1]), (min(pos[0] + 1, self._field_size[0] - 1), pos[1]),
 					 (pos[0], max(pos[1] - 1, 0)), (pos[0], min(pos[1] + 1, self._field_size[1] - 1))})
 	
-	def get_hunters_pos(self, positions: List[Tuple[int, int]]) -> List[str]:
+	def get_hunters_in_pos(self, positions: List[Tuple[int, int]]) -> List[str]:
 		hunters_ids = []
 		for h_id in self.hunter_ids:
 			if self.agents[h_id].pos in positions:
@@ -344,81 +344,44 @@ class PursuitEnv(Env):
 	def spawn_hunters(self, init_pos: Dict[str, Tuple[int, int]] = None):
 		
 		if init_pos is None:
-			hunter_initial_pos = self._initial_pos[AgentType.HUNTER - 1]
-			initial_pos_id = list(hunter_initial_pos.keys())
-			if len(hunter_initial_pos) > 0:
-				for hunter in self._hunter_ids:
-					if hunter in initial_pos_id:
-						self._agents[hunter].pos = hunter_initial_pos[hunter]
-						self._agents[hunter].alive = True
-						
-						self._field[hunter_initial_pos[hunter][0], hunter_initial_pos[hunter][1]] = AgentType.HUNTER
-					else:
-						agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-						while self._field[agent_pos[0], agent_pos[1]] != 0:
-							agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-						self._agents[hunter].pos = agent_pos
-						self._agents[hunter].alive = True
-						
-						# self._initial_pos[AgentType.HUNTER - 1][hunter] = agent_pos
-						self._field[agent_pos[0], agent_pos[1]] = AgentType.HUNTER
-			else:
-				for hunter in self._hunter_ids:
-					agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-					while self._field[agent_pos[0], agent_pos[1]] != 0:
-						agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-					self._agents[hunter].pos = agent_pos
-					self._agents[hunter].alive = True
-					
-					# self._initial_pos[AgentType.HUNTER - 1][hunter] = agent_pos
-					self._field[agent_pos[0], agent_pos[1]] = AgentType.HUNTER
+			for hunter in self._hunter_ids:
+				hunter_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
+				while self._field[hunter_pos[0], hunter_pos[1]] != 0:
+					hunter_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
+				self._agents[hunter].pos = hunter_pos
+				self._agents[hunter].alive = True
+				
+				self._field[hunter_pos[0], hunter_pos[1]] = AgentType.HUNTER
 		
 		else:
 			for hunter in self._hunter_ids:
 				self._agents[hunter].pos = init_pos[hunter]
 				self._agents[hunter].alive = True
 				
-				# self._initial_pos[AgentType.HUNTER - 1][hunter] = init_pos[hunter]
 				self._field[init_pos[hunter][0], init_pos[hunter][1]] = AgentType.HUNTER
 		
 	def spawn_preys(self, init_pos: Dict[str, Tuple[int, int]] = None):
 		
 		if init_pos is None:
-			prey_initial_pos = self._initial_pos[AgentType.PREY - 1]
-			initial_pos_id = list(prey_initial_pos.keys())
-			if len(prey_initial_pos) > 0:
-				for prey in self._prey_ids:
-					if prey in initial_pos_id:
-						self._agents[prey].pos = prey_initial_pos[prey]
-						self._agents[prey].alive = True
-						
-						self._field[prey_initial_pos[prey][0], prey_initial_pos[prey][1]] = AgentType.PREY
-					else:
-						agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-						while self._field[agent_pos[0], agent_pos[1]] != 0:
-							agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-						self._agents[prey].pos = agent_pos
-						self._agents[prey].alive = True
-						
-						# self._initial_pos[AgentType.PREY - 1][prey] = agent_pos
-						self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
-			else:
-				for prey in self._prey_ids:
+			spawn_preys = self._np_random.choice(self._prey_ids, size=self._n_spawn_preys, replace=False).tolist()
+			self._prey_alive_ids = spawn_preys.copy()
+			for prey in self._prey_ids:
+				agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
+				while self._field[agent_pos[0], agent_pos[1]] != 0:
 					agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-					while self._field[agent_pos[0], agent_pos[1]] != 0:
-						agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-					self._agents[prey].pos = agent_pos
+				self._agents[prey].pos = agent_pos
+				if prey in spawn_preys:
 					self._agents[prey].alive = True
-					
-					# self._initial_pos[AgentType.PREY - 1][prey] = agent_pos
 					self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
+				
+				else:
+					self._agents[prey].alive = False
 		
 		else:
 			for prey in self._prey_ids:
 				self._agents[prey].pos = init_pos[prey]
 				self._agents[prey].alive = True
 				
-				# self._initial_pos[AgentType.PREY - 1][prey] = init_pos[prey]
 				self._field[init_pos[prey][0], init_pos[prey][1]] = AgentType.PREY
 	
 	def make_array_obs(self) -> np.ndarray:
@@ -489,20 +452,19 @@ class PursuitEnv(Env):
 		if seed is not None:
 			self.seed(seed)
 		
-		n_agents = len(self._agents)
 		self._env_timestep = 0
+		if self._freeze_pos:
+			hunter_pos = dict([(hunter_id, self._agents[hunter_id].pos) for hunter_id in self._hunter_ids])
+			prey_pos = dict([(prey_id, self._agents[prey_id].pos) for prey_id in self._prey_ids])
 		
-		# when current number of hunters and preys is less than intial, reset to initial state
-		if (self._n_hunters + self._n_preys_alive) < n_agents:
-			for agent_id in self._agents.keys():
-				self._agents[agent_id].alive = True
-			self._prey_alive_ids = self._prey_ids.copy()
-			self._n_preys_alive = self._n_preys
+		else:
+			hunter_pos = None
+			prey_pos = None
 		
 		# reset field and agents positions
 		self._field = np.zeros(self._field_size)
-		self.spawn_hunters()
-		self.spawn_preys()
+		self.spawn_hunters(hunter_pos)
+		self.spawn_preys(prey_pos)
 		
 		obs = self.make_obs()
 		info = self.get_info()
@@ -595,11 +557,12 @@ class TargetPursuitEnv(PursuitEnv):
 	_target_id: str
 	_target_caught: bool
 	
-	def __init__(self, hunters: List[Tuple[str, int]], preys: List[Tuple[str, int]], field_size: Tuple[int, int], hunter_sight: int, target_id: str,
-				 n_catch: int = 4, max_steps: int = 250, use_encoding: bool = False, dead_preys: List[bool] = None, use_layer_obs: bool = False,
-				 agent_centered: bool = False, catch_reward: float = 1.0):
+	def __init__(self, hunters: List[Tuple[str, int]], preys: List[Tuple[str, int]], field_size: Tuple[int, int], hunter_sight: int, target_id: str, n_catch: int = 4,
+				 max_steps: int = 250, use_encoding: bool = False, dead_preys: List[bool] = None, use_layer_obs: bool = False, agent_centered: bool = False,
+				 catch_reward: float = 1.0, render_mode: List[str] = None, n_spawn_preys: Optional[int] = None, freeze_pos: bool = False):
 		
-		super().__init__(hunters, preys, field_size, hunter_sight, n_catch, max_steps, use_encoding, dead_preys, use_layer_obs, agent_centered, catch_reward)
+		super().__init__(hunters, preys, field_size, hunter_sight, n_catch, max_steps, use_encoding, dead_preys, use_layer_obs, agent_centered,
+						 catch_reward, render_mode, n_spawn_preys, freeze_pos)
 		self._target_caught = False
 		self._target_id = target_id
 	
@@ -803,6 +766,33 @@ class TargetPursuitEnv(PursuitEnv):
 		
 		return np.array(rewards_hunters)
 	
+	def spawn_preys(self, init_pos: Dict[str, Tuple[int, int]] = None):
+		
+		if init_pos is None:
+			prey_ids = self.prey_ids.copy()
+			prey_ids.remove(self._target_id)
+			spawn_preys = [self._target_id] + list(self._np_random.choice(prey_ids, size=self._n_spawn_preys - 1, replace=False))
+			self._prey_alive_ids = spawn_preys.copy()
+			for prey in self._prey_ids:
+				agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
+				while self._field[agent_pos[0], agent_pos[1]] != 0:
+					agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
+				self._agents[prey].pos = agent_pos
+				if prey in spawn_preys:
+					self._agents[prey].alive = True
+					self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
+				
+				else:
+					self._agents[prey].alive = False
+		
+		else:
+			assert self._target_id in init_pos.keys(), 'When giving starting positions for preys, target prey %s must be among them' % self._target_id
+			for prey in init_pos.keys():
+				self._agents[prey].pos = init_pos[prey]
+				self._agents[prey].alive = True
+				
+				self._field[init_pos[prey][0], init_pos[prey][1]] = AgentType.PREY
+	
 	def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None) -> tuple[np.ndarray, dict[str, Any]]:
 		
 		obs, info = super().reset(seed=seed, options=options)
@@ -848,7 +838,7 @@ class TargetPursuitEnv(PursuitEnv):
 		if self._target_id in preys_alive:		# First check for target prey
 			preys_alive.remove(self._target_id)
 			prey_adj = self.adj_pos(self._agents[self._target_id].pos)
-			hunters_capturing = [h_id for h_id in self.get_hunters_pos(prey_adj) if h_id not in capturing_hunters]
+			hunters_capturing = [h_id for h_id in self.get_hunters_in_pos(prey_adj) if h_id not in capturing_hunters]
 			if len(hunters_capturing) >= self._n_catch:
 				captured_prey += [self._target_id]
 				self._agents[self._target_id].alive = False
@@ -858,7 +848,7 @@ class TargetPursuitEnv(PursuitEnv):
 		for prey_id in preys_alive:				# Second check for other preys
 			prey_adj = self.adj_pos(self._agents[prey_id].pos)
 			hunters_capturing = []
-			for h_id in self.get_hunters_pos(prey_adj):
+			for h_id in self.get_hunters_in_pos(prey_adj):
 				if h_id not in capturing_hunters:
 					hunters_capturing.append(h_id)
 			is_surrounded = len(hunters_capturing) >= self._n_catch

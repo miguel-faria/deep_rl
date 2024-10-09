@@ -424,7 +424,7 @@ def main():
 	                       "curriculum_learning": 'no' if not (use_higher_model or use_lower_model) else ('lower_model' if use_lower_model else 'higher_model')
 					},
 					dir=tracker_dir,
-					name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, max_n_preys, prey_type) +
+					name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_spawn_preys, prey_type) +
 						 now.strftime("%Y%m%d-%H%M%S")),
 					sync_tensorboard=True)
 			logger.info('Number of iterations: %d' % n_iterations)

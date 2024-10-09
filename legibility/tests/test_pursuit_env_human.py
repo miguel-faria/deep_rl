@@ -13,7 +13,8 @@ def main():
 	# hunters = ['hunter_1', 'hunter_2', 'hunter_3', 'hunter_4']
 	# preys = ['prey_1', 'prey_2']
 	hunter_ids = ['h1', 'h2']
-	prey_ids = ['p1', 'p2']
+	prey_ids = ['p1', 'p2', 'p3', 'p4']
+	n_prey_spawn = 3
 	field_size = (10, 10)
 	hunter_sight = 10
 	max_steps = 50
@@ -29,7 +30,7 @@ def main():
 		preys += [(prey_ids[idx], 0)]
 	
 	# env = PursuitEnv(hunters, preys, field_size, hunter_sight, n_catch, max_steps)
-	env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids[0], n_catch, max_steps, use_layer_obs=True)
+	env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids[0], n_catch, max_steps, use_layer_obs=True, n_spawn_preys=n_prey_spawn)
 	env.seed(RNG_SEED)
 	n_hunters = len(hunters)
 	n_preys = len(preys)
@@ -60,23 +61,22 @@ def main():
 					actions.append(action)
 				else:
 					print('Action ID must be between 0 and 4, you gave ID %d' % action)
-		for prey_id in prey_ids:
-			valid_action = False
-			while not valid_action:
-				human_input = input("Action for agent %s:\t" % prey_id)
-				action = int(KEY_MAP[human_input])
-				if action < 6:
-					valid_action = True
-					actions.append(action)
-				else:
-					print('Action ID must be between 0 and 4, you gave ID %d' % action)
-			# actions += [np.random.choice(len(Action))]
+		actions += env.action_space.sample()[n_hunters:].tolist()
+		print(env.prey_alive_ids, env.target)
+		# for prey_id in prey_ids:
+		# 	valid_action = False
+		# 	while not valid_action:
+		# 		human_input = input("Action for agent %s:\t" % prey_id)
+		# 		action = int(KEY_MAP[human_input])
+		# 		if action < 6:
+		# 			valid_action = True
+		# 			actions.append(action)
+		# 		else:
+		# 			print('Action ID must be between 0 and 4, you gave ID %d' % action)
 		
 		print(' '.join([str(Action(action)) for action in actions]))
 		state, rewards, finished, timeout, _ = env.step(actions)
 		env.render()
-		# print(state, rewards, finished, timeout)
-		# print(env.field)
 
 		if finished:
 			print('Finished\n\n')

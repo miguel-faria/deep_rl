@@ -42,11 +42,11 @@ class TeacherMentalModel(TeacherModel):
 				if self._task == "strategy_qa":
 					if not use_answers:
 						context += "\n\n".join(
-								["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is %s" %
-								 (ic_sample['question'], ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
+								["Q: %s\nAI Predicted Answer: %s So the answer is %s" %
+								 (ic_sample['question'], ic_sample['teacher_explanation'], ic_sample['prediction'])
 								 for ic_sample in intervention_samples])
-						context += ("\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is" %
-									(sample['question'], sample['answer'], teacher_explanation))
+						context += ("\n\nQ: %s\nAI Predicted Answer: %s So the answer is" %
+									(sample['question'], teacher_explanation))
 					else:
 						context += "\n\n".join(
 								["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is %s" %

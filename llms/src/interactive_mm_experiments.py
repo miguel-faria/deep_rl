@@ -10,7 +10,7 @@ from reputation_learning.model import UnidentifiedTaskError
 from reputation_learning.teacher_model import TeacherModel
 from reputation_learning.student_model import StudentModel
 from reputation_learning.teacher_mental_model import UnidentifiedUtilityMetricError
-from reputation_learning.teacher_static_mental_model import TeacherStaticMentalModel
+from reputation_learning.teacher_interactive_mental_model import TeacherInteractiveMentalModel
 from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from typing import Tuple, List, Optional, Dict
@@ -19,8 +19,8 @@ from numpy.random import default_rng, Generator
 RNG_SEED = 25092024
 
 
-def get_teacher_model_samples(rng_gen: Generator, train_data: pd.DataFrame, student_samples: List[pd.Series], teacher_expl_type: str, num_samples: int,
-							  student_model: StudentModel, teacher_model: TeacherModel = None) -> List[Dict]:
+def get_teacher_model_samples(rng_gen: Generator, train_data: pd.DataFrame, student_samples: List[pd.Series], teacher_expl_type: str, num_samples: int, student_model: StudentModel,
+							  teacher_model: TeacherModel = None) -> List[Dict]:
 	
 	teacher_samples = []
 	
@@ -51,8 +51,8 @@ def get_teacher_model_samples(rng_gen: Generator, train_data: pd.DataFrame, stud
 	return teacher_samples
 
 
-def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task: str, mental_model_type: str, max_samples: int,
-							 student_model: StudentModel, teacher_model: TeacherModel) -> Tuple[List, List]:
+def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task: str, mental_model_type: str, max_samples: int, student_model: StudentModel,
+							 teacher_model: TeacherModel) -> Tuple[List, List]:
 	
 	shuffle_train = train_data.sample(frac=1, random_state=rng_gen).reset_index(drop=True)
 	
@@ -223,7 +223,8 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 
 
 def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, student_model_path: str, teacher_model_path: str, task: str, use_explanations: bool, student_expl_type: str,
-				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path) -> Tuple[StudentModel, Optional[TeacherModel], Optional[TeacherStaticMentalModel]]:
+				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, max_student_context: int, num_beams: int,
+				cache_dir: Path) -> Tuple[StudentModel, Optional[TeacherModel], Optional[TeacherInteractiveMentalModel]]:
 	
 	rng_gen = default_rng(rng_seed)
 	
@@ -263,8 +264,8 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 				print('Getting mental models samples')
 				mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
 				print('Creating Teacher Mental Model')
-				mental_model = TeacherStaticMentalModel(teacher_model_path, mm_samples, teacher_gen_model, teacher_tokenizer, teacher_expl_type, task, max_tokens, num_beams, use_explanations,
-														intervention_utility, mental_model_type)
+				mental_model = TeacherInteractiveMentalModel(teacher_model_path, mm_samples, teacher_gen_model, teacher_tokenizer, teacher_expl_type, task, max_tokens, num_beams, use_explanations,
+															 intervention_utility, mental_model_type, None, max_student_context)
 			
 			else:
 				mental_model = None
@@ -275,78 +276,12 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 		return student_model, None, None
 
 
-def get_intervention_idx_budget(student_model: StudentModel, mental_model: TeacherStaticMentalModel, rng_gen: Generator, budgets: List[float], test_samples: pd.DataFrame,
-								intervention_utility: str, use_explanation: bool, use_answers: bool, deceive: bool) -> List[List[int]]:
-	intervention_idx_budget = []
-	n_test_samples = test_samples.shape[0]
+def get_student_performance_per_budget() -> Tuple[List, List]:
 	
-	if use_explanation:
-		if intervention_utility.find('random') != -1:
-			for budget in budgets:
-				budget_count = int(budget * n_test_samples)
-				sample_indexes = list(rng_gen.choice(test_samples.shape[0], budget_count, replace=False).astype(int))
-				intervention_idx_budget.append(sample_indexes)
-		
-		elif intervention_utility.find('oracle') != -1:
-			sample_indexes = []
-			for row in test_samples.iterrows():
-				idx, sample = row
-				prediction, _ = student_model.predict(sample=sample.to_dict(), expl='', intervene=False)
-				if prediction != sample['answer']:
-					sample_indexes.append(idx)
-			for _ in budgets:
-				intervention_idx_budget.append(sample_indexes)
-		
-		else:
-			sample_confidence_pairs = []
-			for idx, sample in test_samples.iterrows():
-				confidence_scores = mental_model.intervention_utility(sample.to_dict(), student_model, use_answers)
-				sample_confidence_pairs.append((idx, confidence_scores))
-			
-			if intervention_utility.find('student') != -1 and intervention_utility.find('confidence') != -1:
-				if intervention_utility == "intervention_correct_student_confidence" or intervention_utility == "utility_correct_student_confidence":
-					sample_confidence_pairs = sorted(sample_confidence_pairs, key=lambda x: x[1], reverse=True)
-				else:
-					sample_confidence_pairs = sorted(sample_confidence_pairs, key=lambda x: x[1])
-				
-				for budget in budgets:
-					budget_count = int(budget * len(test_samples))
-					intervention_samples = [sample_confidence_pair[0] for sample_confidence_pair in sample_confidence_pairs][:budget_count]
-					intervention_idx_budget.append(intervention_samples)
-			
-			elif intervention_utility.find('teacher') != -1 and intervention_utility.find('confidence') != -1:
-				sample_confidence_pairs = sorted(sample_confidence_pairs, key=lambda x: x[1], reverse=True)
-				for budget in budgets:
-					budget_count = int(budget * len(test_samples))
-					intervention_samples = [sample_confidence_pair[0] for sample_confidence_pair in sample_confidence_pairs][:budget_count]
-					intervention_idx_budget.append(intervention_samples)
-			
-			elif (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1) or intervention_utility.find('mm') != -1:
-				if intervention_utility.find('both') != -1:
-					sample_utility_correct_scores = sorted(sample_confidence_pairs, key=lambda x: x[1], reverse=True) if not deceive else sorted(sample_confidence_pairs, key=lambda x: x[1])
-					for budget in budgets:
-						budget_count = int(budget * len(test_samples))
-						intervention_samples = [sample_utility_correct_score[0] for sample_utility_correct_score in sample_utility_correct_scores][:budget_count]
-						intervention_idx_budget.append(intervention_samples)
-				
-				elif intervention_utility.find('no') != -1:
-					sample_no_inter_correct_scores = sorted(sample_confidence_pairs, key=lambda x: x[1])
-					for budget in budgets:
-						budget_count = int(budget * len(test_samples))
-						intervention_samples = [sample_no_inter_correct_score[0] for sample_no_inter_correct_score in sample_no_inter_correct_scores][:budget_count]
-						intervention_idx_budget.append(intervention_samples)
-				
-				else:
-					sample_inter_correct_scores = sorted(sample_confidence_pairs, key=lambda x: x[1], reverse=True)
-					for budget in budgets:
-						budget_count = int(budget * len(test_samples))
-						intervention_samples = [sample_inter_correct_score[0] for sample_inter_correct_score in sample_inter_correct_scores][:budget_count]
-						intervention_idx_budget.append(intervention_samples)
-			
-			else:
-				raise UnidentifiedUtilityMetricError('Utility metric %s not defined' % intervention_utility)
+	correct_answers = []
+	answers_budget = []
 	
-	return intervention_idx_budget
+	return answers_budget, correct_answers
 
 
 def compute_accuracy(labels, predictions):
@@ -374,6 +309,7 @@ def main( ):
 	parser.add_argument('--max-new-tokens', dest='max_new_tokens', default=100, type=int, help='Maximum number of new tokens when generating answers')
 	parser.add_argument('--n-beams', dest='n_beams', default=1, type=int, help='Number of beams to use in answer generation beam search')
 	parser.add_argument('--n-ic-samples', dest='n_ics', default=4, type=int, help='Number of in-context samples to use for context in the student answers')
+	parser.add_argument('--max-student-samples', dest='max_student_samples', default=5, type=int, help='Maximum number of students to sample for mental model context')
 	parser.add_argument('--use-explanations', dest='use_explanations', action='store_true',
 						help='Flag denoting whether student is given explanations to help understanding the problem')
 	parser.add_argument('--mm-type', dest='mm_type', default='mm_both', type=str, help='Mental model intervention strategy')
@@ -381,7 +317,6 @@ def main( ):
 	parser.add_argument('--intervention-utility', dest='intervention_utility', default='mm_both', type=str, help='Mode to determine intervention utility')
 	parser.add_argument('--teacher-explanation-type', dest='teacher_expl_type', default='blind_teacher_CoT', type=str, help='Teacher model explanation type')
 	parser.add_argument('--student-explanation-type', dest='student_expl_type', default='cot', type=str, help='Student model explanation type')
-	parser.add_argument('--deceive', dest='deceive', action='store_true', help='Flag denoting whether teacher gives deceiving explanations')
 	
 	parser.add_argument('--use-gold-label', dest='use_gold_label', action='store_true',
 						help='Flag denoting whether teacher uses the expected answers instead of its own')
@@ -416,7 +351,7 @@ def main( ):
 		if not student_model:
 			student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
 																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
-																	 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir)
+																	 args.intervention_utility, args.max_new_tokens, args.max_student_samples, args.n_beams, args.cache_dir)
 		
 		else:
 			train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)
@@ -433,12 +368,8 @@ def main( ):
 					mental_model.set_samples(mm_samples)
 		print('Done')
 		
-		print('Getting samples for intervention')
-		intervention_idxs_per_budget = get_intervention_idx_budget(student_model, mental_model, rng_gen, budgets, test_samples, args.intervention_utility, args.use_explanations,
-																   args.use_gold_label, args.deceive)
-		
-		print('Getting predictions for each budget level')
-		predictions_per_budget, _, labels = student_model.predict_batch(test_samples, intervention_idxs_per_budget, teacher_model)
+		print('Getting student performances with interactive teacher')
+		predictions_per_budget, labels = get_student_performance_per_budget()
 		
 		print('Computing accuracies')
 		if not args.use_explanations:

@@ -32,7 +32,7 @@ class TeacherModel(Model):
 			else:
 				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 	
-	def predict_confidence(self, sample: Dict, with_explanation: bool = False) -> List[float]:
+	def predict_confidence(self, sample: Dict, with_explanation: bool = False, debug: bool = False) -> List[float]:
 		context = self.get_context(sample)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
@@ -48,9 +48,11 @@ class TeacherModel(Model):
 			scores = softmax(generated['scores'][answer_id], dim=-1)
 			
 			yes_score, no_score = scores[0][yes_id].item(), scores[0][no_id].item()
-			print('Yes score = %s' % yes_score)
-			print('No score = %s' % no_score)
+			
 			class_scores = [yes_score, no_score]
+			if debug:
+				print('Yes score = %s' % yes_score)
+				print('No score = %s' % no_score)
 		
 		elif self._task == "ec_qa":
 			option1_id, option2_id, option3_id, option4_id, option5_id = (self.tokenizer.encode("1")[idx], self.tokenizer.encode("2")[idx], self.tokenizer.encode("3")[idx],
@@ -94,19 +96,21 @@ class TeacherModel(Model):
 			else:
 				option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_id].item(), scores[0][option2_id].item(), scores[0][option3_id].item(),
 																							 scores[0][option4_id].item(), scores[0][option5_id].item())
-			print('Option1 score = %s' % option1_score)
-			print('Option2 score = %s' % option2_score)
-			print('Option3 score = %s' % option3_score)
-			print('Option4 score = %s' % option4_score)
-			print('Option5 score = %s' % option5_score)
+			
 			class_scores = [option1_score, option2_score, option3_score, option4_score, option5_score]
+			if debug:
+				print('Option1 score = %s' % option1_score)
+				print('Option2 score = %s' % option2_score)
+				print('Option3 score = %s' % option3_score)
+				print('Option4 score = %s' % option4_score)
+				print('Option5 score = %s' % option5_score)
 		
 		else:
 			raise UnidentifiedTaskError('Task %s not defined' % self._task)
 		
 		return class_scores
 	
-	def predict(self, sample: Dict) -> Tuple[str, str]:
+	def predict(self, sample: Dict, debug: bool = False) -> Tuple[str, str]:
 		if self._explanation_type.find("human") != -1:
 			return str(sample["answer"]), str(sample["explanation"])
 		
@@ -131,13 +135,15 @@ class TeacherModel(Model):
 								output = str(i + 1)
 								break
 				prediction = output.split(" ")[0]
-				print('%s prediction = %s' % (self._model_name, prediction))
 				explanation = " ".join(output.split(" ")[2:])
-				print('%s explanation = %s' % (self._model_name, explanation))
+				if debug:
+					print('%s prediction = %s' % (self._model_name, prediction))
+					print('%s explanation = %s' % (self._model_name, explanation))
 			
 			else:
 				explanation = output[:output.rfind(".") + 1]
-				print('%s explanation = %s' % (self._model_name, explanation))
+				if debug:
+					print('%s explanation = %s' % (self._model_name, explanation))
 				prediction = output.split(" ")[-1]
 				if self._task == "ec_qa":
 					if prediction not in ["1", "2", "3", "4", "5"]:
@@ -148,7 +154,8 @@ class TeacherModel(Model):
 				
 				elif self._task == "strategy_qa":
 					if prediction not in ["no", "yes"]:
-						print("Regenerating with the explanation")
+						if debug:
+							print("Regenerating with the explanation")
 						context_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
 						context = self.explanation_context(sample, context_samples, explanation)
 						tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
@@ -157,7 +164,9 @@ class TeacherModel(Model):
 						output = output[len(context):] if context in output else output
 						output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
 						prediction = output.split(" ")[0]
-					print('%s Prediction = %s' % (self._model_name, prediction))
+					
+					if debug:
+						print('%s Prediction = %s' % (self._model_name, prediction))
 				
 				elif self._task == "gsm8k":
 					prediction = re.sub(r"[^0-9.]", "", prediction)
@@ -169,11 +178,11 @@ class TeacherModel(Model):
 			
 			return prediction, explanation
 	
-	def predict_batch(self, samples: DataFrame) -> Tuple[List, List]:
+	def predict_batch(self, samples: DataFrame, debug: bool = False) -> Tuple[List, List]:
 		predictions = []
 		explanations = []
 		for test_sample in samples:
-			prediction, explanation = self.predict(sample=test_sample)
+			prediction, explanation = self.predict(sample=test_sample, debug=debug)
 			predictions.append(prediction)
 			explanations.append(explanation)
 		

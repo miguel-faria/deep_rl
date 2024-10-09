@@ -52,7 +52,7 @@ class StudentModel(Model):
 			else:
 				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 	
-	def predict_confidence(self, sample: Dict, with_explanation: bool = False, explanation: Union[List, str] = None) -> List[float]:
+	def predict_confidence(self, sample: Dict, with_explanation: bool = False, explanation: Union[List, str] = None, debug: bool = False) -> List[float]:
 		context = self.get_context(sample, explanation=explanation)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
@@ -80,9 +80,11 @@ class StudentModel(Model):
 			
 			scores = softmax(generated['scores'][answer_id], dim=-1)
 			yes_score, no_score = scores[0][yes_id].item(), scores[0][no_id].item()
-			print('Yes score = %s' % yes_score)
-			print('No score = %s' % no_score)
 			class_scores = [yes_score, no_score]
+			
+			if debug:
+				print('Yes score = %s' % yes_score)
+				print('No score = %s' % no_score)
 		
 		elif self._task == "ec_qa":
 			option1_id, option2_id, option3_id, option4_id, option5_id = (self.tokenizer.encode("1")[idx], self.tokenizer.encode("2")[idx], self.tokenizer.encode("3")[idx],
@@ -140,19 +142,21 @@ class StudentModel(Model):
 			else:
 				option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_id].item(), scores[0][option2_id].item(), scores[0][option3_id].item(),
 																							 scores[0][option4_id].item(), scores[0][option5_id].item())
-			print('Option1 score = %s' % option1_score)
-			print('Option2 score = %s' % option2_score)
-			print('Option3 score = %s' % option3_score)
-			print('Option4 score = %s' % option4_score)
-			print('Option5 score = %s' % option5_score)
 			class_scores = [option1_score, option2_score, option3_score, option4_score, option5_score]
+			
+			if debug:
+				print('Option1 score = %s' % option1_score)
+				print('Option2 score = %s' % option2_score)
+				print('Option3 score = %s' % option3_score)
+				print('Option4 score = %s' % option4_score)
+				print('Option5 score = %s' % option5_score)
 		
 		else:
 			raise UnidentifiedTaskError('Task %s not defined' % self._task)
 		
 		return class_scores
 	
-	def predict(self, sample: Dict, expl: Union[List, str] = None, intervene: bool = False):
+	def predict(self, sample: Dict, expl: Union[List, str] = None, intervene: bool = False, debug: bool = False):
 		context = self.get_context(sample=sample, explanation=expl, intervene=intervene)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
@@ -161,9 +165,6 @@ class StudentModel(Model):
 		if "llama" in self._model_name:
 			output = output[len(context):]
 		output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
-		# print(test_sample['question'])
-		# print(context)
-		# print(output)
 		
 		if self._task == "ec_qa" and "The correct choice is " in output:
 			output = output[len("The correct choice is "):].strip()
@@ -176,12 +177,14 @@ class StudentModel(Model):
 							output = str(i + 1)
 							break
 			prediction = output.split(" ")[0]
-			print('Student Prediction = %s' % prediction)
 			explanation = " ".join(output.split(" ")[2:])
-			print('Student Explanation = %s' % explanation)
+			if debug:
+				print('Student Prediction = %s' % prediction)
+				print('Student Explanation = %s' % explanation)
 		else:
 			explanation = output[:output.rfind(".") + 1] if self._task != "gsm8k" else output
-			print('Student Explanation = %s' % explanation)
+			if debug:
+				print('Student Explanation = %s' % explanation)
 			prediction = output.split(" ")[-1]
 			if self._task == "ec_qa":
 				if prediction not in ["1", "2", "3", "4", "5"]:
@@ -192,7 +195,8 @@ class StudentModel(Model):
 			
 			elif self._task == "strategy_qa":
 				if prediction not in ["no", "yes"]:
-					print("Regenerating with the explanation")
+					if debug:
+						print("Regenerating with the explanation")
 					context = self.teacher_explanation_context(sample, explanation)
 					tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 					generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
@@ -209,11 +213,12 @@ class StudentModel(Model):
 							prediction = re.sub(r"[^0-9.]", "", word)
 							break
 			
-			print('Student Prediction = %s' % prediction)
+			if debug:
+				print('Student Prediction = %s' % prediction)
 		
 		return prediction, explanation
 	
-	def predict_batch(self, samples: DataFrame, intervention_indexes_per_budget: List[List[int]], teacher: Model) -> Tuple[List, List, List]:
+	def predict_batch(self, samples: DataFrame, intervention_indexes_per_budget: List[List[int]], teacher: Model, debug: bool = False) -> Tuple[List, List, List]:
 		labels = []
 		predictions_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]
 		explanations_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]
@@ -222,9 +227,9 @@ class StudentModel(Model):
 			for i, intervention_indexes in enumerate(intervention_indexes_per_budget):
 				if test_index in intervention_indexes:
 					_, explanation = teacher.predict(sample=test_sample.to_dict())
-					prediction_student, explanation_student = self.predict(sample=test_sample.to_dict(), expl=explanation, intervene=True)
+					prediction_student, explanation_student = self.predict(sample=test_sample.to_dict(), expl=explanation, intervene=True, debug=debug)
 				else:
-					prediction_student, explanation_student = self.predict(sample=test_sample.to_dict(), expl='', intervene=False)
+					prediction_student, explanation_student = self.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
 				predictions_per_budget[i].append(prediction_student)
 				explanations_per_budget[i].append(explanation_student)
 			labels.append(test_sample['answer'])

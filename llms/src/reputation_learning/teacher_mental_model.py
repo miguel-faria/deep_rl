@@ -31,99 +31,8 @@ class TeacherMentalModel(TeacherModel):
 	def utility_type(self) -> str:
 		return self._utility_type
 	
-	def get_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, use_answers: bool = False) -> str:
-		context = "Simulate an AI model's answer for the given question.\n\n"
-		if ((self.explanation_type.find('useful') != -1 and self.explanation_type.find('teacher') != -1) or
-				(self.explanation_type.find('mental') != -1 and self.explanation_type.find('model') != -1)):
-			if intervene:
-				intervention_samples = self._ic_samples[1] if isinstance(self._ic_samples, tuple) else self._ic_samples
-				_, teacher_explanation = self.predict(sample)
-				print('Teacher explanation = %s' % teacher_explanation)
-				if self._task == "strategy_qa":
-					if not use_answers:
-						context += "\n\n".join(
-								["Q: %s\nAI Predicted Answer: %s So the answer is %s" %
-								 (ic_sample['question'], ic_sample['teacher_explanation'], ic_sample['prediction'])
-								 for ic_sample in intervention_samples])
-						context += ("\n\nQ: %s\nAI Predicted Answer: %s So the answer is" %
-									(sample['question'], teacher_explanation))
-					else:
-						context += "\n\n".join(
-								["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is %s" %
-								 (ic_sample['question'], ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
-								 for ic_sample in intervention_samples])
-						context += ("\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is" %
-									(sample['question'], sample['answer'], teacher_explanation))
-				elif self._task == "ec_qa":
-					if not use_answers:
-						context += "\n\n".join(
-								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is %s" %
-								 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2], ic_sample['options'][3],
-								  ic_sample['options'][4], ic_sample['teacher_explanation'], ic_sample['prediction'])
-								 for ic_sample in intervention_samples])
-						context += ("\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is" %
-									(sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
-									 sample['options'][4], teacher_explanation))
-					else:
-						context += "\n\n".join(
-								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the correct choice is %s" %
-								 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2], ic_sample['options'][3], ic_sample['options'][4],
-								  ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
-								 for ic_sample in intervention_samples])
-						context += ("\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is" %
-									(sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
-									 sample['options'][4], teacher_explanation))
-				elif self._task == "gsm8k":
-					teacher_explanation_sents = teacher_explanation.split(".")
-					teacher_partial_explanation = teacher_explanation_sents[0] + "."
-					context = "\n\n".join(["Q: %s\nAI Predicted Answer: %s So the answer is %s" % (inter_ic['question'], inter_ic['explanation'], inter_ic['answer'])
-										   for inter_ic in intervention_samples])
-					context += f"\n\nQ: {sample['question']}\nAI Predicted Answer: {teacher_partial_explanation}"
-				else:
-					raise UnidentifiedTaskError('Task %s not defined' % self._task)
-			
-			else:
-				no_intervention_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
-				context = "Simulate an AI model's answer for the given question.\n\n"
-				if self._task == "strategy_qa":
-					if use_answers:
-						context += "\n\n".join(
-								["Q: %s\nAI Predicted Answer: %s" % (ic_sample['question'], ic_sample['prediction'])
-								 for ic_sample in no_intervention_samples])
-						context += "\n\nQ: %s\nAI Predicted Answer:" % sample['question']
-					else:
-						context += "\n\n".join(
-								["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s" % (ic_sample['question'], ic_sample['answer'], ic_sample['prediction'])
-								 for ic_sample in no_intervention_samples])
-						context += "\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer:" % (sample['question'], sample['answer'])
-				elif self._task == "ec_qa":
-					if use_answers:
-						context += "\n\n".join(
-								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s" %
-								 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2],
-								  ic_sample['options'][3], ic_sample['options'][4], ic_sample['prediction'])
-								 for ic_sample in no_intervention_samples])
-						context += (f"\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer:" %
-									(sample['question'], sample['options'][0], sample['options'][1], sample['options'][2],
-									 sample['options'][3], sample['options'][4]))
-					else:
-						context += "\n\n".join(
-								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s" %
-								 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2],
-								  ic_sample['options'][3], ic_sample['options'][4], ic_sample['prediction'])
-								 for ic_sample in no_intervention_samples])
-						context += (f"\n\nQ: %s\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer:" %
-									(sample['question'], sample['options'][0], sample['options'][1], sample['options'][2],
-									 sample['options'][3], sample['options'][4]))
-				elif self._task == "gsm8k":
-					context = "\n\n".join(["Q: %s\nAI Predicted Answer: %s" % (ic_sample['question'], ic_sample['answer']) for ic_sample in no_intervention_samples])
-					context += "\n\nQ: %s\nAI Predicted Answer:" % sample['question']
-				else:
-					raise UnidentifiedTaskError('Task %s not defined' % self._task)
-		else:
-			context += super().get_context(sample, explanation)
-		
-		return context
+	def get_student_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, use_answers: bool = False) -> str:
+		raise NotImplementedError("Method 'get_student_context' is not implemented in teacher mental model base class, subclasses should implement it.")
 
 	def predict_prompt(self, prompt: str, test_sample: Dict) -> Tuple:
 		tokens = self.tokenizer([prompt], return_tensors="pt").to("cuda")
@@ -140,8 +49,6 @@ class TeacherMentalModel(TeacherModel):
 		if self._task == "strategy_qa":
 			yes_id, no_id = self.tokenizer.encode("yes")[idx], self.tokenizer.encode("no")[idx]
 			yes_score, no_score = scores[0][yes_id].item(), scores[0][no_id].item()
-			# print(f'Yes score = {yes_score}')
-			# print(f'No score = {no_score}')
 			option_scores = [yes_score, no_score]
 
 		elif self._task == "ec_qa":
@@ -163,12 +70,6 @@ class TeacherMentalModel(TeacherModel):
 				option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_text_id].item(), scores[0][option2_text_id].item(),
 																							 scores[0][option3_text_id].item(), scores[0][option4_text_id].item(),
 																							 scores[0][option5_text_id].item())
-
-			# print(f'Option1 score = {option1_score}')
-			# print(f'Option2 score = {option2_score}')
-			# print(f'Option3 score = {option3_score}')
-			# print(f'Option4 score = {option4_score}')
-			# print(f'Option5 score = {option5_score}')
 
 			option_scores = [option1_score, option2_score, option3_score, option4_score, option5_score]
 
@@ -194,6 +95,7 @@ class TeacherMentalModel(TeacherModel):
 		return option_scores, output
 
 	def simulate_utility(self, sample: Dict, use_answers: bool) -> Tuple:
+		
 		if use_answers:
 			correct_answer = sample["answer"]
 		else:
@@ -201,12 +103,12 @@ class TeacherMentalModel(TeacherModel):
 			correct_answer = teacher_prediction
 
 		if self._mm_type.find('both') != -1:
-			no_inter_context = self.get_context(sample, None, False, use_answers)
+			no_inter_context = self.get_student_context(sample, None, False, use_answers)
 			no_inter_scores, no_inter_output = self.predict_prompt(no_inter_context, sample)
 
 			# print('AI simulated answer with no intervention (Mental Model) = %s' % no_inter_output)
 
-			inter_context = self.get_context(sample, None, True, use_answers)
+			inter_context = self.get_student_context(sample, None, True, use_answers)
 			inter_scores, inter_output = self.predict_prompt(inter_context, sample)
 
 			# print('AI simulated answer with teacher intervention (Mental Model) = %s' % inter_output)
@@ -237,9 +139,9 @@ class TeacherMentalModel(TeacherModel):
 
 		else:
 			if self._mm_type.find('no') != -1:
-				context = self.get_context(sample, None, False, use_answers)
+				context = self.get_student_context(sample, None, False, use_answers)
 			else:
-				context = self.get_context(sample, None, True, use_answers)
+				context = self.get_student_context(sample, None, True, use_answers)
 			option_scores, output = self.predict_prompt(context, sample)
 
 			# print('AI simulated answer with %sintervention (Mental Model) = %s' % ('no ' if self._mm_intervention.find('no') != -1 else '', output))

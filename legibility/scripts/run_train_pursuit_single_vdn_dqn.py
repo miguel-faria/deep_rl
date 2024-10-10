@@ -24,7 +24,6 @@ USE_CNN = True
 USE_TENSORBOARD = True
 
 # Train params
-CYCLES = 2
 N_ITERATIONS = 1000
 BATCH_SIZE = 32
 TRAIN_FREQ = 1
@@ -32,7 +31,7 @@ TARGET_FREQ = 10
 ONLINE_LR = 0.001
 TARGET_LR = 0.1
 INIT_EPS = 1.0
-FINAL_EPS = 0.1
+FINAL_EPS = 0.05
 EPS_DECAY = 0.08	# for log eps
 # EPS_DECAY = 0.5	# for linear eps
 CYCLE_EPS = 0.97
@@ -51,7 +50,6 @@ FIELD_LENGTH = 10
 STEPS_EPISODE = 400
 WARMUP_STEPS = STEPS_EPISODE * 2
 USE_RENDER = False
-USE_TARGETS = False
 PREY_TYPE = 'idle'
 
 parser = argparse.ArgumentParser()
@@ -67,6 +65,7 @@ parser.add_argument('--episode-steps', dest='max_steps', type=int, required=Fals
 parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH, help='Length of the field of the environment')
 parser.add_argument('--iterations', dest='n_iterations', type=int, required=False, default=N_ITERATIONS, help='Number of iterations per training cycle')
 parser.add_argument('--hunters', dest='n_hunters', type=int, required=False, default=N_AGENTS, help='Number of hunters to spawn')
+parser.add_argument('--required-hunters', dest='n_required_hunters', type=int, required=False, default=N_REQUIRED_HUNTER, help='Number of hunters to spawn')
 parser.add_argument('--limits', dest='limits', nargs=2, type=int, required=False, default=[1, MAX_PREYS], help='Minimum and maximum number of preys')
 parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
@@ -97,6 +96,7 @@ logs_dir = input_args.logs_dir
 models_dir = input_args.models_dir
 max_steps = input_args.max_steps
 n_hunters = input_args.n_hunters
+n_required_hunters = input_args.n_required_hunters
 online_lr = input_args.online_lr
 prey_type = input_args.prey_type
 target_lr = input_args.target_lr
@@ -109,14 +109,14 @@ warmup = input_args.warmup
 for i in range(limits[0], limits[1] + 1):
 	n_spawn_preys = i
 	HUNTER_IDS = [('h%d' % (idx + 1)) for idx in range(n_hunters)]
-	PREY_IDS = [('p%d' % (idx + 1)) for idx in range(MAX_PREYS)]
+	PREY_IDS = [('p%d' % (idx + 1)) for idx in range(n_spawn_preys)]
 	prey_type = input_args.prey_type
 	args = (" --n-agents %d --architecture %s --buffer %d --gamma %f --iterations %d --batch %d --train-freq %d "
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d "
-			"--hunter-ids %s --prey-ids %s --hunter-classes %d --prey-type %s --field-size %d --n-hunters-catch %d --steps-episode %d --catch-reward %f --n-spawn-preys %d"
-			% (n_hunters, ARQUITECTURE, buffer_size, GAMMA,                                                                                                 # DQN parameters
-			   n_iterations, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, INIT_EPS, FINAL_EPS, eps_decay, eps_type, warmup,                   # Train parameters
-			   ' '.join(HUNTER_IDS), ' '.join(PREY_IDS), HUNTER_CLASSES, prey_type, field_len, N_REQUIRED_HUNTER, max_steps, catch_reward, n_spawn_preys))  # Environment parameters
+			"--hunter-ids %s --prey-ids %s --hunter-classes %d --prey-type %s --field-size %d --n-hunters-catch %d --steps-episode %d --catch-reward %f"
+			% (n_hunters, ARQUITECTURE, buffer_size, GAMMA,                                                                                  # DQN parameters
+			   n_iterations, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, INIT_EPS, FINAL_EPS, eps_decay, eps_type, warmup,    # Train parameters
+			   ' '.join(HUNTER_IDS), ' '.join(PREY_IDS), HUNTER_CLASSES, prey_type, field_len, n_required_hunters, max_steps, catch_reward))  # Environment parameters
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") + (" --vdn" if USE_VDN else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
@@ -124,14 +124,15 @@ for i in range(limits[0], limits[1] + 1):
 			 (" --data-dir %s" % data_dir if data_dir != '' else "") + (" --logs-dir %s" % logs_dir if logs_dir != '' else "") +
 			 (" --use-lower-model" if use_lower_model else "") + (" --use-higher-model" if use_higher_model else "") +
 			 (" --tracker-dir %s" % tracker_logs if tracker_logs != '' else "") + (" --train-performance %f" % train_thresh if train_thresh is not None else ""))
-	commamd = "python " + str(src_dir / 'train_pursuit_single_dqn.py') + args
+
+	command = "python " + str(src_dir / 'train_pursuit_single_dqn.py') + args
 	if not USE_SHELL:
-		commamd = shlex.split(commamd)
+		command = shlex.split(command)
 		
-	print(commamd)
+	print(command)
 	start_time = time.time()
 	try:
-		subprocess.run(commamd, shell=USE_SHELL, check=True)
+		subprocess.run(command, shell=USE_SHELL, check=True)
 	
 	except subprocess.CalledProcessError as e:
 		print(e.output)

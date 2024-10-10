@@ -1,14 +1,14 @@
 10x10:
   2-hunters:
-    1-preys: 0.98
-    2-preys: 0.91
-    3-preys: 0.95
-    4-preys: 0.67
+    1-preys: 0.0
+    2-preys: 0.0
+    3-preys: 0.0
+    4-preys: 0.0
   3-hunters:
-    1-preys: 0.95
-    2-preys: 0.62
-    3-preys: 0.92
-    4-preys: 0.68
+    1-preys: 0.0
+    2-preys: 0.0
+    3-preys: 0.0
+    4-preys: 0.0
   4-hunters:
     1-preys: 0.0
     2-preys: 0.0

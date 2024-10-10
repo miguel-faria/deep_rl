@@ -48,7 +48,6 @@ class PursuitEnv(Env):
 	_n_hunters: int
 	_n_preys: int
 	_n_preys_alive: int
-	_n_spawn_preys: int
 	_field_size: Tuple[int, int]
 	_hunter_ids: List[str]
 	_prey_ids: List[str]
@@ -66,7 +65,7 @@ class PursuitEnv(Env):
 	
 	def __init__(self, hunters: List[Tuple[str, int]], preys: List[Tuple[str, int]], field_size: Tuple[int, int], hunter_sight: int, n_catch: int = 4,
 				 max_steps: int = 250, use_encoding: bool = False, dead_preys: List[bool] = None, use_layer_obs: bool = False, agent_centered: bool = False,
-				 catch_reward: float = 1.0, render_mode: List[str] = None, n_spawn_preys: Optional[int] = None, freeze_pos: bool = False):
+				 catch_reward: float = 1.0, render_mode: List[str] = None, freeze_pos: bool = False):
 		
 		self._prey_ids = [prey[0] for prey in preys]
 		self._hunter_ids = [hunter[0] for hunter in hunters]
@@ -74,7 +73,6 @@ class PursuitEnv(Env):
 		self._n_hunters = int(len(hunters))
 		self._n_preys = int(len(preys))
 		self._n_preys_alive = 0
-		self._n_spawn_preys = n_spawn_preys if not n_spawn_preys is None else self._n_preys
 		self._field_size = field_size
 		self._field = np.zeros(field_size)
 		self._hunter_sight = hunter_sight
@@ -363,25 +361,19 @@ class PursuitEnv(Env):
 	def spawn_preys(self, init_pos: Dict[str, Tuple[int, int]] = None):
 		
 		if init_pos is None:
-			spawn_preys = self._np_random.choice(self._prey_ids, size=self._n_spawn_preys, replace=False).tolist()
-			self._prey_alive_ids = spawn_preys.copy()
+			self._prey_alive_ids = self._prey_ids.copy()
 			for prey in self._prey_ids:
 				agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
 				while self._field[agent_pos[0], agent_pos[1]] != 0:
 					agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
 				self._agents[prey].pos = agent_pos
-				if prey in spawn_preys:
-					self._agents[prey].alive = True
-					self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
-				
-				else:
-					self._agents[prey].alive = False
-		
+				self._agents[prey].alive = True
+				self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
+
 		else:
 			for prey in self._prey_ids:
 				self._agents[prey].pos = init_pos[prey]
 				self._agents[prey].alive = True
-				
 				self._field[init_pos[prey][0], init_pos[prey][1]] = AgentType.PREY
 	
 	def make_array_obs(self) -> np.ndarray:
@@ -559,10 +551,10 @@ class TargetPursuitEnv(PursuitEnv):
 	
 	def __init__(self, hunters: List[Tuple[str, int]], preys: List[Tuple[str, int]], field_size: Tuple[int, int], hunter_sight: int, target_id: str, n_catch: int = 4,
 				 max_steps: int = 250, use_encoding: bool = False, dead_preys: List[bool] = None, use_layer_obs: bool = False, agent_centered: bool = False,
-				 catch_reward: float = 1.0, render_mode: List[str] = None, n_spawn_preys: Optional[int] = None, freeze_pos: bool = False):
+				 catch_reward: float = 1.0, render_mode: List[str] = None, freeze_pos: bool = False):
 		
 		super().__init__(hunters, preys, field_size, hunter_sight, n_catch, max_steps, use_encoding, dead_preys, use_layer_obs, agent_centered,
-						 catch_reward, render_mode, n_spawn_preys, freeze_pos)
+						 catch_reward, render_mode, freeze_pos)
 		self._target_caught = False
 		self._target_id = target_id
 	
@@ -770,27 +762,20 @@ class TargetPursuitEnv(PursuitEnv):
 		
 		if init_pos is None:
 			prey_ids = self.prey_ids.copy()
-			prey_ids.remove(self._target_id)
-			spawn_preys = [self._target_id] + list(self._np_random.choice(prey_ids, size=self._n_spawn_preys - 1, replace=False))
-			self._prey_alive_ids = spawn_preys.copy()
+			self._prey_alive_ids = prey_ids
 			for prey in self._prey_ids:
 				agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
 				while self._field[agent_pos[0], agent_pos[1]] != 0:
 					agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
 				self._agents[prey].pos = agent_pos
-				if prey in spawn_preys:
-					self._agents[prey].alive = True
-					self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
-				
-				else:
-					self._agents[prey].alive = False
-		
+				self._agents[prey].alive = True
+				self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
+
 		else:
 			assert self._target_id in init_pos.keys(), 'When giving starting positions for preys, target prey %s must be among them' % self._target_id
 			for prey in init_pos.keys():
 				self._agents[prey].pos = init_pos[prey]
 				self._agents[prey].alive = True
-				
 				self._field[init_pos[prey][0], init_pos[prey][1]] = AgentType.PREY
 	
 	def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None) -> tuple[np.ndarray, dict[str, Any]]:

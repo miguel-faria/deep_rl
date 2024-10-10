@@ -73,7 +73,7 @@ def get_target_seqs(targets: List[str]) -> List[Tuple[str]]:
 		return None
 
 
-def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iterations: int, max_timesteps: int, batch_size: int, online_lr: float,
+def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: TargetPursuitEnv, num_iterations: int, max_timesteps: int, batch_size: int, online_lr: float,
                       target_lr: float, initial_eps: float, final_eps: float, eps_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
                       exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1,
                       use_render: bool = False, greedy_action: bool = True, epoch_logging: bool = False, initial_model_path: str = '',
@@ -197,7 +197,7 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: PursuitEnv, num_iteratio
 						performance_tracker.log({tracker_panel + "-charts/losses/td_loss": sum(avg_loss) / max(len(avg_loss), 1)},
 												step=(it + start_record_it))
 				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
-				env.reset_init_pos()
+				env.target = rng_gen.choice(env.prey_ids)
 				obs, *_ = env.reset()
 				done = True
 				episode_rewards = 0
@@ -243,6 +243,7 @@ def main():
 	parser.add_argument('--iterations', dest='n_iterations', type=int, required=True, help='Number of iterations to run training')
 	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 	parser.add_argument('--models-dir', dest='models_dir', type=str, default='', help='Directory to store trained models, if left blank stored in default location')
+	parser.add_argument('--n-preys-catch', dest='n_preys_catch', type=int, default=1, help='Number of preys to catch for success')
 	parser.add_argument('--restart', dest='restart_train', action='store_true',
 						help='Flag that signals that train is suppose to restart from a previously saved point.')
 	parser.add_argument('--restart-info', dest='restart_info', type=str, nargs='+', required=False, default=None,
@@ -271,14 +272,13 @@ def main():
 	parser.add_argument('--hunter-classes', dest='hunter_class', type=int, required=True, help='Class of agent to use for the hunters')
 	parser.add_argument('--hunter-ids', dest='hunter_ids', type=str, nargs='+', required=True, help='List with the hunter ids in the environment')
 	parser.add_argument('--n-hunters-catch', dest='require_catch', type=int, required=True, help='Minimum number of hunters required to catch a prey')
-	parser.add_argument('--n-spawn-preys', dest='n_spawn_preys', type=int, required=True, help='Number of preys to spawn')
 	parser.add_argument('--prey-ids', dest='prey_ids', type=str, nargs='+', required=True, help='List with the prey ids in the environment')
 	parser.add_argument('--prey-type', dest='prey_type', type=str, required=True, choices=['idle', 'greedy', 'random'],
 						help='Type of prey in the environment, possible types: idle, greedy or random')
 	parser.add_argument('--render', dest='use_render', action='store_true', help='Flag that signals the use of the field render while training')
 	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
-
 	args = parser.parse_args()
+
 	# DQN args
 	n_agents = args.n_agents
 	architecture = args.architecture
@@ -319,16 +319,14 @@ def main():
 	require_catch = args.require_catch
 	hunter_class = args.hunter_class
 	prey_type = args.prey_type
-	n_spawn_preys = args.n_spawn_preys
-	
+
 	hunters = []
 	preys = []
 	n_hunters = len(hunter_ids)
-	max_n_preys = len(prey_ids)
-	assert n_spawn_preys <= max_n_preys, 'Can\'t spawn more preys that provided maximum number of preys'
+	n_preys = len(prey_ids)
 	for idx in range(n_hunters):
 		hunters += [(hunter_ids[idx], hunter_class)]
-	for idx in range(max_n_preys):
+	for idx in range(n_preys):
 		preys += [(prey_ids[idx], PREY_TYPES[prey_type])]
 	
 	os.environ["XLA_PYTHON_CLIENT_MEM_FRACTION"] = args.fraction
@@ -356,7 +354,7 @@ def main():
 	if tracker_dir == '':
 		tracker_dir = log_dir
 	log_filename = (('train_pursuit_single%s_dqn_%dx%d-field_%d-hunters_%d-preys' %
-					 ('_vdn' if use_vdn else '', field_size[0], field_size[1], n_hunters, n_spawn_preys)) +
+					 ('_vdn' if use_vdn else '', field_size[0], field_size[1], n_hunters, n_preys)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / ('pursuit_single%s_dqn' % '_vdn' if use_vdn else '') / ('%dx%d-field' % (field_size[0], field_size[1])) /
 	              ('%d-hunters' % n_hunters) / now.strftime("%Y%m%d-%H%M%S"))
@@ -366,7 +364,7 @@ def main():
 		train_performances = yaml.safe_load(train_file)
 		field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 		hunter_idx = str(n_hunters) + '-hunters'
-		prey_idx = str(n_spawn_preys) + '-preys'
+		prey_idx = str(n_preys) + '-preys'
 		train_acc = train_performances[field_idx][hunter_idx][prey_idx]
 	
 	with open(data_dir / 'configs' / 'q_network_architectures.yaml') as architecture_file:
@@ -407,8 +405,7 @@ def main():
 					config={
 						   	"field": "%dx%d" % (field_size[0], field_size[1]),
 						   	"agents": n_agents,
-						   	"max_preys": max_n_preys,
-						   	"spawn_preys": n_spawn_preys,
+						   	"max_preys": n_preys,
 							"prey_type": prey_type,
 						   	"hunters": n_hunters,
 						   	"online_learing_rate": learn_rate,
@@ -425,7 +422,7 @@ def main():
 						   	"curriculum_learning": 'no' if not (use_higher_model or use_lower_model) else ('lower_model' if use_lower_model else 'higher_model')
 					},
 					dir=tracker_dir,
-					name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_spawn_preys, prey_type) +
+					name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_preys, prey_type) +
 						 now.strftime("%Y%m%d-%H%M%S")),
 					sync_tensorboard=True)
 			logger.info('Number of iterations: %d' % n_iterations)
@@ -449,19 +446,19 @@ def main():
 											 use_gpu, dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
 											 buffer_data=(args.buffer_smart_add, args.buffer_method))
 
-			if use_lower_model and n_spawn_preys > 1:
+			if use_lower_model and n_preys > 1:
 				prev_model_path = model_path.parent.parent.absolute() / 'best'
-				if (prev_model_path / ('%d-preys' % max(n_spawn_preys - 1, 1))).exists():
-					logger.info('Using model trained with %d foods spawned as a baseline' % max(n_spawn_preys - 1, 1))
-					curriculum_model_path = str(prev_model_path / ('%d-preys' % max(n_spawn_preys - 1, 1)))
+				if (prev_model_path / ('%d-preys' % max(n_preys - 1, 1))).exists():
+					logger.info('Using model trained with %d foods spawned as a baseline' % max(n_preys - 1, 1))
+					curriculum_model_path = str(prev_model_path / ('%d-preys' % max(n_preys - 1, 1)))
 				else:
 					logger.info('Model with one less prey not found, training from scratch')
 					curriculum_model_path = ''
-			elif use_higher_model and n_spawn_preys < max_n_preys:
+			elif use_higher_model and n_preys < n_preys:
 				next_model_path = model_path.parent.parent.absolute() / 'best'
-				if (next_model_path / ('%d-preys' % min(n_spawn_preys + 1, max_n_preys))).exists():
-					logger.info('Using model trained with %d foods spawned as a baseline' % min(n_spawn_preys + 1, max_n_preys))
-					curriculum_model_path = str(next_model_path / ('%d-preys' % min(n_spawn_preys + 1, max_n_preys)))
+				if (next_model_path / ('%d-preys' % min(n_preys + 1, n_preys))).exists():
+					logger.info('Using model trained with %d foods spawned as a baseline' % min(n_preys + 1, n_preys))
+					curriculum_model_path = str(next_model_path / ('%d-preys' % min(n_preys + 1, n_preys)))
 				else:
 					logger.info('Model with one more prey not found, training from scratch')
 					curriculum_model_path = ''
@@ -474,14 +471,14 @@ def main():
 			env.seed(RNG_SEED)
 			sys.stdout.flush()
 			cnn_shape = (0,) if not dqn_model.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
-			tracker_panel = 'l%dx%d-%dp' % (field_size[0], field_size[1], n_spawn_preys)
+			tracker_panel = 'l%dx%d-%dp' % (field_size[0], field_size[1], n_preys)
 			greedy_actions = False
 			train_pursuit_dqn(dqn_model, env, n_iterations, max_steps * n_iterations, batch_size, learn_rate, target_update_rate, initial_eps,
 							  final_eps, eps_type, RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tensorboard_freq,
 							  use_render, greedy_actions, args.ep_log, curriculum_model_path, use_tracker, wandb_run, tracker_panel, debug)
 			
 			logger.info('Saving final model')
-			dqn_model.save_model(('preys-%d' % max_n_preys), model_path, logger)
+			dqn_model.save_model(('preys-%d' % n_preys), model_path, logger)
 			sys.stdout.flush()
 			
 			####################
@@ -550,7 +547,7 @@ def main():
 			if (tests_passed / N_TESTS) > train_acc:
 				logger.info('Updating best model for current loc')
 				Path.mkdir(model_path.parent.absolute() / 'best', parents=True, exist_ok=True)
-				dqn_model.save_model('%d-preys' % n_spawn_preys, model_path.parent.absolute() / 'best', logger)
+				dqn_model.save_model('%d-preys' % n_preys, model_path.parent.absolute() / 'best', logger)
 				train_acc = tests_passed / N_TESTS
 			
 			gc.collect()
@@ -560,7 +557,7 @@ def main():
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 				hunter_idx = str(n_hunters) + '-hunters'
-				prey_idx = str(max_n_preys) + '-preys'
+				prey_idx = str(n_preys) + '-preys'
 				performance_data[field_idx][hunter_idx][prey_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(
@@ -576,7 +573,7 @@ def main():
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
 				hunter_idx = str(n_hunters) + '-hunters'
-				prey_idx = str(max_n_preys) + '-preys'
+				prey_idx = str(n_preys) + '-preys'
 				performance_data[field_idx][hunter_idx][prey_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(

@@ -113,7 +113,7 @@ fi
 
 
 
-python src/mohit_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
+python src/interactive_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
 --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4 \
 --n-ic-samples 5 --mm-type "$mental_model" --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" \
 --use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" > mohit_"$mental_model"_"$utility".out

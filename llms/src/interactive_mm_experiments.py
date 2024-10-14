@@ -5,6 +5,8 @@ import pandas as pd
 import torch
 import os
 
+from sklearn.cluster.tests.test_k_means import n_samples
+
 from reputation_learning.dataset_tasks_utils import ECQA, StrategyQA, GSM8k
 from reputation_learning.model import UnidentifiedTaskError
 from reputation_learning.teacher_model import TeacherModel
@@ -276,11 +278,40 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 		return student_model, None, None
 
 
-def get_student_performance_per_budget() -> Tuple[List, List]:
+def get_student_performance_per_budget(budgets: List[float], test_samples: pd.DataFrame, student: StudentModel, teacher: TeacherInteractiveMentalModel,
+									   use_answers: bool, debug: bool, intervene_thresh: float = 0.5) -> Tuple[List, List]:
 	
 	correct_answers = []
-	answers_budget = []
+	n_samples = test_samples.shape[0]
 	
+	assert len(budgets) > 0, "There must be at least one budget value in list."
+	
+	max_intervention_samples = [int(budget * n_samples) for budget in budgets]
+	n_interventions = [0] * len(budgets)
+	answers_budget = [[]] * len(budgets)
+	
+	for test_idx, test_sample in test_samples.iterrows():
+		
+		for i in range(len(budgets)):
+			if n_interventions[i] >= max_intervention_samples[i]:
+				prediction_student, _ = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
+			
+			else:
+				intervene_utility = teacher.intervention_utility(test_sample.to_dict(), student, use_answers)
+				
+				if intervene_utility >= intervene_thresh:
+					_, explanation = teacher.predict(sample=test_sample.to_dict())
+					prediction_student, _ = student.predict(sample=test_sample.to_dict(), expl=explanation, intervene=True, debug=debug)
+				else:
+					prediction_student, _ = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
+				
+				n_interventions[i] += 1
+			
+			answers_budget[i].append(prediction_student)
+			
+		teacher.update_student_context(test_sample.to_dict())
+		correct_answers.append(test_sample['answer'])
+		
 	return answers_budget, correct_answers
 
 
@@ -317,10 +348,13 @@ def main( ):
 	parser.add_argument('--intervention-utility', dest='intervention_utility', default='mm_both', type=str, help='Mode to determine intervention utility')
 	parser.add_argument('--teacher-explanation-type', dest='teacher_expl_type', default='blind_teacher_CoT', type=str, help='Teacher model explanation type')
 	parser.add_argument('--student-explanation-type', dest='student_expl_type', default='cot', type=str, help='Student model explanation type')
+	parser.add_argument('--intervention-threshold', dest='intervention_threshold', default=0.5, type=float,
+						help='Threshold for intervention utility, above which the mental model gives an explanation')
 	
 	parser.add_argument('--use-gold-label', dest='use_gold_label', action='store_true',
 						help='Flag denoting whether teacher uses the expected answers instead of its own')
 	parser.add_argument('--results-path', dest='results_path', default='', type=str, help='Path to the results file')
+	parser.add_argument('--debug', dest='debug', action='store_true', help='Flag that denotes the print of debug information')
 	
 	args = parser.parse_args()
 	
@@ -369,7 +403,7 @@ def main( ):
 		print('Done')
 		
 		print('Getting student performances with interactive teacher')
-		predictions_per_budget, labels = get_student_performance_per_budget()
+		predictions_per_budget, labels = get_student_performance_per_budget(budgets, test_samples, student_model, mental_model, args.use_gold_label, args.debug, args.intervention_threshold)
 		
 		print('Computing accuracies')
 		if not args.use_explanations:

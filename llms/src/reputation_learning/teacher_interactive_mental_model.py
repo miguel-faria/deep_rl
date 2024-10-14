@@ -128,7 +128,7 @@ class TeacherInteractiveMentalModel(TeacherMentalModel):
 				no_intervention_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
 				context = "Simulate an AI model's answer for the given question.\n\n"
 				if self._task == "strategy_qa":
-					if use_answers:
+					if not use_answers:
 						context += "\n\n".join(
 								["Q: %s\nAI Predicted Answer: %s" % (ic_sample['question'], ic_sample['prediction'])
 								 for ic_sample in no_intervention_samples])
@@ -140,7 +140,7 @@ class TeacherInteractiveMentalModel(TeacherMentalModel):
 						context += "\n\nQ: %s\nCorrect Answer: %s\nAI Predicted Answer:" % (sample['question'], sample['answer'])
 				
 				elif self._task == "ec_qa":
-					if use_answers:
+					if not use_answers:
 						context += "\n\n".join(
 								["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s" %
 								 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2],

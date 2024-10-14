@@ -77,6 +77,8 @@ class StudentModel(Model):
 				
 				if yes_id in generated_tokens or no_id in generated_tokens:
 					answer_id = generated_tokens.index(yes_id) if yes_id in generated_tokens else generated_tokens.index(no_id)
+				else:
+					answer_id = 0
 			
 			scores = softmax(generated['scores'][answer_id], dim=-1)
 			yes_score, no_score = scores[0][yes_id].item(), scores[0][no_id].item()

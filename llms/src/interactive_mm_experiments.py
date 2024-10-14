@@ -5,8 +5,6 @@ import pandas as pd
 import torch
 import os
 
-from sklearn.cluster.tests.test_k_means import n_samples
-
 from reputation_learning.dataset_tasks_utils import ECQA, StrategyQA, GSM8k
 from reputation_learning.model import UnidentifiedTaskError
 from reputation_learning.teacher_model import TeacherModel
@@ -283,30 +281,37 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 	
 	correct_answers = []
 	n_samples = test_samples.shape[0]
+	n_budgets = len(budgets)
 	
-	assert len(budgets) > 0, "There must be at least one budget value in list."
+	assert n_budgets > 0, "There must be at least one budget value in list."
 	
 	max_intervention_samples = [int(budget * n_samples) for budget in budgets]
-	n_interventions = [0] * len(budgets)
-	answers_budget = [[]] * len(budgets)
+	intervention_idx_budget = [[]] * n_budgets
+	n_interventions = [0] * n_budgets
+	answers_budget = [[]] * n_budgets
 	
 	for test_idx, test_sample in test_samples.iterrows():
 		
-		for i in range(len(budgets)):
+		for i in range(n_budgets):
 			if n_interventions[i] >= max_intervention_samples[i]:
 				prediction_student, _ = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
 			
 			else:
-				intervene_utility = teacher.intervention_utility(test_sample.to_dict(), student, use_answers)
-				
+				_, intervene_scores = teacher.intervention_utility(test_sample.to_dict(), student, use_answers)
+
+				if teacher.mm_type.find('both'):
+					intervene_utility = intervene_scores[1] - intervene_scores[0]
+				else:
+					intervene_utility = intervene_scores
+
 				if intervene_utility >= intervene_thresh:
 					_, explanation = teacher.predict(sample=test_sample.to_dict())
 					prediction_student, _ = student.predict(sample=test_sample.to_dict(), expl=explanation, intervene=True, debug=debug)
+					intervention_idx_budget[i].append(test_idx)
+					n_interventions[i] += 1
 				else:
 					prediction_student, _ = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
 				
-				n_interventions[i] += 1
-			
 			answers_budget[i].append(prediction_student)
 			
 		teacher.update_student_context(test_sample.to_dict())

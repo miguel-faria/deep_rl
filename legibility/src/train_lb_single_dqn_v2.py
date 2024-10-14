@@ -186,14 +186,19 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 				episode_len = epoch - episode_start
 				avg_episode_len += [episode_len]
 				if use_tracker:
-					performance_tracker.log({
-							tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
-							tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
-							tracker_panel + "-charts/performance/episodic_length":     episode_len,
-							tracker_panel + "-charts/performance/avg_episode_length":  np.mean(avg_episode_len),
-							tracker_panel + "-charts/control/iteration":               it,
-							tracker_panel + "-charts/control/exploration":             eps,
-					},
+					performance_tracker.log(
+							data={
+									tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
+									tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
+									tracker_panel + "-charts/performance/episodic_length":     episode_len,
+									tracker_panel + "-charts/performance/avg_episode_length":  np.mean(avg_episode_len),
+							},
+							step=(it + start_record_it))
+					performance_tracker.log(
+							data={
+									tracker_panel + "-charts/control/iteration":               it,
+									tracker_panel + "-charts/control/exploration":             eps,
+							},
 							step=(it + start_record_it))
 					if not epoch_logging:
 						performance_tracker.log({tracker_panel + "-charts/losses/td_loss": sum(avg_loss) / max(len(avg_loss), 1)},

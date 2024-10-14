@@ -323,7 +323,7 @@ def get_intervention_idx_budget(student_model: StudentModel, mental_model: Teach
 			
 			elif (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1) or intervention_utility.find('mm') != -1:
 				if intervention_utility.find('both') != -1:
-					sample_utility_correct_scores = sorted(sample_confidence_pairs, key=lambda x: x[1], reverse=True) if not deceive else sorted(sample_confidence_pairs, key=lambda x: x[1])
+					sample_utility_correct_scores = sorted(sample_confidence_pairs, key=lambda x: (x[1][1] - x[1][0]), reverse=True) if not deceive else sorted(sample_confidence_pairs, key=lambda x: (x[1][1] - x[1][0]))
 					for budget in budgets:
 						budget_count = int(budget * len(test_samples))
 						intervention_samples = [sample_utility_correct_score[0] for sample_utility_correct_score in sample_utility_correct_scores][:budget_count]

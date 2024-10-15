@@ -31,7 +31,7 @@ class TeacherMentalModel(TeacherModel):
 	def utility_type(self) -> str:
 		return self._utility_type
 	
-	def get_student_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, use_answers: bool = False) -> str:
+	def get_student_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, use_answers: bool = False, debug: bool = False) -> str:
 		raise NotImplementedError("Method 'get_student_context' is not implemented in teacher mental model base class, subclasses should implement it.")
 
 	def predict_prompt(self, prompt: str, test_sample: Dict) -> Tuple:
@@ -50,6 +50,7 @@ class TeacherMentalModel(TeacherModel):
 			yes_id, no_id = self.tokenizer.encode("yes")[idx], self.tokenizer.encode("no")[idx]
 			yes_score, no_score = scores[0][yes_id].item(), scores[0][no_id].item()
 			option_scores = [yes_score, no_score]
+			output = output.split(" ")[-1]
 
 		elif self._task == "ec_qa":
 			option1_id, option2_id, option3_id, option4_id, option5_id = (self.tokenizer.encode("1")[idx], self.tokenizer.encode("2")[idx],
@@ -101,6 +102,8 @@ class TeacherMentalModel(TeacherModel):
 		else:
 			teacher_prediction, _ = self.predict(sample)
 			correct_answer = teacher_prediction
+
+		print('Mental model: ', self._mm_type)
 
 		if self._mm_type.find('both') != -1:
 			no_inter_context = self.get_student_context(sample, None, False, use_answers)
@@ -170,7 +173,9 @@ class TeacherMentalModel(TeacherModel):
 			else:
 				raise UnidentifiedTaskError('Task %s not defined' % self._task)
 
-	def intervention_utility(self, sample: Dict, student: StudentModel, use_answers: bool) -> float:
+	def intervention_utility(self, sample: Dict, student: StudentModel, use_answers: bool) -> Union[float, Tuple]:
+
+		print('Utility type: ', self._utility_type)
 
 		if self._utility_type.find('student') != -1 and self._utility_type.find('confidence') != -1:
 			if self._utility_type.find('intervention') != -1:

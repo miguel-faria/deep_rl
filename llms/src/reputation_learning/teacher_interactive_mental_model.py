@@ -30,41 +30,45 @@ class TeacherInteractiveMentalModel(TeacherMentalModel):
 			self._student_context.pop(0)
 			self._student_context.append(new_context_sample)
 
-	def get_student_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, use_answers: bool = False) -> str:
+	def reset_student_context(self) -> None:
+		self._student_context = []
+
+	def get_student_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, use_answers: bool = False, debug: bool = False) -> str:
 		
 		context = ''
 		
 		if len(self._student_context) > 0:
+			print(self._student_context[0].keys())
 			context += "Considering the following AI model's answers.\n\n"
 			if self._task == "strategy_qa":
 				if not use_answers:
 					context += "\n\n".join(
 							["Q: %s\nAI Predicted Answer: %s So the answer is %s" %
-							 (sample['question'], sample['teacher_explanation'], sample['prediction'])
+							 (sample['question'], sample['explanation'], sample['prediction'])
 							 for sample in self._student_context])
 				else:
 					context += "\n\n".join(
 							["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is %s" %
-							 (ic_sample['question'], ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
-							 for ic_sample in self._student_context])
+							 (sample['question'], sample['answer'], sample['explanation'], sample['prediction'])
+							 for sample in self._student_context])
 			
 			elif self._task == "ec_qa":
 				if not use_answers:
 					context += "\n\n".join(
 							["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nAI Predicted Answer: %s So the correct choice is %s" %
-							 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2], ic_sample['options'][3],
-							  ic_sample['options'][4], ic_sample['teacher_explanation'], ic_sample['prediction'])
-							 for ic_sample in self._student_context])
+							 (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3],
+							  sample['options'][4], sample['explanation'], sample['prediction'])
+							 for sample in self._student_context])
 				else:
 					context += "\n\n".join(
 							["Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the correct choice is %s" %
-							 (ic_sample['question'], ic_sample['options'][0], ic_sample['options'][1], ic_sample['options'][2], ic_sample['options'][3], ic_sample['options'][4],
-							  ic_sample['answer'], ic_sample['teacher_explanation'], ic_sample['prediction'])
-							 for ic_sample in self._student_context])
+							 (sample['question'], sample['options'][0], sample['options'][1], sample['options'][2], sample['options'][3], sample['options'][4],
+							  sample['answer'], sample['explanation'], sample['prediction'])
+							 for sample in self._student_context])
 			
 			elif self._task == "gsm8k":
-				context += "\n\n".join(["Q: %s\nAI Predicted Answer: %s So the answer is %s" % (inter_ic['question'], inter_ic['explanation'], inter_ic['answer'])
-				                       for inter_ic in self._student_context])
+				context += "\n\n".join(["Q: %s\nCorrect Answer: %s\nAI Predicted Answer: %s So the answer is %s" % (sample['question'], sample['answer'], sample['explanation'], sample['prediction'])
+				                       for sample in self._student_context])
 			
 			else:
 				raise UnidentifiedTaskError('Task %s not defined' % self._task)
@@ -77,7 +81,8 @@ class TeacherInteractiveMentalModel(TeacherMentalModel):
 			if intervene:
 				intervention_samples = self._ic_samples[1] if isinstance(self._ic_samples, tuple) else self._ic_samples
 				_, teacher_explanation = self.predict(sample)
-				print('Teacher explanation = %s' % teacher_explanation)
+				if debug:
+					print('Teacher explanation = %s' % teacher_explanation)
 				if self._task == "strategy_qa":
 					if not use_answers:
 						context += "\n\n".join(

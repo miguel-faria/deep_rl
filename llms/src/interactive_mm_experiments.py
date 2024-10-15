@@ -15,6 +15,7 @@ from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from typing import Tuple, List, Optional, Dict
 from numpy.random import default_rng, Generator
+from tqdm import tqdm
 
 RNG_SEED = 25092024
 
@@ -289,15 +290,16 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 	intervention_idx_budget = [[]] * n_budgets
 	n_interventions = [0] * n_budgets
 	answers_budget = [[]] * n_budgets
-	
-	for test_idx, test_sample in test_samples.iterrows():
-		
-		for i in range(n_budgets):
+
+	for i in tqdm(range(n_budgets), desc='Budgets'):
+
+		for test_idx, test_sample in tqdm(test_samples.iterrows(), desc='Test Samples', total=test_samples.shape[0]):
+
 			if n_interventions[i] >= max_intervention_samples[i]:
-				prediction_student, _ = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
+				prediction_student, student_explanation = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
 			
 			else:
-				_, intervene_scores = teacher.intervention_utility(test_sample.to_dict(), student, use_answers)
+				intervene_scores = teacher.intervention_utility(test_sample.to_dict(), student, use_answers)
 
 				if teacher.mm_type.find('both'):
 					intervene_utility = intervene_scores[1] - intervene_scores[0]
@@ -306,16 +308,22 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 
 				if intervene_utility >= intervene_thresh:
 					_, explanation = teacher.predict(sample=test_sample.to_dict())
-					prediction_student, _ = student.predict(sample=test_sample.to_dict(), expl=explanation, intervene=True, debug=debug)
+					prediction_student, student_explanation = student.predict(sample=test_sample.to_dict(), expl=explanation, intervene=True, debug=debug)
 					intervention_idx_budget[i].append(test_idx)
 					n_interventions[i] += 1
 				else:
-					prediction_student, _ = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
+					prediction_student, student_explanation = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
 				
 			answers_budget[i].append(prediction_student)
-			
-		teacher.update_student_context(test_sample.to_dict())
-		correct_answers.append(test_sample['answer'])
+
+			next_context = test_sample.to_dict()
+			next_context['explanation'] = student_explanation
+			next_context['prediction'] = prediction_student
+			teacher.update_student_context(next_context)
+			if i < 1:
+				correct_answers.append(test_sample['answer'])
+
+		teacher.reset_student_context()
 		
 	return answers_budget, correct_answers
 
@@ -371,7 +379,7 @@ def main( ):
 		task_dataset = GSM8k(data_dir=Path(args.data_dir), train_filename=args.train_filename, test_filename=args.test_filename, validation_filename=args.val_filename)
 	else:
 		raise UnidentifiedTaskError('Task %s is not defined' % args.task)
-	
+
 	test_samples = task_dataset.get_test_samples() if args.task != 'strategy_qa' else task_dataset.get_validation_samples()
 	train_samples = task_dataset.get_train_samples()
 	print('Number of test samples = %d' % test_samples.shape[0])

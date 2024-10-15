@@ -278,7 +278,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 
 
 def get_student_performance_per_budget(budgets: List[float], test_samples: pd.DataFrame, student: StudentModel, teacher: TeacherInteractiveMentalModel,
-									   use_answers: bool, debug: bool, intervene_thresh: float = 0.5) -> Tuple[List, List]:
+									   use_answers: bool, debug: bool, intervene_thresh: float = 0.5) -> Tuple[List, List, List]:
 	
 	correct_answers = []
 	n_samples = test_samples.shape[0]
@@ -290,11 +290,15 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 	intervention_idx_budget = [[]] * n_budgets
 	n_interventions = [0] * n_budgets
 	answers_budget = [[]] * n_budgets
-
+	
+	print('Max interventions: ', max_intervention_samples)
+	
 	for i in tqdm(range(n_budgets), desc='Budgets'):
 
 		for test_idx, test_sample in tqdm(test_samples.iterrows(), desc='Test Samples', total=test_samples.shape[0]):
-
+			
+			print('Interventions for budget %f: ' % budgets[i], n_interventions[i])
+			
 			if n_interventions[i] >= max_intervention_samples[i]:
 				prediction_student, student_explanation = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
 			
@@ -305,10 +309,12 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 					intervene_utility = intervene_scores[1] - intervene_scores[0]
 				else:
 					intervene_utility = intervene_scores
-
+				
+				print('Intervention utility for sample %d: %f' % (int(test_idx), intervene_utility))
+				
 				if intervene_utility >= intervene_thresh:
-					_, explanation = teacher.predict(sample=test_sample.to_dict())
-					prediction_student, student_explanation = student.predict(sample=test_sample.to_dict(), expl=explanation, intervene=True, debug=debug)
+					_, teacher_explanation = teacher.predict(sample=test_sample.to_dict())
+					prediction_student, student_explanation = student.predict(sample=test_sample.to_dict(), expl=teacher_explanation, intervene=True, debug=debug)
 					intervention_idx_budget[i].append(test_idx)
 					n_interventions[i] += 1
 				else:
@@ -325,7 +331,7 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 
 		teacher.reset_student_context()
 		
-	return answers_budget, correct_answers
+	return answers_budget, correct_answers, intervention_idx_budget
 
 
 def compute_accuracy(labels, predictions):
@@ -416,7 +422,12 @@ def main( ):
 		print('Done')
 		
 		print('Getting student performances with interactive teacher')
-		predictions_per_budget, labels = get_student_performance_per_budget(budgets, test_samples, student_model, mental_model, args.use_gold_label, args.debug, args.intervention_threshold)
+		predictions_per_budget, labels, interventions = get_student_performance_per_budget(budgets, test_samples, student_model, mental_model, args.use_gold_label, args.debug, args.intervention_threshold)
+		
+		print('Interventions per budget:')
+		for i in range(len(budgets)):
+			print('Intervened %d times in budget %f:' % (len(interventions[i]), budgets[i]))
+			print('Intervention idxs: ', print(interventions[i]))
 		
 		print('Computing accuracies')
 		if not args.use_explanations:

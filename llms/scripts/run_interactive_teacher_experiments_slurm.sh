@@ -85,7 +85,7 @@ else
   script_path="$( cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 ; pwd -P )"
 fi
 
-results_path="$data_dir"/results/mohit_"$mental_model"_"$utility".txt
+results_path="$data_dir"/results/interactive_"$mental_model"_"$utility".txt
 
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"

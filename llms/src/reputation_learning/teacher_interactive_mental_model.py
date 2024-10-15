@@ -38,7 +38,6 @@ class TeacherInteractiveMentalModel(TeacherMentalModel):
 		context = ''
 		
 		if len(self._student_context) > 0:
-			print(self._student_context[0].keys())
 			context += "Considering the following AI model's answers.\n\n"
 			if self._task == "strategy_qa":
 				if not use_answers:

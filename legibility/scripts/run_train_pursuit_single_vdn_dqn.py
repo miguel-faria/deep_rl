@@ -55,7 +55,7 @@ PREY_TYPE = 'idle'
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch-size', dest='batch_size', type=int, required=False, default=BATCH_SIZE)
 parser.add_argument('--buffer-size', dest='buffer_size', type=int, required=False, default=BUFFER)
-parser.add_argument('--catch_reward', dest='catch_reward', type=int, required=False, default=5.0, help='Reward for catching a prey')
+parser.add_argument('--catch-reward', dest='catch_reward', type=float, required=False, default=5.0, help='Reward for catching a prey')
 parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
 					help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
 parser.add_argument('--eps-decay', dest='eps_decay', type=float, required=False, default=EPS_DECAY, help='Epsilon decay.')

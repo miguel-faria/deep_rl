@@ -484,7 +484,8 @@ def main():
 			####################
 			## Testing Model ##
 			####################
-			env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids[0], require_catch, max_steps, use_layer_obs=True)
+			env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids[0], require_catch, max_steps, use_layer_obs=True, agent_centered=True,
+								   catch_reward=args.catch_reward)
 			env.seed(TEST_RNG_SEED)
 			np.random.seed(TEST_RNG_SEED)
 			random.seed(TEST_RNG_SEED)

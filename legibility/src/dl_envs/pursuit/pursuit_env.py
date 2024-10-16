@@ -807,6 +807,7 @@ class TargetPursuitEnv(PursuitEnv):
 	def step(self, actions: ActType) -> tuple[np.ndarray, np.ndarray, bool, bool, dict[str, Any]]:
 		
 		self._env_timestep += 1
+		self._target_caught = False
 		
 		# Attempt moving each agent
 		next_positions = {'hunter': defaultdict(tuple), 'prey': defaultdict(tuple)}

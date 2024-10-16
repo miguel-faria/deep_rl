@@ -429,7 +429,6 @@ def main():
 			logger.info('Environment setup')
 			env = TargetPursuitEnv(hunters, preys, field_size, sight, prey_ids[0], require_catch, max_steps, use_layer_obs=True, agent_centered=True,
 								   catch_reward=args.catch_reward)
-			# env = PursuitEnv(hunters, preys, field_size, sight, require_catch, max_steps, use_layer_obs=True)
 			logger.info('Setup multi-agent DQN')
 			if isinstance(env.observation_space, MultiBinary):
 				obs_space = MultiBinary([*env.observation_space.shape[1:]])
@@ -494,18 +493,17 @@ def main():
 			testing_prey_lists = [random.choice(prey_ids) for _ in range(N_TESTS)]
 			for n_test in range(N_TESTS):
 				env.reset_init_pos()
+				env.target = testing_prey_lists[n_test]
 				obs, *_ = env.reset()
 				logger.info('Test number %d' % (n_test + 1))
 				logger.info('Prey locations: ' + ', '.join(['(%d, %d)' % env.agents[prey_id].pos for prey_id in env.prey_alive_ids]))
 				logger.info('Agent positions: ' + ', '.join(['(%d, %d)' % env.agents[hunter_id].pos for hunter_id in env.hunter_ids]))
 				logger.info('Testing sequence: ' + ', '.join(testing_prey_lists[n_test]))
-				obs, *_ = env.reset()
 				epoch = 0
 				agent_reward = [0] * n_hunters
 				game_over = False
 				finished = False
 				timeout = False
-				env.target = testing_prey_lists[n_test]
 				cnn_shape = (0,) if not dqn_model.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
 				while not game_over:
 					

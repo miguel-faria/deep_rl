@@ -7,13 +7,13 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
-#SBATCH --time=48:00:00
+#SBATCH --time=12:00:00
 #SBATCH --mem-per-cpu=4000
 #SBATCH --qos=gpu-medium
 #SBATCH --output="job-%x-%j.out"
 
 date;hostname;pwd
-options=$(getopt -o d:,s:,t:,mm:,u:,se:,te:,ss:,it: -- "$@")
+options=$(getopt -o d:,s:,t:,u: -l mm:,se:,te:,ss:,it: -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
   data_dir="/mnt/data-artemis/miguelfaria/llms/"
@@ -30,12 +30,12 @@ do
     -d) dataset=${2}; shift ;;
     -s) student_model=${2}; shift ;;
     -t) teacher_model=${2}; shift ;;
-    -mm) mental_model=${2}; shift ;;
     -u) utility=${2}; shift ;;
-    -se) student_expl=${2}; shift ;;
-    -te) teacher_expl=${2}; shift ;;
-    -ss) student_samples=${2}: shift ;;
-    -it) intervention_thresh=${2}: shift ;;
+    --mm) mental_model=${2}; shift ;;
+    --se) student_expl=${2}; shift ;;
+    --te) teacher_expl=${2}; shift ;;
+    --ss) student_samples=${2}: shift ;;
+    --it) intervention_thresh=${2}: shift ;;
     (--) shift; break ;;
     (-*) echo "$0: error - unrecognized option $1" 1>&2; exit 1 ;;
     (*) break ;;
@@ -85,8 +85,6 @@ else
   script_path="$( cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 ; pwd -P )"
 fi
 
-results_path="$data_dir"/results/interactive_"$mental_model"_"$utility".txt
-
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
 source "$HOME"/miniconda3/bin/activate tom_env
@@ -111,12 +109,15 @@ else
   val_file="validation.json"
 fi
 
-
+s_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$student_model")")
+t_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$teacher_model")")
+out_file=interactive_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset".out
+results_path="$data_dir"/results/interactive_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset".txt
 
 python src/interactive_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
 --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4 \
 --n-ic-samples 5 --mm-type "$mental_model" --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" \
---use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" > interactive_"$mental_model"_"$utility".out
+--use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" > "$out_file"
 
 source "$HOME"/miniconda3/bin/deactivate
 date

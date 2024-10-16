@@ -138,13 +138,13 @@ class Model:
 		
 		return context
 	
-	def get_context(self, sample: Dict, explanation: Union[List, str] = None) -> str:
+	def get_context(self, sample: Dict, explanation: Union[List, str] = None, ic_samples: List[Dict] = None) -> str:
 		raise NotImplementedError("Method 'get_context' is not implemented in base class, subclasses should implement it.")
 	
 	def predict_confidence(self, sample: Dict, with_expl: bool = False) -> List[float]:
 		raise NotImplementedError("Method 'predict_confidence' is not implemented in the base class, subclasses should implement it.")
 	
-	def predict(self, sample: Dict) -> Tuple[str, str]:
+	def predict(self, sample: Dict, ic_samples: List[Dict] = None, debug: bool = False) -> Tuple[str, str]:
 		raise NotImplementedError("Method 'predict' is not implemented in the base class, subclasses should implement it.")
 	
 	def predict_batch(self, samples: DataFrame) -> Tuple[List, List]:

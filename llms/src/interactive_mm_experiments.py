@@ -35,10 +35,10 @@ def get_teacher_model_samples(rng_gen: Generator, train_data: pd.DataFrame, stud
 			
 			sample = shuffle_train.iloc[idx].to_dict()
 			
-			student_prediction_no_intervene, _ = student_model.predict(sample, '', False)  # get student prediction without teacher intervention
+			student_prediction_no_intervene, _ = student_model.predict(sample, expl='', intervene=False)  # get student prediction without teacher intervention
 			
 			teacher_expl = sample['explanation'] if teacher_model is None else teacher_model.predict(sample)[0]
-			student_prediction_intervene, _ = student_model.predict(sample, teacher_expl, True)  # get student prediction with teacher intervention
+			student_prediction_intervene, _ = student_model.predict(sample, expl=teacher_expl, intervene=True)  # get student prediction with teacher intervention
 			
 			if student_prediction_intervene == sample['answer'] and student_prediction_no_intervene != student_prediction_intervene:  # add sample if the intervention made student right
 				teacher_samples.append(sample)
@@ -265,8 +265,8 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 				print('Getting mental models samples')
 				mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
 				print('Creating Teacher Mental Model')
-				mental_model = TeacherInteractiveMentalModel(teacher_model_path, mm_samples, teacher_gen_model, teacher_tokenizer, teacher_expl_type, task, max_tokens, num_beams, use_explanations,
-															 intervention_utility, mental_model_type, None, max_student_context)
+				mental_model = TeacherInteractiveMentalModel(teacher_model_path, mm_samples, teacher_gen_model, teacher_tokenizer, teacher_samples, teacher_expl_type, task, max_tokens,
+															 num_beams, use_explanations, intervention_utility, mental_model_type, None, max_student_context)
 			
 			else:
 				mental_model = None
@@ -287,9 +287,9 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 	assert n_budgets > 0, "There must be at least one budget value in list."
 	
 	max_intervention_samples = [int(budget * n_samples) for budget in budgets]
-	intervention_idx_budget = [[]] * n_budgets
-	n_interventions = [0] * n_budgets
-	answers_budget = [[]] * n_budgets
+	intervention_idx_budget = [[] for _ in range(n_budgets)]
+	n_interventions = [0 for _ in range(n_budgets)]
+	answers_budget = [[] for _ in range(n_budgets)]
 	
 	print('Max interventions: ', max_intervention_samples)
 	
@@ -297,21 +297,19 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 
 		for test_idx, test_sample in tqdm(test_samples.iterrows(), desc='Test Samples', total=test_samples.shape[0]):
 			
-			print('Interventions for budget %f: ' % budgets[i], n_interventions[i])
-			
 			if n_interventions[i] >= max_intervention_samples[i]:
 				prediction_student, student_explanation = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
 			
 			else:
 				intervene_scores = teacher.intervention_utility(test_sample.to_dict(), student, use_answers)
+				print('Sample %d intervention scores: ' % test_idx, intervene_scores, intervene_scores[1] - intervene_scores[0])
 
 				if teacher.mm_type.find('both'):
 					intervene_utility = intervene_scores[1] - intervene_scores[0]
 				else:
 					intervene_utility = intervene_scores
 				
-				print('Intervention utility for sample %d: %f' % (int(test_idx), intervene_utility))
-				
+				# print('Intervention utility for sample %d: %f' % (int(test_idx), intervene_utility))
 				if intervene_utility >= intervene_thresh:
 					_, teacher_explanation = teacher.predict(sample=test_sample.to_dict())
 					prediction_student, student_explanation = student.predict(sample=test_sample.to_dict(), expl=teacher_explanation, intervene=True, debug=debug)
@@ -325,10 +323,10 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 			next_context = test_sample.to_dict()
 			next_context['explanation'] = student_explanation
 			next_context['prediction'] = prediction_student
-			teacher.update_student_context(next_context)
+			# teacher.update_student_context(next_context)
 			if i < 1:
 				correct_answers.append(test_sample['answer'])
-
+		
 		teacher.reset_student_context()
 		
 	return answers_budget, correct_answers, intervention_idx_budget
@@ -365,7 +363,7 @@ def main( ):
 	parser.add_argument('--mm-type', dest='mm_type', default='mm_both', type=str, help='Mental model intervention strategy')
 	parser.add_argument('--intervene-behaviour', dest='intervene_behaviour', default='teacher', type=str, help='Teacher intervention behaviour')
 	parser.add_argument('--intervention-utility', dest='intervention_utility', default='mm_both', type=str, help='Mode to determine intervention utility')
-	parser.add_argument('--teacher-explanation-type', dest='teacher_expl_type', default='blind_teacher_CoT', type=str, help='Teacher model explanation type')
+	parser.add_argument('--teacher-explanation-type', dest='teacher_expl_type', default='blind_teacher_cot', type=str, help='Teacher model explanation type')
 	parser.add_argument('--student-explanation-type', dest='student_expl_type', default='cot', type=str, help='Student model explanation type')
 	parser.add_argument('--intervention-threshold', dest='intervention_threshold', default=0.5, type=float,
 						help='Threshold for intervention utility, above which the mental model gives an explanation')
@@ -390,23 +388,26 @@ def main( ):
 	train_samples = task_dataset.get_train_samples()
 	print('Number of test samples = %d' % test_samples.shape[0])
 	print('Number of train samples = %d' % train_samples.shape[0])
+	print('Teacher model: %s' % args.teacher_model)
+	print('Student model: %s' % args.student_model)
 	
-	budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+	# budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+	budgets = [0.6]
 	student_model, teacher_model, mental_model = None, None, None
 	results_file = open(args.results_path, "w", encoding="utf-8-sig")
 	
 	for seed in [41, 42, 43]:
 		
 		print('Starting trials for seed: %d' % seed)
-		rng_gen = default_rng(seed)
 		
 		print('Loading models')
 		if not student_model:
-			student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
+			student_model, teacher_model, mental_model = load_models(seed, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
 																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
 																	 args.intervention_utility, args.max_new_tokens, args.max_student_samples, args.n_beams, args.cache_dir)
 		
 		else:
+			rng_gen = default_rng(seed)
 			train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)
 			student_samples = [train_samples.iloc[idx].to_dict() for idx in train_idxs]
 			student_model.set_samples(student_samples)
@@ -422,7 +423,8 @@ def main( ):
 		print('Done')
 		
 		print('Getting student performances with interactive teacher')
-		predictions_per_budget, labels, interventions = get_student_performance_per_budget(budgets, test_samples, student_model, mental_model, args.use_gold_label, args.debug, args.intervention_threshold)
+		predictions_per_budget, labels, interventions = get_student_performance_per_budget(budgets, test_samples, student_model, mental_model, args.use_gold_label, args.debug,
+																						   args.intervention_threshold)
 		
 		print('Interventions per budget:')
 		for i in range(len(budgets)):

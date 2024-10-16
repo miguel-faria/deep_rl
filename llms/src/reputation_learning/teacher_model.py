@@ -6,6 +6,7 @@ from torch.nn.functional import softmax
 from typing import Dict, List, Tuple, Union
 from reputation_learning.model import Model, UnidentifiedTaskError, UnidentifiedExplanationError
 from transformers import PreTrainedModel, PreTrainedTokenizer
+from tqdm import tqdm
 
 
 class TeacherModel(Model):
@@ -15,8 +16,9 @@ class TeacherModel(Model):
 		
 		super().__init__(model_name, samples, gen_model, tokenizer, expl_type, task, max_tokens, num_beams, use_explanations)
 	
-	def get_context(self, sample: Dict, explanation: Union[List, str] = None) -> str:
-		ic_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
+	def get_context(self, sample: Dict, explanation: Union[List, str] = None, ic_samples: List[Dict] = None) -> str:
+		if ic_samples is None:
+			ic_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
 		if not self._use_explanations:
 			return self.no_explanation_context(sample, ic_samples)
 		else:
@@ -110,12 +112,12 @@ class TeacherModel(Model):
 		
 		return class_scores
 	
-	def predict(self, sample: Dict, debug: bool = False) -> Tuple[str, str]:
+	def predict(self, sample: Dict, ic_samples: List[Dict] = None, debug: bool = False) -> Tuple[str, str]:
 		if self._explanation_type.find("human") != -1:
 			return str(sample["answer"]), str(sample["explanation"])
 		
 		else:
-			context = self.get_context(sample, '')
+			context = self.get_context(sample, explanation='', ic_samples=ic_samples)
 			tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 			generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 			output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
@@ -181,8 +183,9 @@ class TeacherModel(Model):
 	def predict_batch(self, samples: DataFrame, debug: bool = False) -> Tuple[List, List]:
 		predictions = []
 		explanations = []
-		for test_sample in samples:
-			prediction, explanation = self.predict(sample=test_sample, debug=debug)
+		
+		for test_index, test_sample in tqdm(samples.iterrows(), desc='Teacher Prediction Batch', total=samples.shape[0]):
+			prediction, explanation = self.predict(sample=test_sample.to_dict(), debug=debug)
 			predictions.append(prediction)
 			explanations.append(explanation)
 		

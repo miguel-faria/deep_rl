@@ -5,6 +5,7 @@ from torch.nn.functional import softmax
 from typing import Dict, List, Union, Tuple
 from reputation_learning.model import Model, UnidentifiedExplanationError, UnidentifiedTaskError
 from pandas import DataFrame
+from tqdm import tqdm
 
 
 class StudentModel(Model):
@@ -35,7 +36,7 @@ class StudentModel(Model):
 		
 		return context
 	
-	def get_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False):
+	def get_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, ic_samples: List[Dict] = None):
 		if not self._use_explanations:
 			return self.no_explanation_context(sample, self._ic_samples)
 		else:
@@ -158,8 +159,8 @@ class StudentModel(Model):
 		
 		return class_scores
 	
-	def predict(self, sample: Dict, expl: Union[List, str] = None, intervene: bool = False, debug: bool = False):
-		context = self.get_context(sample=sample, explanation=expl, intervene=intervene)
+	def predict(self, sample: Dict, ic_samples: List[Dict] = None, debug: bool = False, expl: Union[List, str] = None, intervene: bool = False):
+		context = self.get_context(sample=sample, explanation=expl, intervene=intervene, ic_samples=ic_samples)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
 		output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
@@ -185,9 +186,11 @@ class StudentModel(Model):
 				print('Student Explanation = %s' % explanation)
 		else:
 			explanation = output[:output.rfind(".") + 1] if self._task != "gsm8k" else output
-			if debug:
-				print('Student Explanation = %s' % explanation)
 			prediction = output.split(" ")[-1]
+			if debug:
+				print('Student Prediction = %s' % prediction)
+				print('Student Explanation = %s' % explanation)
+			
 			if self._task == "ec_qa":
 				if prediction not in ["1", "2", "3", "4", "5"]:
 					for i, choice in enumerate(sample["options"]):
@@ -205,7 +208,7 @@ class StudentModel(Model):
 					output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
 					output = output[len(context):] if context in output else output
 					output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
-					prediction = output.split(" ")[0]
+					prediction = output.split(" ")[-1]
 			
 			elif self._task == "gsm8k":
 				prediction = re.sub(r"[^0-9.]", "", prediction)
@@ -220,12 +223,12 @@ class StudentModel(Model):
 		
 		return prediction, explanation
 	
-	def predict_batch(self, samples: DataFrame, intervention_indexes_per_budget: List[List[int]], teacher: Model, debug: bool = False) -> Tuple[List, List, List]:
+	def predict_batch(self, samples: DataFrame, intervention_indexes_per_budget: List[List[int]] = None, teacher: Model = None, debug: bool = False) -> Tuple[List, List, List]:
 		labels = []
 		predictions_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]
 		explanations_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]
 		
-		for test_index, test_sample in samples.iterrows():
+		for test_index, test_sample in tqdm(samples.iterrows(), desc='Student Prediction Batch', total=samples.shape[0]):
 			for i, intervention_indexes in enumerate(intervention_indexes_per_budget):
 				if test_index in intervention_indexes:
 					_, explanation = teacher.predict(sample=test_sample.to_dict())

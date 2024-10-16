@@ -7,7 +7,7 @@ from reputation_learning.model import UnidentifiedTaskError
 
 class TeacherStaticMentalModel(TeacherMentalModel):
 	
-	def get_student_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, use_answers: bool = False) -> str:
+	def get_student_context(self, sample: Dict, explanation: Union[List, str] = None, intervene: bool = False, use_answers: bool = False, debug: bool = False) -> str:
 		
 		context = "Simulate an AI model's answer for the given question.\n\n"
 		
@@ -15,8 +15,9 @@ class TeacherStaticMentalModel(TeacherMentalModel):
 				(self.explanation_type.find('mental') != -1 and self.explanation_type.find('model') != -1)):
 			if intervene:
 				intervention_samples = self._ic_samples[1] if isinstance(self._ic_samples, tuple) else self._ic_samples
-				_, teacher_explanation = self.predict(sample)
-				print('Teacher explanation = %s' % teacher_explanation)
+				_, teacher_explanation = self.predict(sample, ic_samples=self.teacher_samples)
+				if debug:
+					print('Teacher explanation = %s' % teacher_explanation)
 				if self._task == "strategy_qa":
 					if not use_answers:
 						context += "\n\n".join(

@@ -16,12 +16,17 @@ class UnidentifiedUtilityMetricError(Exception):
 class TeacherMentalModel(TeacherModel):
 	
 	def __init__(self, model_name: Union[str, List[str]], intervention_samples: Union[List[Dict], Tuple] = None, gen_model: Union[PreTrainedModel, List[PreTrainedModel]] = None,
-	             tokenizer: Union[PreTrainedTokenizer, List[PreTrainedTokenizer]] = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
-	             use_explanations: bool = True, utility_type: str = '', mm_type: str = 'mm_both'):
+	             tokenizer: Union[PreTrainedTokenizer, List[PreTrainedTokenizer]] = None, teacher_samples: List[Dict] = None, expl_type: str = '', task: str = '', max_tokens: int = 10,
+				 num_beams: int = 1, use_explanations: bool = True, utility_type: str = '', mm_type: str = 'mm_both'):
 		
 		super().__init__(model_name, intervention_samples, gen_model, tokenizer, expl_type, task, max_tokens, num_beams, use_explanations)
+		self._teacher_samples = teacher_samples.copy()
 		self._mm_type = mm_type
 		self._utility_type = utility_type
+	
+	@property
+	def teacher_samples(self) -> List[Dict]:
+		return self._teacher_samples
 	
 	@property
 	def mm_type(self) -> str:
@@ -50,7 +55,7 @@ class TeacherMentalModel(TeacherModel):
 			yes_id, no_id = self.tokenizer.encode("yes")[idx], self.tokenizer.encode("no")[idx]
 			yes_score, no_score = scores[0][yes_id].item(), scores[0][no_id].item()
 			option_scores = [yes_score, no_score]
-			output = output.split(" ")[-1]
+			# output = output.split(" ")[-1]
 
 		elif self._task == "ec_qa":
 			option1_id, option2_id, option3_id, option4_id, option5_id = (self.tokenizer.encode("1")[idx], self.tokenizer.encode("2")[idx],
@@ -103,8 +108,6 @@ class TeacherMentalModel(TeacherModel):
 			teacher_prediction, _ = self.predict(sample)
 			correct_answer = teacher_prediction
 
-		print('Mental model: ', self._mm_type)
-
 		if self._mm_type.find('both') != -1:
 			no_inter_context = self.get_student_context(sample, None, False, use_answers)
 			no_inter_scores, no_inter_output = self.predict_prompt(no_inter_context, sample)
@@ -113,8 +116,13 @@ class TeacherMentalModel(TeacherModel):
 
 			inter_context = self.get_student_context(sample, None, True, use_answers)
 			inter_scores, inter_output = self.predict_prompt(inter_context, sample)
-
+			
+			# print('No intervention context: ', no_inter_context, '\n')
+			# print('Intervention context: ', inter_context, '\n')
+			
 			# print('AI simulated answer with teacher intervention (Mental Model) = %s' % inter_output)
+			# print('No intervention scores: ', no_inter_scores)
+			# print('Intervention scores: ', inter_scores)
 
 			if self._task == "strategy_qa":
 				if correct_answer == "yes":
@@ -174,8 +182,6 @@ class TeacherMentalModel(TeacherModel):
 				raise UnidentifiedTaskError('Task %s not defined' % self._task)
 
 	def intervention_utility(self, sample: Dict, student: StudentModel, use_answers: bool) -> Union[float, Tuple]:
-
-		print('Utility type: ', self._utility_type)
 
 		if self._utility_type.find('student') != -1 and self._utility_type.find('confidence') != -1:
 			if self._utility_type.find('intervention') != -1:

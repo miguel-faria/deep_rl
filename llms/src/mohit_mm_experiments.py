@@ -15,6 +15,8 @@ from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from typing import Tuple, List, Optional, Dict
 from numpy.random import default_rng, Generator
+from tqdm import tqdm
+
 
 RNG_SEED = 25092024
 
@@ -34,10 +36,10 @@ def get_teacher_model_samples(rng_gen: Generator, train_data: pd.DataFrame, stud
 			
 			sample = shuffle_train.iloc[idx].to_dict()
 			
-			student_prediction_no_intervene, _ = student_model.predict(sample, '', False)  # get student prediction without teacher intervention
+			student_prediction_no_intervene, _ = student_model.predict(sample, expl='', intervene=False)  # get student prediction without teacher intervention
 			
 			teacher_expl = sample['explanation'] if teacher_model is None else teacher_model.predict(sample)[0]
-			student_prediction_intervene, _ = student_model.predict(sample, teacher_expl, True)  # get student prediction with teacher intervention
+			student_prediction_intervene, _ = student_model.predict(sample, expl=teacher_expl, intervene=True)  # get student prediction with teacher intervention
 			
 			if student_prediction_intervene == sample['answer'] and student_prediction_no_intervene != student_prediction_intervene:  # add sample if the intervention made student right
 				teacher_samples.append(sample)
@@ -263,8 +265,8 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 				print('Getting mental models samples')
 				mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
 				print('Creating Teacher Mental Model')
-				mental_model = TeacherStaticMentalModel(teacher_model_path, mm_samples, teacher_gen_model, teacher_tokenizer, teacher_expl_type, task, max_tokens, num_beams, use_explanations,
-														intervention_utility, mental_model_type)
+				mental_model = TeacherStaticMentalModel(teacher_model_path, mm_samples, teacher_gen_model, teacher_tokenizer, teacher_samples, teacher_expl_type, task, max_tokens,
+														num_beams, use_explanations, intervention_utility, mental_model_type)
 			
 			else:
 				mental_model = None
@@ -299,8 +301,9 @@ def get_intervention_idx_budget(student_model: StudentModel, mental_model: Teach
 		
 		else:
 			sample_confidence_pairs = []
-			for idx, sample in test_samples.iterrows():
+			for idx, sample in tqdm(test_samples.iterrows(), desc='Test Samples', total=test_samples.shape[0]):
 				confidence_scores = mental_model.intervention_utility(sample.to_dict(), student_model, use_answers)
+				print(idx, confidence_scores, confidence_scores[1] - confidence_scores[0])
 				sample_confidence_pairs.append((idx, confidence_scores))
 			
 			if intervention_utility.find('student') != -1 and intervention_utility.find('confidence') != -1:

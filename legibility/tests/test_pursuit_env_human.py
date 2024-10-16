@@ -30,7 +30,7 @@ def main():
 		preys += [(prey_ids[idx], 0)]
 	
 	# env = PursuitEnv(hunters, preys, field_size, hunter_sight, n_catch, max_steps)
-	env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids[0], n_catch, max_steps, use_layer_obs=True, n_spawn_preys=n_prey_spawn)
+	env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids[0], n_catch, max_steps, use_layer_obs=True, agent_centered=True)
 	env.seed(RNG_SEED)
 	n_hunters = len(hunters)
 	n_preys = len(preys)

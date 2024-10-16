@@ -40,7 +40,7 @@ def main():
 		preys += [(prey_ids[idx], 1)]
 	
 	# env = PursuitEnv(hunters, preys, field_size, hunter_sight, n_catch, max_steps)
-	env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids, n_catch, max_steps, use_layer_obs=True)
+	env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids[0], n_catch, max_steps, use_layer_obs=True, agent_centered=True)
 	env.seed(RNG_SEED)
 	free_pos = [(row, col) for row in range(field_size[0]) for col in range(field_size[1])]
 	init_pos_hunter = {}

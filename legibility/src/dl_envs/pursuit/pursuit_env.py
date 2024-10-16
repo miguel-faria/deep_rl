@@ -7,6 +7,7 @@ from gymnasium import Env
 from typing import Tuple, List, Dict, Any, TypeVar, Union, Optional
 from enum import IntEnum, Enum
 from collections import defaultdict, namedtuple
+from itertools import product
 from gymnasium.utils import seeding
 from gymnasium.spaces import Space, Box, MultiBinary, MultiDiscrete
 from dl_envs.pursuit.agents.target_agent import TargetAgent
@@ -342,14 +343,19 @@ class PursuitEnv(Env):
 	def spawn_hunters(self, init_pos: Dict[str, Tuple[int, int]] = None):
 		
 		if init_pos is None:
+			valid_pos = list(product(range(self._field_size[0]), range(self._field_size[1])))
+			for pos in np.transpose(np.nonzero(self._field)):
+				valid_pos.remove(tuple(pos))
+				
 			for hunter in self._hunter_ids:
-				hunter_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-				while self._field[hunter_pos[0], hunter_pos[1]] != 0:
-					hunter_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
+				hunter_pos = tuple(self._np_random.choice(valid_pos))
+				while self._field[hunter_pos[0], hunter_pos[1]] != 0 or any([self._field[pos[0], pos[1]] != 0 for pos in self.adj_pos(hunter_pos)]):
+					valid_pos.remove(hunter_pos)
+					hunter_pos = tuple(self._np_random.choice(valid_pos))
 				self._agents[hunter].pos = hunter_pos
 				self._agents[hunter].alive = True
-				
 				self._field[hunter_pos[0], hunter_pos[1]] = AgentType.HUNTER
+				valid_pos.remove(hunter_pos)
 		
 		else:
 			for hunter in self._hunter_ids:
@@ -362,13 +368,19 @@ class PursuitEnv(Env):
 		
 		if init_pos is None:
 			self._prey_alive_ids = self._prey_ids.copy()
+			valid_pos = list(product(range(self._field_size[0]), range(self._field_size[1])))
+			for pos in np.transpose(np.nonzero(self._field)):
+				valid_pos.remove(tuple(pos))
+			
 			for prey in self._prey_ids:
-				agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-				while self._field[agent_pos[0], agent_pos[1]] != 0:
-					agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
+				agent_pos = tuple(self._np_random.choice(valid_pos))
+				while self._field[agent_pos[0], agent_pos[1]] != 0 or any([self._field[pos[0], pos[1]] != 0 for pos in self.adj_pos(agent_pos)]):
+					valid_pos.remove(valid_pos)
+					agent_pos = tuple(self._np_random.choice(valid_pos))
 				self._agents[prey].pos = agent_pos
 				self._agents[prey].alive = True
 				self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
+				valid_pos.remove(valid_pos)
 
 		else:
 			for prey in self._prey_ids:
@@ -763,13 +775,19 @@ class TargetPursuitEnv(PursuitEnv):
 		if init_pos is None:
 			prey_ids = self.prey_ids.copy()
 			self._prey_alive_ids = prey_ids
+			valid_pos = list(product(range(self._field_size[0]), range(self._field_size[1])))
+			for pos in np.transpose(np.nonzero(self._field)):
+				valid_pos.remove(tuple(pos))
+				
 			for prey in self._prey_ids:
-				agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
-				while self._field[agent_pos[0], agent_pos[1]] != 0:
-					agent_pos = (self._np_random.choice(self._field_size[0]), self._np_random.choice(self._field_size[1]))
+				agent_pos = tuple(self._np_random.choice(valid_pos))
+				while self._field[agent_pos[0], agent_pos[1]] != 0 or any([self._field[pos[0], pos[1]] != 0 for pos in self.adj_pos(agent_pos)]):
+					valid_pos.remove(agent_pos)
+					agent_pos = tuple(self._np_random.choice(valid_pos))
 				self._agents[prey].pos = agent_pos
 				self._agents[prey].alive = True
 				self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
+				valid_pos.remove(agent_pos)
 
 		else:
 			assert self._target_id in init_pos.keys(), 'When giving starting positions for preys, target prey %s must be among them' % self._target_id

@@ -119,7 +119,7 @@ for i in range(limits[0], limits[1] + 1):
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d "
 			"--hunter-ids %s --prey-ids %s --hunter-classes %d --prey-type %s --field-size %d --n-hunters-catch %d --steps-episode %d --catch-reward %f"
 			% (n_hunters, ARQUITECTURE, buffer_size, GAMMA,                                                                                  # DQN parameters
-			   n_iterations, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, startt_eps, final_eps, eps_decay, eps_type, warmup,    # Train parameters
+			   n_iterations, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, start_eps, final_eps, eps_decay, eps_type, warmup,    # Train parameters
 			   ' '.join(HUNTER_IDS), ' '.join(PREY_IDS), HUNTER_CLASSES, prey_type, field_len, n_required_hunters, max_steps, catch_reward))  # Environment parameters
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") + (" --vdn" if USE_VDN else "") +

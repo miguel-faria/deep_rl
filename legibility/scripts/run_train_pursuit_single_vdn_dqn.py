@@ -91,6 +91,7 @@ catch_reward = input_args.catch_reward
 data_dir = input_args.data_dir
 eps_decay = input_args.eps_decay
 eps_type = input_args.eps_type
+final_eps = input_args.final_eps
 field_len = input_args.field_len
 n_iterations = input_args.n_iterations
 limits = input_args.limits
@@ -101,6 +102,7 @@ n_hunters = input_args.n_hunters
 n_required_hunters = input_args.n_required_hunters
 online_lr = input_args.online_lr
 prey_type = input_args.prey_type
+start_eps = input_args.start_eps
 target_lr = input_args.target_lr
 tracker_logs = input_args.logs
 train_thresh = input_args.train_thresh
@@ -117,7 +119,7 @@ for i in range(limits[0], limits[1] + 1):
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d "
 			"--hunter-ids %s --prey-ids %s --hunter-classes %d --prey-type %s --field-size %d --n-hunters-catch %d --steps-episode %d --catch-reward %f"
 			% (n_hunters, ARQUITECTURE, buffer_size, GAMMA,                                                                                  # DQN parameters
-			   n_iterations, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, INIT_EPS, FINAL_EPS, eps_decay, eps_type, warmup,    # Train parameters
+			   n_iterations, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, startt_eps, final_eps, eps_decay, eps_type, warmup,    # Train parameters
 			   ' '.join(HUNTER_IDS), ' '.join(PREY_IDS), HUNTER_CLASSES, prey_type, field_len, n_required_hunters, max_steps, catch_reward))  # Environment parameters
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") + (" --vdn" if USE_VDN else "") +

@@ -363,7 +363,7 @@ def compute_accuracy(labels, predictions):
 
 def main( ):
 	parser = argparse.ArgumentParser(description='Machine teaching with Theory of Mind based mental models experiments from Mohit Bensal')
-	parser.add_argument('--data-dir', dest='data_dir', default='', type=str, help='Path to the directory with the datasets')
+	# Models arguments
 	parser.add_argument('--cache-dir', dest='cache_dir', default='', type=str, help='Path to the cache directory, where downladed models are stored')
 	parser.add_argument('--train-filename', dest='train_filename', default='', type=str, help='Filename of the training data')
 	parser.add_argument('--test-filename', dest='test_filename', default='', type=str, help='Filename of the testing data')
@@ -373,7 +373,13 @@ def main( ):
 						help='Local or hugging face path to use for the student model')
 	parser.add_argument('--teacher-model', dest='teacher_model', default='google/flan-t5-xl', type=str,
 						help='Local or hugging face path to use for the teacher model')
-	
+	parser.add_argument('--use-gold-label', dest='use_gold_label', action='store_true',
+						help='Flag denoting whether teacher uses the expected answers instead of its own')
+
+	# Execution arguments
+	parser.add_argument('--budgets', dest='budgets', default=None, type=float, nargs='+',
+	                    help='Interaction budgets to test the teaching. Default: [0, 0.2, 0.4, 0.6, 0.8, 1.0]')
+	parser.add_argument('--data-dir', dest='data_dir', default='', type=str, help='Path to the directory with the datasets')
 	parser.add_argument('--max-new-tokens', dest='max_new_tokens', default=100, type=int, help='Maximum number of new tokens when generating answers')
 	parser.add_argument('--n-beams', dest='n_beams', default=1, type=int, help='Number of beams to use in answer generation beam search')
 	parser.add_argument('--n-ic-samples', dest='n_ics', default=4, type=int, help='Number of in-context samples to use for context in the student answers')
@@ -385,9 +391,6 @@ def main( ):
 	parser.add_argument('--teacher-explanation-type', dest='teacher_expl_type', default='blind_teacher_CoT', type=str, help='Teacher model explanation type')
 	parser.add_argument('--student-explanation-type', dest='student_expl_type', default='cot', type=str, help='Student model explanation type')
 	parser.add_argument('--deceive', dest='deceive', action='store_true', help='Flag denoting whether teacher gives deceiving explanations')
-	
-	parser.add_argument('--use-gold-label', dest='use_gold_label', action='store_true',
-						help='Flag denoting whether teacher uses the expected answers instead of its own')
 	parser.add_argument('--results-path', dest='results_path', default='', type=str, help='Path to the results file')
 	
 	args = parser.parse_args()
@@ -406,7 +409,7 @@ def main( ):
 	print('Number of test samples = %d' % test_samples.shape[0])
 	print('Number of train samples = %d' % train_samples.shape[0])
 	
-	budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+	budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] if args.budgets is None else args.budgets
 	student_model, teacher_model, mental_model = None, None, None
 	results_file = open(args.results_path, "w", encoding="utf-8-sig")
 	

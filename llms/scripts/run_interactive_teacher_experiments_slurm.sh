@@ -7,13 +7,13 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
-#SBATCH --time=12:00:00
+#SBATCH --time=4:00:00
 #SBATCH --mem-per-cpu=4000
-#SBATCH --qos=gpu-medium
+#SBATCH --qos=gpu-short
 #SBATCH --output="job-%x-%j.out"
 
 date;hostname;pwd
-options=$(getopt -o d:,s:,t:,u: -l mm:,se:,te:,ss:,it: -- "$@")
+options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,ss:,it: -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
   data_dir="/mnt/data-artemis/miguelfaria/llms/"
@@ -23,6 +23,7 @@ else
 fi
 
 eval set -- "$options"
+budgets=()
 
 while [ $# -gt 0 ]
 do
@@ -31,6 +32,12 @@ do
     -s) student_model=${2}; shift ;;
     -t) teacher_model=${2}; shift ;;
     -u) utility=${2}; shift ;;
+    -b) shift
+      while [[ "$1" != "--" && "$1" != -* && "$#" -gt 0 ]]; do
+        budgets+=("$1")
+        shift
+      done
+      ;;
     --mm) mental_model=${2}; shift ;;
     --se) student_expl=${2}; shift ;;
     --te) teacher_expl=${2}; shift ;;
@@ -42,6 +49,10 @@ do
     esac
     shift
 done
+
+if [ ${#budgets[@]} -eq 0 ]; then
+  budgets=("0" "0.2" "0.4" "0.8" "1.0")
+fi
 
 if [ -z "$dataset" ]; then
   dataset="strategy_qa"
@@ -111,13 +122,15 @@ fi
 
 s_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$student_model")")
 t_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$teacher_model")")
-out_file=interactive_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset".out
-results_path="$data_dir"/results/interactive_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset".txt
+out_file=interactive_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset"_"$(date '+%Y-%m-%d_%H-%M-%S')".out
+results_path="$data_dir"/results/interactive_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset"_"$(date '+%Y-%m-%d_%H-%M-%S')".txt
 
 python src/interactive_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
---val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4 \
---n-ic-samples 5 --mm-type "$mental_model" --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" \
---use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" > "$out_file"
+                                          --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" \
+                                          --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4  --n-ic-samples 5 --mm-type "$mental_model" \
+                                          --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" \
+                                          --use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" \
+                                          --budgets "${budgets[@]}" > "$out_file"
 
 source "$HOME"/miniconda3/bin/deactivate
 date

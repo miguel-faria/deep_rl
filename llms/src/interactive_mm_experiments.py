@@ -302,7 +302,7 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 			
 			else:
 				intervene_scores = teacher.intervention_utility(test_sample.to_dict(), student, use_answers)
-				print('Sample %d intervention scores: ' % test_idx, intervene_scores, intervene_scores[1] - intervene_scores[0])
+				# print('Sample %d intervention scores: ' % test_idx, intervene_scores, intervene_scores[1] - intervene_scores[0])
 
 				if teacher.mm_type.find('both'):
 					intervene_utility = intervene_scores[1] - intervene_scores[0]
@@ -343,36 +343,39 @@ def compute_accuracy(labels, predictions):
 
 def main( ):
 	parser = argparse.ArgumentParser(description='Machine teaching with Theory of Mind based mental models experiments from Mohit Bensal')
-	parser.add_argument('--data-dir', dest='data_dir', default='', type=str, help='Path to the directory with the datasets')
+	# Models arguments
 	parser.add_argument('--cache-dir', dest='cache_dir', default='', type=str, help='Path to the cache directory, where downladed models are stored')
-	parser.add_argument('--train-filename', dest='train_filename', default='', type=str, help='Filename of the training data')
-	parser.add_argument('--test-filename', dest='test_filename', default='', type=str, help='Filename of the testing data')
-	parser.add_argument('--val-filename', dest='val_filename', default='', type=str, help='Filename of the validation data')
-	parser.add_argument('--task', dest='task', default='strategy_qa', choices=['strategy_qa', 'ec_qa', 'gsm8k'], type=str, help='Dataset task to run')
 	parser.add_argument('--student-model', dest='student_model', default='google/flan-t5-large', type=str,
 						help='Local or hugging face path to use for the student model')
 	parser.add_argument('--teacher-model', dest='teacher_model', default='google/flan-t5-xl', type=str,
 						help='Local or hugging face path to use for the teacher model')
-	
-	parser.add_argument('--max-new-tokens', dest='max_new_tokens', default=100, type=int, help='Maximum number of new tokens when generating answers')
-	parser.add_argument('--n-beams', dest='n_beams', default=1, type=int, help='Number of beams to use in answer generation beam search')
-	parser.add_argument('--n-ic-samples', dest='n_ics', default=4, type=int, help='Number of in-context samples to use for context in the student answers')
-	parser.add_argument('--max-student-samples', dest='max_student_samples', default=5, type=int, help='Maximum number of students to sample for mental model context')
-	parser.add_argument('--use-explanations', dest='use_explanations', action='store_true',
-						help='Flag denoting whether student is given explanations to help understanding the problem')
-	parser.add_argument('--mm-type', dest='mm_type', default='mm_both', type=str, help='Mental model intervention strategy')
-	parser.add_argument('--intervene-behaviour', dest='intervene_behaviour', default='teacher', type=str, help='Teacher intervention behaviour')
-	parser.add_argument('--intervention-utility', dest='intervention_utility', default='mm_both', type=str, help='Mode to determine intervention utility')
-	parser.add_argument('--teacher-explanation-type', dest='teacher_expl_type', default='blind_teacher_cot', type=str, help='Teacher model explanation type')
-	parser.add_argument('--student-explanation-type', dest='student_expl_type', default='cot', type=str, help='Student model explanation type')
-	parser.add_argument('--intervention-threshold', dest='intervention_threshold', default=0.5, type=float,
-						help='Threshold for intervention utility, above which the mental model gives an explanation')
-	
+	parser.add_argument('--test-filename', dest='test_filename', default='', type=str, help='Filename of the testing data')
+	parser.add_argument('--train-filename', dest='train_filename', default='', type=str, help='Filename of the training data')
 	parser.add_argument('--use-gold-label', dest='use_gold_label', action='store_true',
 						help='Flag denoting whether teacher uses the expected answers instead of its own')
-	parser.add_argument('--results-path', dest='results_path', default='', type=str, help='Path to the results file')
+	parser.add_argument('--val-filename', dest='val_filename', default='', type=str, help='Filename of the validation data')
+
+	# Execution arguments
+	parser.add_argument('--budgets', dest='budgets', default=None, type=float, nargs='+',
+	                    help='Interaction budgets to test the teaching. Default: [0, 0.2, 0.4, 0.6, 0.8, 1.0]')
+	parser.add_argument('--data-dir', dest='data_dir', default='', type=str, help='Path to the directory with the datasets')
 	parser.add_argument('--debug', dest='debug', action='store_true', help='Flag that denotes the print of debug information')
-	
+	parser.add_argument('--intervene-behaviour', dest='intervene_behaviour', default='teacher', type=str, help='Teacher intervention behaviour')
+	parser.add_argument('--intervention-utility', dest='intervention_utility', default='mm_both', type=str, help='Mode to determine intervention utility')
+	parser.add_argument('--intervention-threshold', dest='intervention_threshold', default=0.5, type=float,
+						help='Threshold for intervention utility, above which the mental model gives an explanation')
+	parser.add_argument('--max-new-tokens', dest='max_new_tokens', default=100, type=int, help='Maximum number of new tokens when generating answers')
+	parser.add_argument('--max-student-samples', dest='max_student_samples', default=5, type=int, help='Maximum number of students to sample for mental model context')
+	parser.add_argument('--mm-type', dest='mm_type', default='mm_both', type=str, help='Mental model intervention strategy')
+	parser.add_argument('--n-beams', dest='n_beams', default=1, type=int, help='Number of beams to use in answer generation beam search')
+	parser.add_argument('--n-ic-samples', dest='n_ics', default=4, type=int, help='Number of in-context samples to use for context in the student answers')
+	parser.add_argument('--results-path', dest='results_path', default='', type=str, help='Path to the results file')
+	parser.add_argument('--student-explanation-type', dest='student_expl_type', default='cot', type=str, help='Student model explanation type')
+	parser.add_argument('--task', dest='task', default='strategy_qa', choices=['strategy_qa', 'ec_qa', 'gsm8k'], type=str, help='Dataset task to run')
+	parser.add_argument('--teacher-explanation-type', dest='teacher_expl_type', default='blind_teacher_cot', type=str, help='Teacher model explanation type')
+	parser.add_argument('--use-explanations', dest='use_explanations', action='store_true',
+						help='Flag denoting whether student is given explanations to help understanding the problem')
+
 	args = parser.parse_args()
 	
 	if args.task == "strategy_qa":
@@ -388,11 +391,15 @@ def main( ):
 	train_samples = task_dataset.get_train_samples()
 	print('Number of test samples = %d' % test_samples.shape[0])
 	print('Number of train samples = %d' % train_samples.shape[0])
-	print('Teacher model: %s' % args.teacher_model)
 	print('Student model: %s' % args.student_model)
+	print('Student explanation type: %s' % args.student_expl_type)
+	print('Teacher model: %s' % args.teacher_model)
+	print('Teacher mental model: %s' % args.mm_type)
+	print('Teacher explanation type: %s' % args.teacher_expl_type)
+	print('Teacher minimum intervention threshold: %f' % args.intervention_threshold)
 	
-	# budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
-	budgets = [0.6]
+	budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] if args.budgets is None else args.budgets
+	# budgets = [0.6]
 	student_model, teacher_model, mental_model = None, None, None
 	results_file = open(args.results_path, "w", encoding="utf-8-sig")
 	
@@ -444,7 +451,7 @@ def main( ):
 				accuracy = compute_accuracy(labels, predictions_per_budget[budget_index])
 				print("Accuracy for budget %f = %f" % (budget, accuracy))
 				results_file.write("Seed = %d\n" % seed)
-				results_file.write("Accuracy for budget %f = %f" % (budget, accuracy))
+				results_file.write("Accuracy for budget %f = %f\n" % (budget, accuracy))
 				results_file.flush()
 				os.fsync(results_file.fileno())
 

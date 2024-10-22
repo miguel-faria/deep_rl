@@ -51,7 +51,7 @@ if [ "$cuda_version" = 12 ]; then
     jax_version="jax[cuda""$cuda_version""_pip]"
   fi
 else
-  jax_version="jax[cuda""$cuda_version""_pip]"
+  jax_version="jax[cuda""$cuda_version""_pip]==0.4.10"
 fi
 
 if [ "$env_type" = "conda" ]; then
@@ -74,7 +74,11 @@ if [ "$env_type" = "conda" ]; then
   source "$conda_home"/etc/profile.d/conda.sh
   mamba activate "$env_name"
 
-  mamba install -y -c conda-forge numpy scipy matplotlib pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv
+  if [ "$cuda_version" = 11 ]; then
+    mamba install -y -c conda-forge numpy==1.26.4 ml_dtypes==0.1.0 scipy matplotlib pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv
+  else
+    mamba install -y -c conda-forge numpy scipy matplotlib pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv
+  fi
   mamba install -y -c conda-forge stable-baselines3 tensorboard wandb gymnasium pygame
   mamba install -y -c conda-forge optax flax
   python3 -m pip install --upgrade "$jax_version" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
@@ -134,7 +138,11 @@ else
   source "$HOME/python_envs/$env_name/bin/activate"
 
   python3 -m pip install --upgrade pip
-  python3 -m pip install numpy scipy matplotlib ipython jupyter pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv-python gym pyglet
+  if [ "$cuda_version" = 11 ]; then
+    python3 -m pip install numpy==1.26.4 ml_dtypes==0.1.0 scipy matplotlib ipython jupyter pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv-python gym pyglet==1.5.29
+  else
+    python3 -m pip install numpy scipy matplotlib ipython jupyter pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv-python gym pyglet==1.5.29
+  fi
   python3 -m pip install --upgrade "jax[cuda""$cuda_version""_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
   python3 -m pip install optax flax
   python3 -m pip install stable-baselines3 tensorboard wandb gymnasium pygame

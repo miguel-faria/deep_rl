@@ -24,8 +24,11 @@ fi
 
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  source "$HOME"/miniconda3/bin/activate deep_rl_env
+  source "$HOME"/miniconda3/bin/activate drl_env
   python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 10 --hunters 2 --catch-reward 4 --prey-type idle --batch-size 64 --buffer-size 2500 --iterations 4000 --episode-steps 800 --warmup 800 --limits 1 4 --eps-type log --eps-decay 0.15 --use-lower-curriculum --logs-dir /mnt/scratch-artemis/miguelfaria/logs/pursuit --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
+elif [ "$HOSTNAME" = "hera" ] ; then
+  source "$HOME"/miniconda3/bin/activate drl_env
+  python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 20 --hunters 2 --catch-reward 5 --prey-type idle --batch-size 64 --buffer-size 2500 --iterations 4000 --episode-steps 800 --warmup 800 --limits 1 4 --eps-type log --eps-decay 0.175 --use-lower-curriculum --logs-dir /mnt/data-hera1/miguelfaria/logs/pursuit --models-dir /mnt/data-hera1/miguelfaria/deep_rl/models --data-dir /mnt/data-hera1/miguelfaria/deep_rl/data
 else
   source "$HOME"/miniconda3/bin/activate drl_env
   python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 20 --hunters 2 --catch-reward 5 --prey-type idle --batch-size 64 --buffer-size 2500 --iterations 4000 --episode-steps 800 --limits 1 1 --eps-type log --eps-decay 0.175 --use-lower-curriculum

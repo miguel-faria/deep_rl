@@ -12,7 +12,7 @@ echo "\n" >> "$HOME"/.bashrc
 # Download and install miniconda
 mkdir -p "$conda_home"
 wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O "$conda_home"/miniconda.sh
-bash ~/miniconda3/miniconda.sh -b -u -p "$conda_home"
+bash "$conda_home"/miniconda.sh -b -u -p "$conda_home"
 rm -rf "$conda_home"/miniconda.sh
 source ~/.bashrc
 

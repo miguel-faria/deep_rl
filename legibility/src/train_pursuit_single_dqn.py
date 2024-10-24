@@ -146,7 +146,7 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: TargetPursuitEnv, num_it
 			if len(rewards) == 1:
 				rewards = np.array([rewards] * dqn_model.num_agents)
 			
-			if terminated or ('caught_target' in infos.keys() and infos['caught_target']):
+			if terminated or ('caught_target' in infos.keys() and infos['caught_target'] == env.target):
 				finished = np.ones(dqn_model.num_agents, dtype=np.int32)
 			else:
 				finished = np.zeros(dqn_model.num_agents, dtype=np.int32)

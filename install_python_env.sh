@@ -75,12 +75,15 @@ if [ "$env_type" = "conda" ]; then
   mamba activate "$env_name"
 
   if [ "$cuda_version" = 11 ]; then
-    mamba install -y -c conda-forge numpy==1.26.4 ml_dtypes==0.1.0 scipy matplotlib pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv
+    mamba install -y -c conda-forge numpy==1.24.3 ml_dtypes==0.1.0 scipy matplotlib pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv
+    mamba install -y -c conda-forge stable-baselines3 tensorboard wandb gymnasium pygame
+    mamba install -y -c conda-forge optax==0.1.5 flax=0.6.10
   else
     mamba install -y -c conda-forge numpy scipy matplotlib pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv
+    mamba install -y -c conda-forge stable-baselines3 tensorboard wandb gymnasium pygame
+    mamba install -y -c conda-forge optax flax
   fi
-  mamba install -y -c conda-forge stable-baselines3 tensorboard wandb gymnasium pygame
-  mamba install -y -c conda-forge optax flax
+
   python3 -m pip install --upgrade "$jax_version" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
   python3 -m pip install gym pyglet==1.5.29
   # pip3 install --upgrade nvidia-cudnn-cu11 nvidia-cufft-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvcc-cu11 nvidia-cuda-runtime-cu11

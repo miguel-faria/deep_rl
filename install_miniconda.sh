@@ -7,7 +7,7 @@ else
 fi
 
 echo "export CONDA_HOME=""$conda_home" >> "$HOME"/.bashrc
-echo "\n" >> "$HOME"/.bashrc
+echo "" >> "$HOME"/.bashrc
 
 # Download and install miniconda
 mkdir -p "$conda_home"

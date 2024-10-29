@@ -455,7 +455,8 @@ def main( ):
 		
 		print('Intervention utilities:')
 		for i in range(len(budgets)):
-			print('Budget %f: max = %f\tmin = %f' % (budgets[i], max(intervention_conf_budget[i]), min(intervention_conf_budget[i])))
+			if budgets[i] > 0:
+				print('Budget %f: max = %f\tmin = %f' % (budgets[i], max(intervention_conf_budget[i]), min(intervention_conf_budget[i])))
 		
 		print('Getting predictions for each budget level')
 		predictions_per_budget, _, labels = student_model.predict_batch(test_samples, intervention_idxs_per_budget, teacher_model)

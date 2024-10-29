@@ -23,6 +23,7 @@ fi
 #export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 #export PATH="/opt/cuda/bin:$PATH"
 
+#module load python cuda
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 source "$CONDA_HOME"/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then

@@ -78,16 +78,17 @@ if [ -z "$teacher_expl" ]; then
 fi
 
 if [ -n "${SLURM_JOB_ID:-}" ] ; then
-  script_path=$(dirname "$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}' | head -n 1)")
+  IFS=' '
+  read -ra newarr <<< "$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}')"
+  script_path=$(dirname "${newarr[0]}")
 else
   script_path="$( cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 ; pwd -P )"
 fi
 
+# module load python cuda
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
 source "$HOME"/miniconda3/bin/activate llm_env
-
-module load python cuda
 
 cd "$script_path" || exit
 cd .. || exit

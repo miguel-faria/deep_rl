@@ -11,6 +11,7 @@
 #SBATCH --mem=4G
 #SBATCH --qos=gpu-long
 #SBATCH --output="job-%x-%j.out"
+#SBATCH --partition=a6000
 date;hostname;pwd
 
 if [ -n "${SLURM_JOB_ID:-}" ] ; then

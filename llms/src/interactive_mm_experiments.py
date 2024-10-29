@@ -406,7 +406,6 @@ def main( ):
 	results_file = open(args.results_path, "w", encoding="utf-8-sig")
 	
 	for seed in [41, 42, 43]:
-	# for seed in [41]:
 		
 		print('Starting trials for seed: %d' % seed)
 		
@@ -436,12 +435,11 @@ def main( ):
 		predictions_per_budget, labels, interventions = get_student_performance_per_budget(budgets, test_samples, student_model, mental_model, args.use_gold_label, args.debug,
 																						   args.intervention_threshold)
 		
-		print(interventions[0])
 		print('Interventions per budget:')
 		for i in range(len(budgets)):
-			print('Intervened %d times in budget %f:' % (len(interventions[i][0]), budgets[i]))
-			print('Intervention idxs: ', print(interventions[i][0]))
-			print('Intervention utilities: ', print(interventions[i][1]))
+			print('Intervened %d times in budget %f.' % (len(interventions[i][0]), budgets[i]))
+			print('Intervention idxs: ', interventions[i][0])
+			print('Intervention utilities: ', interventions[i][1])
 		
 		print('Computing accuracies')
 		if not args.use_explanations:

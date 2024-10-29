@@ -17,6 +17,7 @@ from typing import Tuple, List, Optional, Dict
 from numpy.random import default_rng, Generator
 from tqdm import tqdm
 
+
 RNG_SEED = 25092024
 
 

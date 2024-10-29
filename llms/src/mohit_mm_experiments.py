@@ -278,8 +278,9 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 
 
 def get_intervention_idx_budget(student_model: StudentModel, mental_model: TeacherStaticMentalModel, rng_gen: Generator, budgets: List[float], test_samples: pd.DataFrame,
-								intervention_utility: str, use_explanation: bool, use_answers: bool, deceive: bool) -> List[List[int]]:
+								intervention_utility: str, use_explanation: bool, use_answers: bool, deceive: bool) -> Tuple:
 	intervention_idx_budget = []
+	intercention_conf_budget = []
 	n_test_samples = test_samples.shape[0]
 	
 	if use_explanation:
@@ -303,7 +304,6 @@ def get_intervention_idx_budget(student_model: StudentModel, mental_model: Teach
 			sample_confidence_pairs = []
 			for idx, sample in tqdm(test_samples.iterrows(), desc='Test Samples', total=test_samples.shape[0]):
 				confidence_scores = mental_model.intervention_utility(sample.to_dict(), student_model, use_answers)
-				print(idx, confidence_scores, confidence_scores[1] - confidence_scores[0])
 				sample_confidence_pairs.append((idx, confidence_scores))
 			
 			if intervention_utility.find('student') != -1 and intervention_utility.find('confidence') != -1:
@@ -315,14 +315,18 @@ def get_intervention_idx_budget(student_model: StudentModel, mental_model: Teach
 				for budget in budgets:
 					budget_count = int(budget * len(test_samples))
 					intervention_samples = [sample_confidence_pair[0] for sample_confidence_pair in sample_confidence_pairs][:budget_count]
+					intervention_confs = [sample_utility_correct_score[1] for sample_utility_correct_score in sample_confidence_pairs][:budget_count]
 					intervention_idx_budget.append(intervention_samples)
+					intercention_conf_budget.append(intervention_confs)
 			
 			elif intervention_utility.find('teacher') != -1 and intervention_utility.find('confidence') != -1:
 				sample_confidence_pairs = sorted(sample_confidence_pairs, key=lambda x: x[1], reverse=True)
 				for budget in budgets:
 					budget_count = int(budget * len(test_samples))
 					intervention_samples = [sample_confidence_pair[0] for sample_confidence_pair in sample_confidence_pairs][:budget_count]
+					intervention_confs = [sample_utility_correct_score[1] for sample_utility_correct_score in sample_confidence_pairs][:budget_count]
 					intervention_idx_budget.append(intervention_samples)
+					intercention_conf_budget.append(intervention_confs)
 			
 			elif (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1) or intervention_utility.find('mm') != -1:
 				if intervention_utility.find('both') != -1:
@@ -330,26 +334,32 @@ def get_intervention_idx_budget(student_model: StudentModel, mental_model: Teach
 					for budget in budgets:
 						budget_count = int(budget * len(test_samples))
 						intervention_samples = [sample_utility_correct_score[0] for sample_utility_correct_score in sample_utility_correct_scores][:budget_count]
+						intervention_confs = [sample_utility_correct_score[1] for sample_utility_correct_score in sample_utility_correct_scores][:budget_count]
 						intervention_idx_budget.append(intervention_samples)
+						intercention_conf_budget.append(intervention_confs)
 				
 				elif intervention_utility.find('no') != -1:
 					sample_no_inter_correct_scores = sorted(sample_confidence_pairs, key=lambda x: x[1])
 					for budget in budgets:
 						budget_count = int(budget * len(test_samples))
 						intervention_samples = [sample_no_inter_correct_score[0] for sample_no_inter_correct_score in sample_no_inter_correct_scores][:budget_count]
+						intervention_confs = [sample_utility_correct_score[1] for sample_utility_correct_score in sample_no_inter_correct_scores][:budget_count]
 						intervention_idx_budget.append(intervention_samples)
+						intercention_conf_budget.append(intervention_confs)
 				
 				else:
 					sample_inter_correct_scores = sorted(sample_confidence_pairs, key=lambda x: x[1], reverse=True)
 					for budget in budgets:
 						budget_count = int(budget * len(test_samples))
 						intervention_samples = [sample_inter_correct_score[0] for sample_inter_correct_score in sample_inter_correct_scores][:budget_count]
+						intervention_confs = [sample_utility_correct_score[1] for sample_utility_correct_score in sample_inter_correct_scores][:budget_count]
 						intervention_idx_budget.append(intervention_samples)
+						intercention_conf_budget.append(intervention_confs)
 			
 			else:
 				raise UnidentifiedUtilityMetricError('Utility metric %s not defined' % intervention_utility)
 	
-	return intervention_idx_budget
+	return intervention_idx_budget, intercention_conf_budget
 
 
 def compute_accuracy(labels, predictions):
@@ -440,8 +450,12 @@ def main( ):
 		print('Done')
 		
 		print('Getting samples for intervention')
-		intervention_idxs_per_budget = get_intervention_idx_budget(student_model, mental_model, rng_gen, budgets, test_samples, args.intervention_utility, args.use_explanations,
-																   args.use_gold_label, args.deceive)
+		intervention_idxs_per_budget, intervention_conf_budget = get_intervention_idx_budget(student_model, mental_model, rng_gen, budgets, test_samples, args.intervention_utility,
+																							 args.use_explanations, args.use_gold_label, args.deceive)
+		
+		print('Intervention utilities:')
+		for i in range(len(budgets)):
+			print('Budget %f: max = %f\tmin = %f' % (budgets[i], max(intervention_conf_budget[i]), min(intervention_conf_budget[i])))
 		
 		print('Getting predictions for each budget level')
 		predictions_per_budget, _, labels = student_model.predict_batch(test_samples, intervention_idxs_per_budget, teacher_model)

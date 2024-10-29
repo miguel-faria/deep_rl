@@ -1,10 +1,11 @@
 #!/bin/bash
 
-if [ $# -eq 0]; then
-  conda_home="$HOME"/miniconda3/
+if [ $# -eq 0 ]; then
+  conda_home="$HOME"/miniconda3
 else
   conda_home=$1
 fi
+
 
 echo "export CONDA_HOME=""$conda_home" >> "$HOME"/.bashrc
 echo "" >> "$HOME"/.bashrc

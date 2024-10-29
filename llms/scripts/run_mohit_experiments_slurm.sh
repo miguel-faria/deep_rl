@@ -48,7 +48,6 @@ if [ ${#budgets[@]} -eq 0 ]; then
   budgets=("0" "0.2" "0.4" "0.6" "0.8" "1.0")
 fi
 
-
 if [ -z "$dataset" ]; then
   dataset="strategy_qa"
 fi

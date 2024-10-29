@@ -453,7 +453,6 @@ def main( ):
 		intervention_idxs_per_budget, intervention_conf_budget = get_intervention_idx_budget(student_model, mental_model, rng_gen, budgets, test_samples, args.intervention_utility,
 																							 args.use_explanations, args.use_gold_label, args.deceive)
 		
-		print(intervention_conf_budget)
 		print('Intervention utilities:')
 		for i in range(len(budgets)):
 			print('Budget %f: max = %f\tmin = %f' % (budgets[i], max(intervention_conf_budget[i]), min(intervention_conf_budget[i])))

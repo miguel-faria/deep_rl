@@ -315,7 +315,7 @@ def get_intervention_idx_budget(student_model: StudentModel, mental_model: Teach
 				for budget in budgets:
 					budget_count = int(budget * len(test_samples))
 					intervention_samples = [sample_confidence_pair[0] for sample_confidence_pair in sample_confidence_pairs][:budget_count]
-					intervention_confs = [sample_utility_correct_score[1] for sample_utility_correct_score in sample_confidence_pairs][:budget_count]
+					intervention_confs = [sample_confidence_pair[1] for sample_confidence_pair in sample_confidence_pairs][:budget_count]
 					intervention_idx_budget.append(intervention_samples)
 					intercention_conf_budget.append(intervention_confs)
 			
@@ -324,7 +324,7 @@ def get_intervention_idx_budget(student_model: StudentModel, mental_model: Teach
 				for budget in budgets:
 					budget_count = int(budget * len(test_samples))
 					intervention_samples = [sample_confidence_pair[0] for sample_confidence_pair in sample_confidence_pairs][:budget_count]
-					intervention_confs = [sample_utility_correct_score[1] for sample_utility_correct_score in sample_confidence_pairs][:budget_count]
+					intervention_confs = [sample_confidence_pair[1] for sample_confidence_pair in sample_confidence_pairs][:budget_count]
 					intervention_idx_budget.append(intervention_samples)
 					intercention_conf_budget.append(intervention_confs)
 			
@@ -343,7 +343,7 @@ def get_intervention_idx_budget(student_model: StudentModel, mental_model: Teach
 					for budget in budgets:
 						budget_count = int(budget * len(test_samples))
 						intervention_samples = [sample_no_inter_correct_score[0] for sample_no_inter_correct_score in sample_no_inter_correct_scores][:budget_count]
-						intervention_confs = [sample_utility_correct_score[1] for sample_utility_correct_score in sample_no_inter_correct_scores][:budget_count]
+						intervention_confs = [sample_no_inter_correct_score[1] for sample_no_inter_correct_score in sample_no_inter_correct_scores][:budget_count]
 						intervention_idx_budget.append(intervention_samples)
 						intercention_conf_budget.append(intervention_confs)
 				
@@ -352,7 +352,7 @@ def get_intervention_idx_budget(student_model: StudentModel, mental_model: Teach
 					for budget in budgets:
 						budget_count = int(budget * len(test_samples))
 						intervention_samples = [sample_inter_correct_score[0] for sample_inter_correct_score in sample_inter_correct_scores][:budget_count]
-						intervention_confs = [sample_utility_correct_score[1] for sample_utility_correct_score in sample_inter_correct_scores][:budget_count]
+						intervention_confs = [sample_inter_correct_score[1] for sample_inter_correct_score in sample_inter_correct_scores][:budget_count]
 						intervention_idx_budget.append(intervention_samples)
 						intercention_conf_budget.append(intervention_confs)
 			

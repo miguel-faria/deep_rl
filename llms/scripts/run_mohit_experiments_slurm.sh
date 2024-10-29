@@ -11,7 +11,7 @@
 #SBATCH --mem-per-cpu=4000
 #SBATCH --qos=gpu-short
 #SBATCH --output="job-%x-%j.out"
-#SBATFH --partition=a6000
+#SBATCH --partition=a6000
 
 date;hostname;pwd
 options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te: -- "$@")

@@ -288,7 +288,7 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 	assert n_budgets > 0, "There must be at least one budget value in list."
 	
 	max_intervention_samples = [int(budget * n_samples) for budget in budgets]
-	intervention_idx_budget = [[] for _ in range(n_budgets)]
+	intervention_idx_budget = [[[], []] for _ in range(n_budgets)]
 	n_interventions = [0 for _ in range(n_budgets)]
 	answers_budget = [[] for _ in range(n_budgets)]
 	
@@ -314,7 +314,8 @@ def get_student_performance_per_budget(budgets: List[float], test_samples: pd.Da
 				if intervene_utility >= intervene_thresh:
 					_, teacher_explanation = teacher.predict(sample=test_sample.to_dict())
 					prediction_student, student_explanation = student.predict(sample=test_sample.to_dict(), expl=teacher_explanation, intervene=True, debug=debug)
-					intervention_idx_budget[i].append(test_idx)
+					intervention_idx_budget[i][0].append(test_idx)
+					intervention_idx_budget[i][1].append(intervene_utility)
 					n_interventions[i] += 1
 				else:
 					prediction_student, student_explanation = student.predict(sample=test_sample.to_dict(), expl='', intervene=False, debug=debug)
@@ -437,7 +438,8 @@ def main( ):
 		print('Interventions per budget:')
 		for i in range(len(budgets)):
 			print('Intervened %d times in budget %f:' % (len(interventions[i]), budgets[i]))
-			print('Intervention idxs: ', print(interventions[i]))
+			print('Intervention idxs: ', print(interventions[i][0]))
+			print('Intercention utilities: ', print(interventions[i][1]))
 		
 		print('Computing accuracies')
 		if not args.use_explanations:

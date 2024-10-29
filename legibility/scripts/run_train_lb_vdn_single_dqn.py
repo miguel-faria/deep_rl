@@ -72,6 +72,7 @@ parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, cho
                     help='Type of epsilon decay.')
 parser.add_argument('--episode-steps', dest='max_steps', type=int, required=False, default=STEPS_EPISODE, help='Maximum number of steps per episode.')
 parser.add_argument('--field-len', dest='field_len', type=int, required=False, default=FIELD_LENGTH, help='Length of the field.')
+parser.add_argument('--final-eps', dest='final_eps', type=float, required=False, default=FINAL_EPS, help='Minimum epsilon greedy.')
 parser.add_argument('--iterations', dest='max_iterations', type=int, required=False, default=N_ITERATIONS, help='Number of iterations to train.')
 parser.add_argument('--limits', dest='limits', nargs=2, type=int, required=False, default=[1, MAX_SPAWN_FOODS], help='Min and max number of food spawns to train.')
 parser.add_argument('--tracker-dir', dest='logs', type=str, required=False, default='', help='Directory to store the performance logs.')
@@ -79,6 +80,7 @@ parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='D
 parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
 					help='Directory to store trained models and load optimal models, if left blank stored in default location')
 parser.add_argument('--online-lr', dest='online_lr', type=float, default=ONLINE_LR, help='Learning rate for the online model.')
+parser.add_argument('--start-eps', dest='start_eps', type=float, required=False, default=INIT_EPS, help='Starting value for exploration epsilon greedy.')
 parser.add_argument('--target-lr', dest='target_lr', type=float, default=TARGET_LR, help='Learning rate for the target model.')
 parser.add_argument('--train-thresh', dest='train_thresh', type=float, required=False, default=None, help='Minimum performance threshold to skip model training.')
 parser.add_argument('--use-lower-curriculum', dest='use_lower_model', action='store_true',
@@ -100,6 +102,7 @@ data_dir = input_args.data_dir
 eps_type = input_args.eps_type
 eps_decay = input_args.eps_decay
 field_len = input_args.field_len
+final_eps = input_args.final_eps
 iterations = input_args.max_iterations
 limits = input_args.limits
 logs_dir = input_args.logs_dir
@@ -107,6 +110,7 @@ models_dir = input_args.models_dir
 max_steps = input_args.max_steps
 online_lr = input_args.online_lr
 smart_add = input_args.buffer_smart_add
+start_eps = input_args.start_eps
 target_lr = input_args.target_lr
 tracker_logs = input_args.logs
 train_thresh = input_args.train_thresh
@@ -121,9 +125,9 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 	args = (" --nagents %d --architecture %s --buffer %d --gamma %f --iterations %d --max-cycles %d --batch %d --train-freq %d "
 			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f "
 			"--player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d "
-			% (N_AGENTS, ARQUITECTURE, buffer_size, GAMMA,                                                                                                      # DQN parameters
-			   iterations, MAX_CYCLES, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, INIT_EPS, FINAL_EPS, eps_decay, eps_type, warmup, cycle_eps,  # Train parameters
-			   PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS)) 														                    # Environment parameters
+			% (N_AGENTS, ARQUITECTURE, buffer_size, GAMMA,                                                                                                      	# DQN parameters
+			   iterations, MAX_CYCLES, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, start_eps, final_eps, eps_decay, eps_type, warmup, cycle_eps,  	# Train parameters
+			   PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS)) 														                    	# Environment parameters
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
 			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +

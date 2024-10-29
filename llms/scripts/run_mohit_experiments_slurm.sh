@@ -89,7 +89,7 @@ fi
 
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
-source "$HOME"/miniconda3/bin/activate tom_env
+source "$HOME"/miniconda3/bin/activate llm_env
 
 cd "$script_path" || exit
 cd .. || exit

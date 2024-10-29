@@ -89,7 +89,7 @@ if [ "$env_type" = "conda" ]; then
   # pip3 install --upgrade nvidia-cudnn-cu11 nvidia-cufft-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvcc-cu11 nvidia-cuda-runtime-cu11
 
   if [ "$use_llms" -eq 1 ]; then
-      mamba install -y -c huggingface transformers datasets
+      mamba install -y -c huggingface -c conda-forge transformers datasets
       mamba install -y -c conda-forge evaluate accelerate
       python3 -m pip install sentencepiece vllm
   fi

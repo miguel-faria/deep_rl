@@ -32,12 +32,7 @@ do
     -s) student_model=${2}; shift ;;
     -t) teacher_model=${2}; shift ;;
     -u) utility=${2}; shift ;;
-    -b) shift
-      while [[ "$1" != "--" && "$1" != -* && "$#" -gt 0 ]]; do
-        budgets+=("$1")
-        shift
-      done
-      ;;
+    -b) budgets+=("${2}"); shift ;;
     --mm) mental_model=${2}; shift ;;
     --se) student_expl=${2}; shift ;;
     --te) teacher_expl=${2}; shift ;;

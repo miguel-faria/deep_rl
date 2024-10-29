@@ -84,8 +84,8 @@ if [ "$env_type" = "conda" ]; then
   mamba deactivate
 
   {
-    echo "alias activateToM=\"conda activate ""$env_name""\""
-    echo "alias tomExplain=\"conda activate ""$env_name""; cd ""$script_path""\""
+    echo "alias activateLLM=\"conda activate ""$env_name""\""
+    echo "alias llms=\"conda activate ""$env_name""; cd ""$script_path""\""
   } >> ~/.bash_aliases
 
   env_home="$HOME"/miniconda3/envs/"$env_name"
@@ -148,8 +148,8 @@ else
   deactivate
 
   {
-    echo "alias activateToM=\"source \"\$HOME\"/python_envs/""$env_name""/bin/activate\""
-    echo "alias tomExplain=\"source \"\$HOME\"/python_envs/""$env_name""/bin/activate; cd ""$script_path""\""
+    echo "alias activateLLM=\"source \"\$HOME\"/python_envs/""$env_name""/bin/activate\""
+    echo "alias llms=\"source \"\$HOME\"/python_envs/""$env_name""/bin/activate; cd ""$script_path""\""
   } >> ~/.bash_aliases
 
   {

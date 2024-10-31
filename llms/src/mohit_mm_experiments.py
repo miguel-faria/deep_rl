@@ -12,7 +12,7 @@ from reputation_learning.student_model import StudentModel
 from reputation_learning.teacher_mental_model import UnidentifiedUtilityMetricError
 from reputation_learning.teacher_static_mental_model import TeacherStaticMentalModel
 from pathlib import Path
-from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer, LlamaForCausalLM, LlamaTokenizer
 from typing import Tuple, List, Optional, Dict
 from numpy.random import default_rng, Generator
 from tqdm import tqdm
@@ -233,12 +233,11 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 	train_idxs = rng_gen.choice(train_data.shape[0], num_samples, replace=False)
 	student_samples = [train_data.iloc[idx].to_dict() for idx in train_idxs]
 	
-	student_tokenizer = AutoTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
-	teacher_tokenizer = AutoTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
-	
 	if "llama" in student_model_path:
-		student_gen_model = AutoModelForCausalLM.from_pretrained(student_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
+		student_gen_model = LlamaForCausalLM.from_pretrained(student_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
+		student_tokenizer = LlamaTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
 	else:
+		student_tokenizer = AutoTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
 		student_gen_model = AutoModelForSeq2SeqLM.from_pretrained(student_model_path, device_map="auto", cache_dir=cache_dir)
 	
 	student_model = StudentModel(student_model_path, student_samples, student_gen_model, student_tokenizer, student_expl_type, task, max_tokens, num_beams, use_explanations)
@@ -251,9 +250,11 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 		
 		else:
 			if "llama" in teacher_model_path:
-				teacher_gen_model = AutoModelForCausalLM.from_pretrained(teacher_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
+				teacher_gen_model = LlamaForCausalLM.from_pretrained(teacher_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
+				teacher_tokenizer = LlamaTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
 			else:
 				teacher_gen_model = AutoModelForSeq2SeqLM.from_pretrained(teacher_model_path, device_map="auto", cache_dir=cache_dir)
+				teacher_tokenizer = AutoTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
 			
 			print('Getting teacher samples')
 			teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)

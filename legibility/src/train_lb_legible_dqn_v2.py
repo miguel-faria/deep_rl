@@ -685,7 +685,9 @@ def main():
 					Path.mkdir(model_path.parent.absolute() / 'best', parents=True, exist_ok=True)
 					agent_madqn.save_model(('food_%dx%d' % (loc[0], loc[1])), model_path.parent.absolute() / 'best', logger)
 					train_acc['%s, %s' % (loc[0], loc[1])] = tests_passed / N_TESTS
-				
+
+				del env
+				del agent_madqn
 				gc.collect()
 			
 			logger.info('Updating best training performances record')

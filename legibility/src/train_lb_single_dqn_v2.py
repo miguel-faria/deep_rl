@@ -584,21 +584,24 @@ def main():
 					train_acc['%s, %s' % (loc[0], loc[1])] = tests_passed / N_TESTS
 				
 				agent_madqn = None
+				del env
+				del agent_madqn
 				gc.collect()
 			
-			logger.info('Updating best training performances record')
-			wandb.finish()
-			with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
-			          mode='r+', encoding='utf-8') as train_file:
-				performance_data = yaml.safe_load(train_file)
-				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
-				food_idx = str(n_foods_spawn) + '-food'
-				performance_data[field_idx][food_idx] = train_acc
-				train_file.seek(0)
-				sorted_data = dict(
-						[[sorted_key, performance_data[sorted_key]] for sorted_key in
-						 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
-				yaml.safe_dump(sorted_data, train_file)
+				logger.info('Updating best training performances record with %dx%d results' % (loc[0], loc[1]))
+				with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
+						  mode='r+', encoding='utf-8') as train_file:
+					performance_data = yaml.safe_load(train_file)
+					field_idx = str(field_size[0]) + 'x' + str(field_size[1])
+					food_idx = str(n_foods_spawn) + '-food'
+					performance_data[field_idx][food_idx] = train_acc
+					train_file.seek(0)
+					sorted_data = dict(
+							[[sorted_key, performance_data[sorted_key]] for sorted_key in
+							 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+					yaml.safe_dump(sorted_data, train_file)
+			
+			wandb_run.finish()
 		
 		except KeyboardInterrupt as ks:
 			logger.info('Caught keyboard interrupt, cleaning up and closing.')

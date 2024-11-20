@@ -1,13 +1,11 @@
 #! /usr/bin/env python
 import numpy as np
-from pandas import DataFrame
 
-from torch.nn.functional import softmax
 from typing import Dict, List, Union, Tuple
 from transformers import PreTrainedModel, PreTrainedTokenizer
-from reputation_learning.model import Model, UnidentifiedTaskError
-from reputation_learning.student_model import StudentModel
-from reputation_learning.teacher_model import TeacherModel
+from machine_teaching.models.hf.model_hf import UnidentifiedTaskError
+from machine_teaching.models.hf.student_model_hf import StudentModel
+from machine_teaching.models.hf.teacher_model_hf import TeacherModel
 
 
 class UnidentifiedUtilityMetricError(Exception):

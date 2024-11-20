@@ -17,11 +17,18 @@ class UnidentifiedExplanationError(Exception):
 
 class Model:
 	
-	def __init__(self, model_name: str, samples: Union[List[Dict], Tuple] = None, gen_model: PreTrainedModel = None, tokenizer: PreTrainedTokenizer = None, expl_type: str = '',
-				 task: str = '', max_tokens: int = 10, num_beams: int = 1, use_explanations: bool = True):
+	_task: str
+	_model_name: str
+	_use_explanations: bool
+	_max_tokens: int
+	_num_beams: int
+	_ic_samples: Union[List[Dict], Tuple]
+	_explanation_type: str
+	
+	def __init__(self, model_name: str, samples: Union[List[Dict], Tuple] = None, gen_model = None, expl_type: str = '', task: str = '', max_tokens: int = 10,
+				 num_beams: int = 1, use_explanations: bool = True):
 		
 		self._gen_model = gen_model
-		self._tokenizer = tokenizer
 		self._task = task
 		self._model_name = model_name
 		self._use_explanations = use_explanations
@@ -35,20 +42,12 @@ class Model:
 		return self._model_name
 
 	@property
-	def gen_model(self) -> PreTrainedModel:
+	def gen_model(self):
 		return self._gen_model
-	
-	@property
-	def tokenizer(self) -> PreTrainedTokenizer:
-		return self._tokenizer
 	
 	@property
 	def explanation_type(self) -> str:
 		return self._explanation_type
-	
-	@staticmethod
-	def get_answer_idx(answers: List, answer_id: Union[str, int]) -> int:
-		return len(answers) - answers[-1::-1].index(answer_id) -1
 	
 	def set_samples(self, samples: Union[List[Dict], Tuple]) -> None:
 		self._ic_samples = samples
@@ -137,15 +136,4 @@ class Model:
 			raise UnidentifiedTaskError("Task %s not recognized for simple explanation context" % self._task)
 		
 		return context
-	
-	def get_context(self, sample: Dict, explanation: Union[List, str] = None, ic_samples: List[Dict] = None) -> str:
-		raise NotImplementedError("Method 'get_context' is not implemented in base class, subclasses should implement it.")
-	
-	def predict_confidence(self, sample: Dict, with_expl: bool = False) -> List[float]:
-		raise NotImplementedError("Method 'predict_confidence' is not implemented in the base class, subclasses should implement it.")
-	
-	def predict(self, sample: Dict, ic_samples: List[Dict] = None, debug: bool = False) -> Tuple[str, str]:
-		raise NotImplementedError("Method 'predict' is not implemented in the base class, subclasses should implement it.")
-	
-	def predict_batch(self, samples: DataFrame) -> Tuple[List, List]:
-		raise NotImplementedError("Method 'predict_batch' is not implemented in the base class, subclasses should implement it.")
+

@@ -5,11 +5,11 @@ import pandas as pd
 import torch
 import os
 
-from reputation_learning.dataset_tasks_utils import ECQA, StrategyQA, GSM8k
-from reputation_learning.model import UnidentifiedTaskError
-from reputation_learning.teacher_model import TeacherModel
-from reputation_learning.student_model import StudentModel
-from reputation_learning.reputation_based_student import ReuptationBasedStudent, UnidentifiedUtilityMetricError
+from utilities.dataset_tasks_utils import ECQA, StrategyQA, GSM8k
+from machine_teaching.models.hf.model_hf import UnidentifiedTaskError
+from machine_teaching.models.hf.teacher_model_hf import TeacherModel
+from machine_teaching.models.hf.student_model_hf import StudentModel
+from machine_teaching.reputation_based_student import ReuptationBasedStudent
 from pathlib import Path
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from typing import Tuple, List, Optional, Dict

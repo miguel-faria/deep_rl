@@ -3,12 +3,12 @@ import re
 
 from torch.nn.functional import softmax
 from typing import Dict, List, Union, Tuple
-from reputation_learning.model import Model, UnidentifiedExplanationError, UnidentifiedTaskError
+from machine_teaching.models.hf.model_hf import ModelHF, UnidentifiedExplanationError, UnidentifiedTaskError
 from pandas import DataFrame
 from tqdm import tqdm
 
 
-class StudentModel(Model):
+class StudentModel(ModelHF):
 	
 	def teacher_explanation_context(self, test_sample: Dict, teacher_explanation: str):
 		if self._task == "strategy_qa":
@@ -223,7 +223,7 @@ class StudentModel(Model):
 		
 		return prediction, explanation
 	
-	def predict_batch(self, samples: DataFrame, intervention_indexes_per_budget: List[List[int]] = None, teacher: Model = None, debug: bool = False) -> Tuple[List, List, List]:
+	def predict_batch(self, samples: DataFrame, intervention_indexes_per_budget: List[List[int]] = None, teacher: ModelHF = None, debug: bool = False) -> Tuple[List, List, List]:
 		labels = []
 		predictions_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]
 		explanations_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]

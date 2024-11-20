@@ -2,10 +2,10 @@
 
 from torch.nn.functional import softmax
 from typing import Dict, List, Union, Tuple
-from reputation_learning.teacher_model import TeacherModel
-from reputation_learning.student_model import StudentModel
+from machine_teaching.models.hf.teacher_model_hf import TeacherModel
+from machine_teaching.models.hf.student_model_hf import StudentModel
 from transformers import PreTrainedModel, PreTrainedTokenizer
-from reputation_learning.model import UnidentifiedTaskError
+from machine_teaching.models.hf.model_hf import UnidentifiedTaskError
 
 
 class UnidentifiedUtilityMetricError(Exception):

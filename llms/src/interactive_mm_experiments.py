@@ -5,14 +5,13 @@ import pandas as pd
 import torch
 import os
 
-from reputation_learning.dataset_tasks_utils import ECQA, StrategyQA, GSM8k
-from reputation_learning.model import UnidentifiedTaskError
-from reputation_learning.teacher_model import TeacherModel
-from reputation_learning.student_model import StudentModel
-from reputation_learning.teacher_mental_model import UnidentifiedUtilityMetricError
-from reputation_learning.teacher_interactive_mental_model import TeacherInteractiveMentalModel
+from utilities.dataset_tasks_utils import ECQA, StrategyQA, GSM8k
+from machine_teaching.models.hf.model_hf import UnidentifiedTaskError
+from machine_teaching.models.hf.teacher_model_hf import TeacherModel
+from machine_teaching.models.hf.student_model_hf import StudentModel
+from machine_teaching.models.hf.teacher_interactive_mental_model_hf import TeacherInteractiveMentalModel
 from pathlib import Path
-from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer, LlamaForCausalLM, LlamaTokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, LlamaForCausalLM, LlamaTokenizer
 from typing import Tuple, List, Optional, Dict
 from numpy.random import default_rng, Generator
 from tqdm import tqdm

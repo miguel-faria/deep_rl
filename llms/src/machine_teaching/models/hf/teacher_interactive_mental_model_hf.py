@@ -1,9 +1,9 @@
 #! /usr/bin/env python
 
 from typing import Dict, List, Union, Tuple
-from reputation_learning.teacher_mental_model import TeacherMentalModel
+from machine_teaching.models.hf.teacher_mental_model_hf import TeacherMentalModel
 from transformers import PreTrainedModel, PreTrainedTokenizer
-from reputation_learning.model import UnidentifiedTaskError
+from machine_teaching.models.hf.model_hf import UnidentifiedTaskError
 
 
 class TeacherInteractiveMentalModel(TeacherMentalModel):

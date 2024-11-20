@@ -4,12 +4,12 @@ import re
 from pandas import DataFrame
 from torch.nn.functional import softmax
 from typing import Dict, List, Tuple, Union
-from reputation_learning.model import Model, UnidentifiedTaskError, UnidentifiedExplanationError
+from machine_teaching.models.hf.model_hf import ModelHF, UnidentifiedTaskError, UnidentifiedExplanationError
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from tqdm import tqdm
 
 
-class TeacherModel(Model):
+class TeacherModel(ModelHF):
 	
 	def __init__(self, model_name: str, samples: List[Dict] = None, gen_model: PreTrainedModel = None, tokenizer: PreTrainedTokenizer = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
 				 use_explanations: bool = True):

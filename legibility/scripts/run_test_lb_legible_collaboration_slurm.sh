@@ -84,7 +84,7 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
 
     # Generate the sbatch script for this job
     if [ "$job" -gt 1 ] ; then
-      job_id=$(sbatch --parsable << EOF
+      job_id=$(sbatch --parsable <<-EOF
         #!/bin/bash
         #SBATCH --mail-type=BEGIN,END,FAIL
         #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
@@ -103,7 +103,7 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
         EOF
       )
     else
-      job_id=$(sbatch --parsable << EOF
+      job_id=$(sbatch --parsable <<-EOF
         #!/bin/bash
         #SBATCH --mail-type=BEGIN,END,FAIL
         #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt

@@ -73,7 +73,7 @@ fi
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 source "$HOME"/miniconda3/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  for ((job=1; job<=num_jobs; job++)); do
+  for (( job=1; job<=num_jobs; job++ )); do
     start_test=$(( (job - 1) * tests_per_job + 1 ))
     end_test=$(( job * tests_per_job ))
 
@@ -83,8 +83,8 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
     fi
 
     # Generate the sbatch script for this job
+    sbatch_script="sbatch_job_$job.sh"
     if [ "$job" -gt 1 ] ; then
-      sbatch_script="sbatch_job_$job.sh"
       cat <<-EOF > $"sbatch_script"
         #!/bin/bash
         #SBATCH --mail-type=BEGIN,END,FAIL
@@ -104,7 +104,6 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
 
       job_id=$(sbatch --parsable "$sbatch_script")
     else
-      sbatch_script="sbatch_job_$job.sh"
       cat <<-EOF > $"sbatch_script"
         #!/bin/bash
         #SBATCH --mail-type=BEGIN,END,FAIL

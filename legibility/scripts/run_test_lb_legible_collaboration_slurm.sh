@@ -74,7 +74,7 @@ export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 source "$HOME"/miniconda3/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   for (( job=1; job<=num_jobs; job++ )); do
-    echo "Launching job $"job" out of "$num_jobs""
+    echo "Launching job "$job" out of "$num_jobs""
     start_test=$(( (job - 1) * tests_per_job + 1 ))
     end_test=$(( job * tests_per_job ))
 
@@ -84,9 +84,9 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
     fi
 
     # Generate the sbatch script for this job
-    sbatch_script="sbatch_job_$job.sh"
+    sbatch_script="sbatch_job_"$job".sh"
     if [ "$job" -gt 1 ] ; then
-      cat <<EOF > $"sbatch_script"
+      cat > "$sbatch_script" <<EOF
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
@@ -104,7 +104,7 @@ python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} -
 EOF
 
     else
-      cat <<EOF > $"sbatch_script"
+      cat > "$sbatch_script" <<EOF
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt

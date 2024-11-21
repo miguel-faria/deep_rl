@@ -84,7 +84,7 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
     fi
 
     # Generate the sbatch script for this job
-    sbatch_script=""$script_path"/sbatch_job_"$job".sh"
+    sbatch_script=""$script_path"/sbatch_job_"$test_mode"_"$job".sh"
     if [ $job -gt 1 ] ; then
       cat > "$sbatch_script" <<EOF
 #!/bin/bash

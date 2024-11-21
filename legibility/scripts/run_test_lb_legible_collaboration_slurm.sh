@@ -84,7 +84,7 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
     fi
 
     # Generate the sbatch script for this job
-    sbatch_script="sbatch_job_"$job".sh"
+    sbatch_script=""$script_path"/sbatch_job_"$job".sh"
     if [ "$job" -gt 1 ] ; then
       cat > "$sbatch_script" <<EOF
 #!/bin/bash
@@ -123,7 +123,7 @@ python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} -
 EOF
 
     fi
-    job_id=$(sbatch --parsable "$sbatch_script" | awk '{print $4}')
+    job_id=$(sbatch "$sbatch_script" | awk '{print $4}')
     echo "Job ID: "$job_id""
   done
 else

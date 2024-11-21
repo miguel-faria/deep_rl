@@ -79,31 +79,14 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
     end_test=$(( job * tests_per_job ))
 
     # Adjust the end test for the last job if it exceeds the total tests
-    if [ $end_test -gt $total_tests ]; then
+    if [ "$end_test" -gt "$total_tests" ]; then
       end_test=$total_tests
     fi
 
     # Generate the sbatch script for this job
     sbatch_script=""$script_path"/sbatch_job_"$job".sh"
+    set -x
     if [ "$job" -gt 1 ] ; then
-      cat > "$sbatch_script" <<EOF
-#!/bin/bash
-#SBATCH --mail-type=BEGIN,END,FAIL
-#SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
-#SBATCH --job-name=test_lb_legible_collaboration_${job}
-#SBATCH --nodes=1
-#SBATCH --cpus-per-task=1
-#SBATCH --tasks-per-node=1
-#SBATCH --gres=gpu:1
-#SBATCH --time=04:00:00
-#SBATCH --mem=4G
-#SBATCH --qos=gpu-short
-#SBATCH --output=job-%x-%j_${job}.out
-#SBATCH --partition=a6000
-python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} --start-run ${start_test} --mode ${test_mode} --field-len ${field_len} --max-foods ${max_foods} --spawn-foods ${max_spawn_foods} --logs-dir ${logs_dir} --models-dir ${models_dir} --data-dir ${data_dir}
-EOF
-
-    else
       cat > "$sbatch_script" <<EOF
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL
@@ -122,7 +105,26 @@ EOF
 python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} --start-run ${start_test} --mode ${test_mode} --field-len ${field_len} --max-foods ${max_foods} --spawn-foods ${max_spawn_foods} --logs-dir ${logs_dir} --models-dir ${models_dir} --data-dir ${data_dir}
 EOF
 
+    else
+      cat > "$sbatch_script" <<EOF
+#!/bin/bash
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
+#SBATCH --job-name=test_lb_legible_collaboration_${job}
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=1
+#SBATCH --tasks-per-node=1
+#SBATCH --gres=gpu:1
+#SBATCH --time=04:00:00
+#SBATCH --mem=4G
+#SBATCH --qos=gpu-short
+#SBATCH --output=job-%x-%j_${job}.out
+#SBATCH --partition=a6000
+python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} --start-run ${start_test} --mode ${test_mode} --field-len ${field_len} --max-foods ${max_foods} --spawn-foods ${max_spawn_foods} --logs-dir ${logs_dir} --models-dir ${models_dir} --data-dir ${data_dir}
+EOF
+
     fi
+    unset -x
     job_id=$(sbatch "$sbatch_script" | awk '{print $4}')
     echo "Job ID: "$job_id""
   done

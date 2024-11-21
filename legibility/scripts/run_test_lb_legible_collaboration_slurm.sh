@@ -75,8 +75,8 @@ source "$HOME"/miniconda3/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   for (( job=1; job<=n_jobs; job++ )); do
     echo "Launching job "$job" out of "$n_jobs""
-    start_test=$(( (job - 1) * tests_per_job + 1 ))
-    end_test=$(( job * tests_per_job ))
+    start_test=$(( (job - 1) * tests_job + 1 ))
+    end_test=$(( job * tests_job ))
 
     # Adjust the end test for the last job if it exceeds the total tests
     if [ $end_test -gt $n_tests ]; then

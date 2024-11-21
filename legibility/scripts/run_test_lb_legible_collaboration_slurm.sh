@@ -73,8 +73,8 @@ fi
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 source "$HOME"/miniconda3/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  for (( job=1; job<=num_jobs; job++ )); do
-    echo "Launching job "$job" out of "$num_jobs""
+  for (( job=1; job<=n_jobs; job++ )); do
+    echo "Launching job "$job" out of "$n_jobs""
     start_test=$(( (job - 1) * tests_per_job + 1 ))
     end_test=$(( job * tests_per_job ))
 

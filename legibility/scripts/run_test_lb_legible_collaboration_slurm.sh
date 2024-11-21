@@ -79,14 +79,13 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
     end_test=$(( job * tests_per_job ))
 
     # Adjust the end test for the last job if it exceeds the total tests
-    if [ "$end_test" -gt "$total_tests" ]; then
+    if [ $end_test -gt $total_tests ]; then
       end_test=$total_tests
     fi
 
     # Generate the sbatch script for this job
     sbatch_script=""$script_path"/sbatch_job_"$job".sh"
-    set -x
-    if [ "$job" -gt 1 ] ; then
+    if [ $job -gt 1 ] ; then
       cat > "$sbatch_script" <<EOF
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL
@@ -124,7 +123,6 @@ python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} -
 EOF
 
     fi
-    set +x
     job_id=$(sbatch "$sbatch_script" | awk '{print $4}')
     echo "Job ID: "$job_id""
   done

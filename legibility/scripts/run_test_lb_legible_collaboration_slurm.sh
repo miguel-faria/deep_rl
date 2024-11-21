@@ -84,7 +84,8 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
 
     # Generate the sbatch script for this job
     if [ "$job" -gt 1 ] ; then
-      job_id=$(sbatch --parsable <<-EOF
+      sbatch_script="sbatch_job_$job.sh"
+      cat <<-EOF > $"sbatch_script"
         #!/bin/bash
         #SBATCH --mail-type=BEGIN,END,FAIL
         #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
@@ -98,12 +99,13 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
         #SBATCH --qos=gpu-short
         #SBATCH --output=job-%x-%j_"$job".out
         #SBATCH --partition=a6000
-
         python "$script_path"/run_test_lb_legible_collaboration.py --tests "$end_test" --start-run "$start_test" --mode "$test_mode" --field-len "$field_len" --max-foods "$max_foods" --spawn-foods "$max_spawn_foods" --logs-dir "$logs_dir" --models-dir "$models_dir" --data-dir "$data_dir"
         EOF
-      )
+
+      job_id=$(sbatch --parsable "$sbatch_script")
     else
-      job_id=$(sbatch --parsable <<-EOF
+      sbatch_script="sbatch_job_$job.sh"
+      cat <<-EOF > $"sbatch_script"
         #!/bin/bash
         #SBATCH --mail-type=BEGIN,END,FAIL
         #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
@@ -118,10 +120,10 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
         #SBATCH --output=job-%x-%j_"$job".out
         #SBATCH --partition=a6000
         #SBATCH --dependency=afterok:"$job_id"
-
         python "$script_path"/run_test_lb_legible_collaboration.py --tests "$end_test" --start-run "$start_test" --mode "$test_mode" --field-len "$field_len" --max-foods "$max_foods" --spawn-foods "$max_spawn_foods" --logs-dir "$logs_dir" --models-dir "$models_dir" --data-dir "$data_dir"
         EOF
-      )
+
+      job_id=$(sbatch --parsable "$sbatch_script")
     fi
     echo "Job ID: "$job_id""
   done

@@ -1,7 +1,7 @@
 #!/bin/bash
 
 date;hostname;pwd
-options=$(getopt -o n:,m:,s:,j: -l food:,spawn_foods:,field: -- "$@")
+options=$(getopt -o n:,m:,s:,j: -l food:,spawn:,field: -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   logs_dir="/mnt/scratch-artemis/miguelfaria/logs/lb-foraging"
   data_dir="/mnt/data-artemis/miguelfaria/deep_rl/data"
@@ -22,7 +22,7 @@ do
     -s) start_run=${2}; shift ;;
     -j) tests_job=${2}; shift ;;
     --foods) max_foods=${2}; shift ;;
-    --spawn_foods) max_spawn_foods=${2}; shift ;;
+    --spawn) max_spawn_foods=${2}; shift ;;
     --field) field_len=${2}; shift ;;
     (--) shift; break ;;
     (-*) echo "$0: error - unrecognized option $1" 1>&2; exit 1 ;;
@@ -85,42 +85,42 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
     # Generate the sbatch script for this job
     sbatch_script="sbatch_job_$job.sh"
     if [ "$job" -gt 1 ] ; then
-      cat <<-EOF > $"sbatch_script"
-        #!/bin/bash
-        #SBATCH --mail-type=BEGIN,END,FAIL
-        #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
-        #SBATCH --job-name=test_lb_legible_collaboration_"$job"
-        #SBATCH --nodes=1
-        #SBATCH --cpus-per-task=1
-        #SBATCH --tasks-per-node=1
-        #SBATCH --gres=gpu:1
-        #SBATCH --time=04:00:00
-        #SBATCH --mem=4G
-        #SBATCH --qos=gpu-short
-        #SBATCH --output=job-%x-%j_"$job".out
-        #SBATCH --partition=a6000
-        python "$script_path"/run_test_lb_legible_collaboration.py --tests "$end_test" --start-run "$start_test" --mode "$test_mode" --field-len "$field_len" --max-foods "$max_foods" --spawn-foods "$max_spawn_foods" --logs-dir "$logs_dir" --models-dir "$models_dir" --data-dir "$data_dir"
-      EOF
+      cat <<EOF > $"sbatch_script"
+#!/bin/bash
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
+#SBATCH --job-name=test_lb_legible_collaboration_"$job"
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=1
+#SBATCH --tasks-per-node=1
+#SBATCH --gres=gpu:1
+#SBATCH --time=04:00:00
+#SBATCH --mem=4G
+#SBATCH --qos=gpu-short
+#SBATCH --output=job-%x-%j_"$job".out
+#SBATCH --partition=a6000
+python "$script_path"/run_test_lb_legible_collaboration.py --tests "$end_test" --start-run "$start_test" --mode "$test_mode" --field-len "$field_len" --max-foods "$max_foods" --spawn-foods "$max_spawn_foods" --logs-dir "$logs_dir" --models-dir "$models_dir" --data-dir "$data_dir"
+EOF
 
       job_id=$(sbatch --parsable "$sbatch_script")
     else
-      cat <<-EOF > $"sbatch_script"
-        #!/bin/bash
-        #SBATCH --mail-type=BEGIN,END,FAIL
-        #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
-        #SBATCH --job-name=test_lb_legible_collaboration_"$job"
-        #SBATCH --nodes=1
-        #SBATCH --cpus-per-task=1
-        #SBATCH --tasks-per-node=1
-        #SBATCH --gres=gpu:1
-        #SBATCH --time=04:00:00
-        #SBATCH --mem=4G
-        #SBATCH --qos=gpu-short
-        #SBATCH --output=job-%x-%j_"$job".out
-        #SBATCH --partition=a6000
-        #SBATCH --dependency=afterok:"$job_id"
-        python "$script_path"/run_test_lb_legible_collaboration.py --tests "$end_test" --start-run "$start_test" --mode "$test_mode" --field-len "$field_len" --max-foods "$max_foods" --spawn-foods "$max_spawn_foods" --logs-dir "$logs_dir" --models-dir "$models_dir" --data-dir "$data_dir"
-      EOF
+      cat <<EOF > $"sbatch_script"
+#!/bin/bash
+#SBATCH --mail-type=BEGIN,END,FAIL
+#SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
+#SBATCH --job-name=test_lb_legible_collaboration_"$job"
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=1
+#SBATCH --tasks-per-node=1
+#SBATCH --gres=gpu:1
+#SBATCH --time=04:00:00
+#SBATCH --mem=4G
+#SBATCH --qos=gpu-short
+#SBATCH --output=job-%x-%j_"$job".out
+#SBATCH --partition=a6000
+#SBATCH --dependency=afterok:"$job_id"
+python "$script_path"/run_test_lb_legible_collaboration.py --tests "$end_test" --start-run "$start_test" --mode "$test_mode" --field-len "$field_len" --max-foods "$max_foods" --spawn-foods "$max_spawn_foods" --logs-dir "$logs_dir" --models-dir "$models_dir" --data-dir "$data_dir"
+EOF
 
       job_id=$(sbatch --parsable "$sbatch_script")
     fi

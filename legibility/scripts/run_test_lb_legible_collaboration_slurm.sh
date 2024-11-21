@@ -90,7 +90,7 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
-#SBATCH --job-name=test_lb_legible_collaboration_"$job"
+#SBATCH --job-name=test_lb_legible_collaboration_${job}
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --tasks-per-node=1
@@ -98,9 +98,9 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
 #SBATCH --time=04:00:00
 #SBATCH --mem=4G
 #SBATCH --qos=gpu-short
-#SBATCH --output=job-%x-%j_"$job".out
+#SBATCH --output=job-%x-%j_${job}.out
 #SBATCH --partition=a6000
-python "$script_path"/run_test_lb_legible_collaboration.py --tests "$end_test" --start-run "$start_test" --mode "$test_mode" --field-len "$field_len" --max-foods "$max_foods" --spawn-foods "$max_spawn_foods" --logs-dir "$logs_dir" --models-dir "$models_dir" --data-dir "$data_dir"
+python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} --start-run ${start_test} --mode ${test_mode} --field-len ${field_len} --max-foods ${max_foods} --spawn-foods ${max_spawn_foods} --logs-dir ${logs_dir} --models-dir ${models_dir} --data-dir ${data_dir}
 EOF
 
     else
@@ -108,7 +108,7 @@ EOF
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
-#SBATCH --job-name=test_lb_legible_collaboration_"$job"
+#SBATCH --job-name=test_lb_legible_collaboration_${job}
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --tasks-per-node=1
@@ -116,10 +116,10 @@ EOF
 #SBATCH --time=04:00:00
 #SBATCH --mem=4G
 #SBATCH --qos=gpu-short
-#SBATCH --output=job-%x-%j_"$job".out
+#SBATCH --output=job-%x-%j_${job}.out
 #SBATCH --partition=a6000
-#SBATCH --dependency=afterok:"$job_id"
-python "$script_path"/run_test_lb_legible_collaboration.py --tests "$end_test" --start-run "$start_test" --mode "$test_mode" --field-len "$field_len" --max-foods "$max_foods" --spawn-foods "$max_spawn_foods" --logs-dir "$logs_dir" --models-dir "$models_dir" --data-dir "$data_dir"
+#SBATCH --dependency=afterok:${job_id}
+python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} --start-run ${start_test} --mode ${test_mode} --field-len ${field_len} --max-foods ${max_foods} --spawn-foods ${max_spawn_foods} --logs-dir ${logs_dir} --models-dir ${models_dir} --data-dir ${data_dir}
 EOF
 
     fi

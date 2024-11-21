@@ -79,8 +79,8 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
     end_test=$(( job * tests_per_job ))
 
     # Adjust the end test for the last job if it exceeds the total tests
-    if [ $end_test -gt $total_tests ]; then
-      end_test=$total_tests
+    if [ $end_test -gt $n_tests ]; then
+      end_test=$n_tests
     fi
 
     # Generate the sbatch script for this job

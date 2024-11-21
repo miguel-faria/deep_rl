@@ -74,6 +74,7 @@ export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 source "$HOME"/miniconda3/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   for (( job=1; job<=num_jobs; job++ )); do
+    echo "Launching job $"job" out of "$num_jobs""
     start_test=$(( (job - 1) * tests_per_job + 1 ))
     end_test=$(( job * tests_per_job ))
 
@@ -102,7 +103,6 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
 python "$script_path"/run_test_lb_legible_collaboration.py --tests "$end_test" --start-run "$start_test" --mode "$test_mode" --field-len "$field_len" --max-foods "$max_foods" --spawn-foods "$max_spawn_foods" --logs-dir "$logs_dir" --models-dir "$models_dir" --data-dir "$data_dir"
 EOF
 
-      job_id=$(sbatch --parsable "$sbatch_script")
     else
       cat <<EOF > $"sbatch_script"
 #!/bin/bash
@@ -122,8 +122,8 @@ EOF
 python "$script_path"/run_test_lb_legible_collaboration.py --tests "$end_test" --start-run "$start_test" --mode "$test_mode" --field-len "$field_len" --max-foods "$max_foods" --spawn-foods "$max_spawn_foods" --logs-dir "$logs_dir" --models-dir "$models_dir" --data-dir "$data_dir"
 EOF
 
-      job_id=$(sbatch --parsable "$sbatch_script")
     fi
+    job_id=$(sbatch --parsable "$sbatch_script" | awk '{print $4}')
     echo "Job ID: "$job_id""
   done
 else

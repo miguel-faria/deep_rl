@@ -37,11 +37,21 @@ def write_results_file(data_dir: Path, filename: str, results: Dict, logger: log
 				for header, val in zip(headers[1:], list(results[key])):
 					row[header] = results[key][val]
 				writer.writerow(row)
-	
-	# with open(data_dir / (filename + '.json'), 'w') as json_file:
-	# 	for key in results.keys():
-	# 		json_file.write(json.dumps({' '.join([str(x) for x in key]): results[key][-1]}))
-	
+
+	except IOError as e:
+		logger.error("I/O error: " + str(e))
+
+
+def append_results_file(data_dir: Path, filename: str, results: Dict, logger: logging.Logger, test_nr: int) -> None:
+	try:
+		with open(data_dir / (filename + '.csv'), 'a') as results_file:
+			headers = ['test_nr', 'num_steps', 'pred_steps', 'average_pred_steps', 'num_caught_foods', 'food_steps', 'num_deadlocks']
+			writer = csv.DictWriter(results_file, fieldnames=headers, delimiter=',', lineterminator='\n')
+			row = {'test_nr': test_nr}
+			for header, key in zip(headers[1:], list(results.keys())):
+				row[header] = results[key]
+			writer.writerow(row)
+
 	except IOError as e:
 		logger.error("I/O error: " + str(e))
 
@@ -206,15 +216,11 @@ def run_test_iteration(start_optim_models: Dict, start_leg_models: Dict, logger:
 	logger.info(env.get_full_env_log())
 	while n_foods_left > 1 and not timeout:
 		logger.info('Run number %d, step %d: remaining %d foods, predicted objective %s and real objective %s from ' % (run_n + 1, n_steps + 1, n_foods_left, tom_agent.predict_task, task) + str(foods_left))
-		print('Run number %d, step %d: remaining %d foods, predicted objective %s and real objective %s' % (run_n + 1, n_steps + 1, n_foods_left, tom_agent.predict_task, task))
 		n_steps += 1
 		last_leader_sample = (leader_obs, actions[0])
 		if task != tom_agent.predict_task:
 			later_error = n_steps
-		# print(env.get_env_log() + '\nAction: ' + str(actions))
-		print(' '.join([', '.join(str(x) for x in p.position) for p in env.players]) + ', ' + ' '.join([', '.join(str(x) for x in f.position) for f in env.foods]) + '\t' + str([Action(act).name for act in actions]))
 		obs, _, _, timeout, _ = env.step(actions)
-		# print(' '.join([', '.join(str(x) for x in p.position) for p in env.players]) + ', ' + ' '.join([', '.join(str(x) for x in f.position) for f in env.foods]))
 		if use_render:
 			env.render()
 		current_food_count = np.sum([not food.picked for food in env.foods])
@@ -274,7 +280,6 @@ def run_test_iteration(start_optim_models: Dict, start_leg_models: Dict, logger:
 		current_state = ''.join([''.join(str(x) for x in p.position) for p in env.players]) + ''.join([''.join(str(x) for x in f.position) for f in env.foods])
 		if is_deadlock(recent_states, current_state, actions):
 			n_deadlocks += 1
-			print('DEADLOCK!!!')
 			if current_state not in deadlock_states:
 				deadlock_states.append(current_state)
 			act_try += 1
@@ -305,8 +310,8 @@ def run_test_iteration(start_optim_models: Dict, start_leg_models: Dict, logger:
 
 def eval_legibility(n_runs: int, test_mode: int, logger: logging.Logger, opt_models_dir: Path, leg_models_dir: Path, field_dims: Tuple[int, int], n_agents: int,
                     player_level: int, player_sight: int, max_foods: int, max_foods_spawn: int, food_locs: List[Tuple], foods_lvl: int, max_steps: int, gamma: float,
-                    num_layers: int, act_function: Callable, layer_sizes: List[int], use_cnn: bool, use_dueling: bool, use_ddqn: bool, cnn_properties: List = None,
-                    run_paralell: bool = False, use_render: bool = False):
+                    num_layers: int, act_function: Callable, layer_sizes: List[int], use_cnn: bool, use_dueling: bool, use_ddqn: bool, data_dir: Path,
+                    cnn_properties: List = None, run_paralell: bool = False, use_render: bool = False, start_run: int = 0):
 	
 	env = FoodCOOPLBForaging(n_agents, player_level, field_dims, max_foods, player_sight, max_steps, True, foods_lvl, RNG_SEED, food_locs, use_render=use_render,
 	                         use_encoding=True, agent_center=True, grid_observation=use_cnn)
@@ -319,23 +324,40 @@ def eval_legibility(n_runs: int, test_mode: int, logger: logging.Logger, opt_mod
 	optim_models, leg_models = load_models(logger, opt_models_dir, leg_models_dir, max_foods_spawn, food_locs, foods_lvl, num_layers, act_function, layer_sizes, gamma, use_cnn,
 	                                       use_dueling, use_ddqn, cnn_shape, cnn_properties)
 	
-	results = {}
 	if run_paralell:
+		results = {}
 		t_pool = mp.Pool(int(0.75 * mp.cpu_count()))
 		pool_results = [t_pool.apply_async(run_test_iteration, args=(optim_models, leg_models, logger, test_mode, run, n_agents, player_level, field_dims, max_foods, player_sight,
 		                                                             max_steps, foods_lvl, RNG_SEED + run, food_locs, use_render, use_cnn, max_foods_spawn, opt_models_dir,
-		                                                             leg_models_dir, gamma, num_layers, act_function, layer_sizes, use_dueling, use_ddqn, cnn_properties)) for run in range(n_runs)]
+		                                                             leg_models_dir, gamma, num_layers, act_function, layer_sizes, use_dueling, use_ddqn, cnn_properties)) for run in range(start_run, n_runs)]
 		t_pool.close()
 		for idx in range(len(pool_results)):
 			results[idx] = list(pool_results[idx].get())
 		t_pool.join()
+
+		if start_run < 1:
+			write_results_file(data_dir / 'performances' / 'lb_foraging',
+			                   'test_mode-%d_field_%d-%d_foods-%d_agents-%d' % (test_mode, field_dims[0], field_dims[1], max_foods_spawn, n_agents), results, logger)
+
+		else:
+			append_results_file(data_dir / 'performances' / 'lb_foraging',
+			                   'test_mode-%d_field_%d-%d_foods-%d_agents-%d' % (test_mode, field_dims[0], field_dims[1], max_foods_spawn, n_agents), results, logger)
+
 	else:
-		for run in range(n_runs):
-			results[run] = run_test_iteration(optim_models, leg_models, logger, test_mode, run, n_agents, player_level, field_dims, max_foods, player_sight, max_steps,
-			                                  foods_lvl, RNG_SEED + run, food_locs, use_render, use_cnn, max_foods_spawn, opt_models_dir, leg_models_dir, gamma, num_layers,
-			                                  act_function, layer_sizes, use_dueling, use_ddqn, cnn_properties)
-	
-	return results
+		for run in range(start_run, n_runs):
+			results = run_test_iteration(optim_models, leg_models, logger, test_mode, run, n_agents, player_level, field_dims, max_foods, player_sight, max_steps,
+			                             foods_lvl, RNG_SEED + run, food_locs, use_render, use_cnn, max_foods_spawn, opt_models_dir, leg_models_dir, gamma, num_layers,
+			                             act_function, layer_sizes, use_dueling, use_ddqn, cnn_properties)
+
+			if run < 1:
+				write_results_file(data_dir / 'performances' / 'lb_foraging',
+				                   'test_mode-%d_field_%d-%d_foods-%d_agents-%d' % (test_mode, field_dims[0], field_dims[1], max_foods_spawn, n_agents), {run: results}, logger)
+
+			else:
+				append_results_file(data_dir / 'performances' / 'lb_foraging',
+				                    'test_mode-%d_field_%d-%d_foods-%d_agents-%d' % (test_mode, field_dims[0], field_dims[1], max_foods_spawn, n_agents), results, logger, run)
+
+			logger.info('Run %d results: ' % run + str(results))
 
 
 def main():
@@ -360,6 +382,7 @@ def main():
 	                    help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
 	parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 	parser.add_argument('--fraction', dest='fraction', type=str, default='0.5', help='Fraction of JAX memory pre-compilation')
+	parser.add_argument('--start-run', dest='start_run', type=int, default=0, help='Starting test run number')
 	
 	# Environment configuration
 	parser.add_argument('--n-agents', dest='n_agents', type=int, required=True, help='Number of agents in the foraging environment')
@@ -387,6 +410,7 @@ def main():
 	use_render = args.render
 	use_paralell = args.paralell
 	use_gpu = args.gpu
+	start_run = args.start_run
 	
 	# Environment parameters
 	n_agents = args.n_agents
@@ -461,12 +485,8 @@ def main():
 	file_handler.setLevel(logging.INFO)
 	logger.addHandler(file_handler)
 	
-	results = eval_legibility(n_runs, mode, logger, opt_models_dir, leg_models_dir, field_size, n_agents, player_level, sight, n_foods, n_foods_spawn, food_locs, food_level,
-	                          steps_episode, gamma, n_layers, relu, layer_sizes, use_cnn, use_dueling_dqn, use_ddqn, cnn_properties, use_paralell, use_render)
-	
-	logger.info('Results: ' + str(results))
-	write_results_file(data_dir / 'performances' / 'lb_foraging',
-	                   'test_mode-%d_field_%d-%d_foods-%d_agents-%d' % (mode, field_size[0], field_size[1], n_foods_spawn, n_agents), results, logger)
+	eval_legibility(n_runs, mode, logger, opt_models_dir, leg_models_dir, field_size, n_agents, player_level, sight, n_foods, n_foods_spawn, food_locs, food_level,
+	                steps_episode, gamma, n_layers, relu, layer_sizes, use_cnn, use_dueling_dqn, use_ddqn, data_dir, cnn_properties, use_paralell, use_render, start_run)
 	
 	return 0
 

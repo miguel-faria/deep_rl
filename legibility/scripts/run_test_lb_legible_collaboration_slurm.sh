@@ -130,5 +130,5 @@ else
   python "$script_path"/run_test_lb_legible_collaboration.py --tests "$n_tests" --mode "$test_mode"
 fi
 
-source "$HOME"/miniconda3/bin/deactivate
+conda deactivate
 date

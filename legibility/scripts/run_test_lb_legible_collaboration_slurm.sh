@@ -124,7 +124,7 @@ python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} -
 EOF
 
     fi
-    unset -x
+    set +x
     job_id=$(sbatch "$sbatch_script" | awk '{print $4}')
     echo "Job ID: "$job_id""
   done

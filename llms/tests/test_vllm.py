@@ -20,7 +20,7 @@ def cot_context(test_sample: Dict, ic_samples: List[Dict]) -> str:
 
 def main():
 
-	model = 'google/gemma-2b'
+	model = 'EleutherAI/pile-t5-base'
 	num_beams = 4
 	max_tokens = 100
 	data_dir = './data/datasets/strategyqa'
@@ -41,7 +41,7 @@ def main():
 	)
 	
 	print('Setting up vLLM model')
-	vllm_model = LLM(model=model, trust_remote_code=True)
+	vllm_model = LLM(model=model, trust_remote_code=True, gpu_memory_utilization=1.0)
 	
 	rng_gen = default_rng(40)
 	train_idxs = rng_gen.choice(train_samples.shape[0], 5, replace=False)
@@ -76,6 +76,7 @@ def main():
 	# print('Making inference with HF')
 	# tokens = tokenizer([context], return_tensors="pt").to("cuda")
 	# yes_id, no_id = tokenizer.encode("yes")[0], tokenizer.encode("no")[0]
+	
 	# print('Generating answer')
 	# generated = hf_model.generate(**tokens, num_beams=num_beams, max_new_tokens=max_tokens, output_scores=True, return_dict_in_generate=True)
 	# print('Decoding answer')

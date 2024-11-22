@@ -55,6 +55,7 @@ parser.add_argument('--leg-agents', type=int, default=N_LEG_AGENTS, help='Number
 parser.add_argument('--steps', type=int, default=STEPS_EPISODE, help='Maximum number of steps per episode')
 parser.add_argument('--render', action='store_true', help='Flag that denotes the usage of a render')
 parser.add_argument('--paralell', action='store_true', help='Flag that denotes the usage of a render')
+parser.add_argument('--start-run', dest='start_run', type=int, default=0, help='Starting test run number')
 
 input_args = parser.parse_args()
 field_len = input_args.field_len
@@ -69,10 +70,11 @@ n_leg_agents = input_args.leg_agents
 steps = input_args.steps
 render = input_args.render or USE_RENDER
 paralell = input_args.paralell or RUN_PARALELL
+start_run = input_args.start_run
 
-args = (' --mode %d --runs %d --n-agents %d --player-level %d --field-size %d'
+args = (' --mode %d --runs %d --n-agents %d --player-level %d --field-size %d --start-run %d'
         ' --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d --n-leg-agents %d --architecture %s --gamma %f'
-        % (mode, n_tests, N_AGENTS, PLAYER_LVL, field_len, max_foods, FOOD_LEVEL, steps, max_spawn_foods, n_leg_agents, ARCHITECTURE, GAMMA))
+        % (mode, n_tests, N_AGENTS, PLAYER_LVL, field_len, start_run, max_foods, FOOD_LEVEL, steps, max_spawn_foods, n_leg_agents, ARCHITECTURE, GAMMA))
 args += ((' --render' if render else '') + (' --paralell' if paralell else '') + (' --use_gpu' if USE_GPU else '') + (" --fraction %f" % PRECOMP_FRAC) +
          (' --cnn' if USE_CNN else '') + (' --dueling' if USE_DUELING else '') + (' --ddqn' if USE_DDQN else '') + (' --vdn' if USE_VDN else '') +
          (' --models-dir %s' % models_dir if models_dir != '' else '') + (' --data-dir %s' % data_dir if data_dir != '' else '') +

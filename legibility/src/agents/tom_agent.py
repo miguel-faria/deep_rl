@@ -75,13 +75,9 @@ class TomAgent(Agent):
 		goals_likelihood = []
 		
 		for task_id in self._tasks:
-			# q = jax.device_get(self._goal_models[task_id].q_network.apply(self._goal_models[task_id].online_state.params, obs)[0])
 			q = jax.device_get(self._sample_models[task_id].q_network.apply(self._sample_models[task_id].online_state.params, obs)[0])
-			print(task_id, jnp.exp(self._sign * conf * (q[a] - q.max())), jnp.sum(jnp.exp(self._sign * conf * (q - q.max()))), jnp.exp(self._sign * conf * (q[a] - q.max())) / jnp.sum(jnp.exp(self._sign * conf * (q - q.max()))))
-			# print(task_id, jnp.exp(self._sign * conf * q[a]), jnp.sum(jnp.exp(self._sign * conf * q)), jnp.exp(self._sign * conf * q[a]) / jnp.sum(jnp.exp(self._sign * conf * q)))
 			goals_likelihood += [jnp.exp(self._sign * conf * (q[a] - q.max())) / jnp.sum(jnp.exp(self._sign * conf * (q - q.max())))]
-		# goals_likelihood += [jnp.exp(self._sign * conf * q[a]) / jnp.sum(jnp.exp(self._sign * conf * q))]
-		
+
 		goals_likelihood = jnp.array(goals_likelihood)
 		return goals_likelihood
 	
@@ -112,16 +108,11 @@ class TomAgent(Agent):
 		
 		state, action = sample
 		sample_prob = self.sample_probability(state, action, conf)
-		print(sample_prob)
-		# sample_likelihoods = self._goal_prob * sample_prob
-		# self._goal_prob += sample_prob
-		# self._goal_prob = self._goal_prob / self._goal_prob.sum()
 		self._interaction_likelihoods = jnp.vstack((self._interaction_likelihoods, sample_prob))
 		
 		likelihoods = jnp.cumprod(self._interaction_likelihoods, axis=0)[-1]
 		goals_prob = likelihoods * self._goal_prob
 		goals_prob_sum = goals_prob.sum()
-		print(likelihoods, goals_prob, goals_prob_sum)
 		if goals_prob_sum == 0:
 			p_max = jnp.ones(self._n_tasks) / self._n_tasks
 		else:
@@ -137,14 +128,12 @@ class TomAgent(Agent):
 	def action(self, obs: jnp.ndarray, sample: Tuple[jnp.ndarray, int], conf: float, logger: Logger, task: str = '') -> int:
 		if task == '':
 			predict_task, predict_conf = self.bayesian_task_inference(sample, conf, logger)
-			print('Prediction: %s\tConfidence: %f' % (predict_task, predict_conf))
 			self._predict_task = predict_task
 		return super().action(obs, sample, conf, logger, self._predict_task)
 	
 	def sub_acting(self, obs: jnp.ndarray, logger: Logger, act_try: int, sample: Tuple[jnp.ndarray, int], conf: float, task: str = '') -> int:
 		if task == '':
 			predict_task, predict_conf = self.bayesian_task_inference(sample, conf, logger)
-			print('Prediction: %s\tConfidence: %f' % (predict_task, predict_conf))
 			self._predict_task = predict_task
 		return super().sub_acting(obs, logger, act_try, sample, conf, self._predict_task)
 

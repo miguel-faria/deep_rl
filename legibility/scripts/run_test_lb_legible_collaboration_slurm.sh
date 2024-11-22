@@ -70,13 +70,13 @@ else
 fi
 
 #module load python cuda
-export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
+export XLA_PYTHON_CLIENT_MEM_FRACTION=0.25
 source "$HOME"/miniconda3/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   for (( job=1; job<=n_jobs; job++ )); do
-    echo "Launching job "$job" out of "$n_jobs""
     start_test=$(( (job - 1) * tests_job ))
     end_test=$(( job * tests_job ))
+    echo "Launching job "$job" out of "$n_jobs", starting at "$start_test" and ending at "$end_test""
 
     # Adjust the end test for the last job if it exceeds the total tests
     if [ $end_test -gt $n_tests ]; then
@@ -84,19 +84,19 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
     fi
 
     # Generate the sbatch script for this job
-    sbatch_script=""$script_path"/sbatch_job_"$test_mode"_"$job".sh"
+    sbatch_script=""$script_path"/sbatch_job_"$test_mode"_"$job"_"$start_test"-"$end_test".sh"
     if [ $job -gt 1 ] ; then
       cat > "$sbatch_script" <<EOF
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
-#SBATCH --job-name=test_lb_legible_collaboration_${test_mode}_${job}
+#SBATCH --job-name=test_lb_legible_collaboration_${test_mode}_${job}_${start_test}_${end_test}
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --tasks-per-node=1
 #SBATCH --gres=gpu:1
 #SBATCH --time=04:00:00
-#SBATCH --mem=4G
+#SBATCH --mem=8G
 #SBATCH --qos=gpu-short
 #SBATCH --output=job-%x-%j.out
 #SBATCH --partition=a6000
@@ -109,13 +109,13 @@ EOF
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
-#SBATCH --job-name=test_lb_legible_collaboration_${test_mode}_${job}
+#SBATCH --job-name=test_lb_legible_collaboration_${test_mode}_${job}_${start_test}_${end_test}
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --tasks-per-node=1
 #SBATCH --gres=gpu:1
 #SBATCH --time=04:00:00
-#SBATCH --mem=4G
+#SBATCH --mem=8G
 #SBATCH --qos=gpu-short
 #SBATCH --output=job-%x-%j.out
 #SBATCH --partition=a6000

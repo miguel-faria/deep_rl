@@ -17,7 +17,7 @@ eval set -- "$options"
 while [ $# -gt 0 ]
 do
   case $1 in
-    -n) n_tests=${2}; shift ;;
+    -n) max_tests=${2}; shift ;;
     -m) test_mode=${2}; shift ;;
     -s) start_run=${2}; shift ;;
     -j) tests_job=${2}; shift ;;
@@ -31,8 +31,8 @@ do
     shift
 done
 
-if [ -z "$n_tests" ]; then
-  n_tests=250
+if [ -z "$max_tests" ]; then
+  max_tests=250
 fi
 
 if [ -z "$test_mode" ]; then
@@ -59,6 +59,7 @@ if [ -z "$field_len" ]; then
   field_len=8
 fi
 
+n_tests=$(( max_tests - start_run))
 n_jobs=$(( (n_tests + tests_job - 1) / tests_job ))
 
 if [ -n "${SLURM_JOB_ID:-}" ] ; then
@@ -74,13 +75,13 @@ export XLA_PYTHON_CLIENT_MEM_FRACTION=0.25
 source "$HOME"/miniconda3/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   for (( job=1; job<=n_jobs; job++ )); do
-    start_test=$(( (job - 1) * tests_job ))
-    end_test=$(( job * tests_job ))
+    start_test=$(( start_run + (job - 1) * tests_job ))
+    end_test=$(( start_test + job * tests_job ))
     echo "Launching job "$job" out of "$n_jobs", starting at "$start_test" and ending at "$end_test""
 
     # Adjust the end test for the last job if it exceeds the total tests
-    if [ $end_test -gt $n_tests ]; then
-      end_test=$n_tests
+    if [ $end_test -gt $max_tests ]; then
+      end_test=$max_tests
     fi
 
     # Generate the sbatch script for this job
@@ -127,7 +128,7 @@ EOF
     echo "Job ID: "$job_id""
   done
 else
-  python "$script_path"/run_test_lb_legible_collaboration.py --tests "$n_tests" --mode "$test_mode"
+  python "$script_path"/run_test_lb_legible_collaboration.py --tests "$max_tests" --mode "$test_mode"
 fi
 
 conda deactivate

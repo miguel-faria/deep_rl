@@ -19,7 +19,7 @@ def cot_context(test_sample: Dict, ic_samples: List[Dict]) -> str:
 
 def main():
 
-	model = 'google/gemma-2b'
+	model = 'EleutherAI/pile-t5-base'
 	num_beams = 4
 	max_tokens = 100
 	data_dir = './data/datasets/strategyqa'
@@ -40,11 +40,11 @@ def main():
 	)
 	
 	print('Setting up vLLM model')
-	vllm_model = LLM(model=model, trust_remote_code=True)
+	vllm_model = LLM(model=model, trust_remote_code=True, gpu_memory_utilization=1.0)
 	
 	print('Setting up HF models')
-	tokenizer = AutoTokenizer.from_pretrained(model, cache_dir=cache_dir, use_fast=False)
-	hf_model = AutoModelForCausalLM.from_pretrained(model, device_map="cuda", cache_dir=cache_dir)
+	# tokenizer = AutoTokenizer.from_pretrained(model, cache_dir=cache_dir, use_fast=False)
+	# hf_model = AutoModelForCausalLM.from_pretrained(model, device_map="cuda", cache_dir=cache_dir)
 	
 	rng_gen = default_rng(40)
 	train_idxs = rng_gen.choice(train_samples.shape[0], 5, replace=False)
@@ -59,23 +59,26 @@ def main():
 	answer = outputs[0].outputs[0].text
 	logprobs = outputs[0].outputs[0].logprobs
 	answer_end = answer.index('\n')
-	logprobs_decoded = [logprob[list(logprob.keys())[0]].decoded_token.strip() for logprob in logprobs]
-	answer_logprobs = logprobs_decoded.index('yes') if 'yes' in logprobs_decoded else logprobs_decoded.index('no')
+	logprobs_text = [logprob.values()[0].decoded_token.strip() for logprob in logprobs]
+	logprobs_vals = [logprob.values()[0].logprob for logprob in logprobs]
+	answer_logprobs = logprobs_text.index('yes') if 'yes' in logprobs_text else logprobs_text.index('no')
 	answer = answer[:answer_end]
 	print(answer)
+	print(logprobs_text[:answer_logprobs+1])
+	print(logprobs_vals[:answer_logprobs+1])
 	# print(softmax(logprobs[answer_logprobs][list(logprobs[answer_logprobs].keys())[0]].logprob, dim=-1))
 	
-	print('Making inference with HF')
-	tokens = tokenizer([context], return_tensors="pt").to("cuda")
-	print('Generating answer')
-	generated = hf_model.generate(**tokens, num_beams=num_beams, max_new_tokens=max_tokens, output_scores=True, return_dict_in_generate=True)
-	print('Decoding answer')
-	output = tokenizer.batch_decode(generated['sequences'], skip_special_tokens=True)[0].strip()
-	output = output[len(context):]
-	output = output[:output.index('\n')]
+	# print('Making inference with HF')
+	# tokens = tokenizer([context], return_tensors="pt").to("cuda")
+	# print('Generating answer')
+	# generated = hf_model.generate(**tokens, num_beams=num_beams, max_new_tokens=max_tokens, output_scores=True, return_dict_in_generate=True)
+	# print('Decoding answer')
+	# output = tokenizer.batch_decode(generated['sequences'], skip_special_tokens=True)[0].strip()
+	# output = output[len(context):]
+	# output = output[:output.index('\n')]
 	# output = output[0].strip()[:output.index('\n')].strip() if '\n' in output else output[0].strip().strip()
 	# softmax(generated['scores'][answer_id], dim=-1)
-	print(output)
+	# print(output)
 	# print(generated[0].squeeze().tolist())
 	
 

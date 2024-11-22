@@ -76,13 +76,13 @@ source "$HOME"/miniconda3/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   for (( job=1; job<=n_jobs; job++ )); do
     start_test=$(( start_run + (job - 1) * tests_job ))
-    end_test=$(( start_test + job * tests_job ))
-    echo "Launching job "$job" out of "$n_jobs", starting at "$start_test" and ending at "$end_test""
-
+    end_test=$(( start_test + tests_job ))
     # Adjust the end test for the last job if it exceeds the total tests
     if [ $end_test -gt $max_tests ]; then
       end_test=$max_tests
     fi
+
+    echo "Launching job "$job" out of "$n_jobs", starting at "$start_test" and ending at "$end_test""
 
     # Generate the sbatch script for this job
     sbatch_script=""$script_path"/sbatch_job_"$test_mode"_"$job"_"$start_test"-"$end_test".sh"

@@ -3,6 +3,7 @@ import re
 
 from pandas import DataFrame
 from torch.nn.functional import softmax
+from torch import Tensor
 from typing import Dict, List, Tuple, Union
 from machine_teaching.models.vllm.model_vllm import ModelVLLM
 from machine_teaching.models.model import UnidentifiedTaskError, UnidentifiedExplanationError
@@ -46,6 +47,10 @@ class TeacherModel(ModelVLLM):
 		outputs = self.gen_model.generate(context, gen_params)
 		
 		generated_text = outputs[0].outputs[0].text
+		logprobs = [list(logprob.values())[0] for logprob in outputs[0].outputs[0].logprobs]
+		answer_end = generated_text.index('\n')
+		logprobs_decoded = [logprob.decoded_token.strip() for logprob in logprobs]
+		logprobs_values = Tensor([logprob.logprob for logprob in logprobs])
 		
 		idx = 1 if "llama" in self._model_name else 0
 		if self._task == "strategy_qa":

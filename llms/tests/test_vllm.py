@@ -20,7 +20,7 @@ def cot_context(test_sample: Dict, ic_samples: List[Dict]) -> str:
 
 def main():
 
-	model = 'EleutherAI/pile-t5-base'
+	model = 'google/gemma-2b'
 	num_beams = 4
 	max_tokens = 100
 	data_dir = './data/datasets/strategyqa'
@@ -37,7 +37,8 @@ def main():
 				temperature=0.0,
 				top_k=num_beams,
 				max_tokens=max_tokens,
-				logprobs=1
+				logprobs=2,
+				spaces_between_special_tokens=False,
 	)
 	
 	print('Setting up vLLM model')
@@ -53,18 +54,25 @@ def main():
 	
 	print('Making inference with vLLM')
 	outputs = vllm_model.generate(context, gen_params)
+	no_id = vllm_model.get_tokenizer().encode('no')[1]
+	yes_id = vllm_model.get_tokenizer().encode('yes')[1]
+	# print(no_id, yes_id)
+	# print(outputs[0].outputs[0].logprobs)
 	answer = outputs[0].outputs[0].text
-	logprobs = [list(logprob.values())[0] for logprob in outputs[0].outputs[0].logprobs]
+	logprobs = [list(logprob.values()) for logprob in outputs[0].outputs[0].logprobs]
 	answer_end = answer.index('\n')
-	logprobs_decoded = [logprob.decoded_token.strip() for logprob in logprobs]
-	logprobs_values = Tensor([logprob.logprob for logprob in logprobs])
-	print(logprobs_decoded)
-	print(logprobs_values)
+	logprobs_decoded = [logprob[0].decoded_token.strip() for logprob in logprobs]
+	logprobs_values = Tensor([logprob[0].logprob for logprob in logprobs])
 	answer_logprobs = logprobs_decoded.index('yes') if 'yes' in logprobs_decoded else logprobs_decoded.index('no')
+	logprobs_decoded_alt = [logprobs[idx][0].decoded_token.strip() if idx != answer_logprobs else logprobs[idx][1].decoded_token.strip() for idx in range(len(logprobs))]
+	logprobs_values_alt = Tensor([logprobs[idx][0].logprob if idx != answer_logprobs else logprobs[idx][1].logprob for idx in range(len(logprobs))])
+	# print(logprobs_decoded)
+	# print(logprobs_values)
 	answer = answer[:answer_end]
 	print(answer)
-	print()
-	print(softmax(logprobs_values, dim=-1)[:answer_logprobs])
+	for text, text_alt, prob, prob_alt in zip(logprobs_decoded[:answer_logprobs+1], logprobs_decoded_alt[:answer_logprobs+1],
+											  softmax(logprobs_values, dim=-1)[:answer_logprobs+1], softmax(logprobs_values_alt, dim=-1)[:answer_logprobs+1]):
+		print(text, prob.numpy(), text_alt, prob_alt.numpy())
 	# print(answer_logprobs)
 	# print(logprobs[answer_logprobs][list(logprobs[answer_logprobs].keys())[0]].logprob)
 
@@ -72,11 +80,11 @@ def main():
 	# print('Setting up HF models')
 	# tokenizer = AutoTokenizer.from_pretrained(model, cache_dir=cache_dir, use_fast=False)
 	# hf_model = AutoModelForCausalLM.from_pretrained(model, device_map="cuda", cache_dir=cache_dir)
-	
+
 	# print('Making inference with HF')
 	# tokens = tokenizer([context], return_tensors="pt").to("cuda")
 	# yes_id, no_id = tokenizer.encode("yes")[0], tokenizer.encode("no")[0]
-	
+
 	# print('Generating answer')
 	# generated = hf_model.generate(**tokens, num_beams=num_beams, max_new_tokens=max_tokens, output_scores=True, return_dict_in_generate=True)
 	# print('Decoding answer')
@@ -86,13 +94,11 @@ def main():
 	# print(output)
 	# generated_tokens = generated[0].squeeze().tolist()
 	# answer_id = 0
-	# if yes_id in generated_tokens or no_id in generated_tokens:
-	# 	answer_id = generated_tokens.index(yes_id) - 1 if yes_id in generated_tokens else generated_tokens.index(no_id) - 1
 	# scores = softmax(generated['scores'][answer_id], dim=-1)
-	# print(scores)
+	# print(scores, scores.shape)
 	# yes_score, no_score = scores[0][yes_id].item(), scores[0][no_id].item()
+	# print(yes_id, no_id)
 	# print(yes_score, no_score)
-	# print(generated[0].squeeze().tolist())
 	
 
 if __name__ == '__main__':

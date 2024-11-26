@@ -14,9 +14,9 @@ from tqdm import tqdm
 class TeacherModel(ModelVLLM):
 	
 	def __init__(self, model_name: str, samples: List[Dict] = None, gen_model: LLM = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
-				 use_explanations: bool = True):
+				 num_logprobs: int = 2, use_explanations: bool = True):
 		
-		super().__init__(model_name, samples, gen_model, expl_type, task, max_tokens, num_beams, use_explanations)
+		super().__init__(model_name, samples, gen_model, expl_type, task, max_tokens, num_beams, num_logprobs, use_explanations)
 	
 	def get_context(self, sample: Dict, explanation: Union[List, str] = None, ic_samples: List[Dict] = None) -> str:
 		if ic_samples is None:
@@ -42,9 +42,12 @@ class TeacherModel(ModelVLLM):
 				temperature=0.0,
 				top_k=self._num_beams,
 				max_tokens=self._max_tokens,
-				logprobs=1
+				logprobs=self._n_logprobs
 		)
 		outputs = self.gen_model.generate(context, gen_params)
+		no_id = self.gen_model.get_tokenizer().encode(' no')[1]
+		yes_id = self.gen_model.get_tokenizer().encode(' yes')[1]
+		end_id = self.gen_model.get_tokenizer().encode(' yes')[1]
 		
 		generated_text = outputs[0].outputs[0].text
 		logprobs = [list(logprob.values())[0] for logprob in outputs[0].outputs[0].logprobs]

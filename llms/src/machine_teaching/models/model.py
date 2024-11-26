@@ -104,10 +104,10 @@ class Model:
 		
 		elif self._task == 'ec_qa':
 			context += "\n\n".join(
-					['Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\n Choice 3: %s\nChoice 4: %s\n Choice 5:%s\nA: %s So the correct choice is %s' %
+					['Q: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5:%s\nA: %s So the correct choice is %s' %
 					 (ics['question'], ics['options'][0], ics['options'][1], ics['options'][2], ics['options'][3], ics['options'][4], ics['explanation'], ics['answer'])
 					 for ics in ic_samples])
-			context += ('\n\nQ: %s\nAnswer Choices:\n Choice 1: %s\nChoice 2: %s\n Choice 3: %s\nChoice 4: %s\n Choice 5: %s\nA:' %
+			context += ('\n\nQ: %s\nAnswer Choices:\nChoice 1: %s\nChoice 2: %s\nChoice 3: %s\nChoice 4: %s\nChoice 5: %s\nA:' %
 						(test_sample['question'], test_sample['options'][0], test_sample['options'][1], test_sample['options'][2],
 						 test_sample['options'][3], test_sample['options'][4]))
 		

@@ -100,59 +100,20 @@ class StudentModel(ModelVLLM):
 				print('No score = %s' % no_score)
 		
 		elif self._task == "ec_qa":
+			# Find model answer to question
 			option1_id = self.gen_model.get_tokenizer().encode('1')
 			option2_id = self.gen_model.get_tokenizer().encode('2')
 			option3_id = self.gen_model.get_tokenizer().encode('3')
 			option4_id = self.gen_model.get_tokenizer().encode('4')
 			option5_id = self.gen_model.get_tokenizer().encode('5')
-			
-			if with_explanation and not explanation:
-				if "llama" in self._model_name:
-					end_id = self.tokenizer.encode("\n")[2]
-					answer_id = len(tokens["input_ids"][0])
-				else:
-					end_id = self.tokenizer.encode("\n")[0]
-					answer_id = 1
-				
-				generated_tokens = generated[0].squeeze().tolist()[answer_id:]
-				if end_id in generated_tokens:
-					generated_tokens = generated_tokens[:generated_tokens.index(end_id)]
-				
-				if option1_id in generated_tokens:
-					answer_id = self.get_answer_idx(generated_tokens, option1_id)
-				elif option2_id in generated_tokens:
-					answer_id = self.get_answer_idx(generated_tokens, option2_id)
-				elif option3_id in generated_tokens:
-					answer_id = self.get_answer_idx(generated_tokens, option3_id)
-				elif option4_id in generated_tokens:
-					answer_id = self.get_answer_idx(generated_tokens, option4_id)
-				elif option5_id in generated_tokens:
-					answer_id = self.get_answer_idx(generated_tokens, option5_id)
-				else:
-					found_text = True
-					if option1_text_id in generated_tokens:
-						answer_id = self.get_answer_idx(generated_tokens, option1_text_id)
-					if option2_text_id in generated_tokens:
-						answer_id = max(answer_id, self.get_answer_idx(generated_tokens, option2_text_id))
-					if option3_text_id in generated_tokens:
-						answer_id = max(answer_id, self.get_answer_idx(generated_tokens, option3_text_id))
-					if option4_text_id in generated_tokens:
-						answer_id = max(answer_id, self.get_answer_idx(generated_tokens, option4_text_id))
-					if option5_text_id in generated_tokens:
-						answer_id = max(answer_id, self.get_answer_idx(generated_tokens, option5_text_id))
-			else:
-				answer_id = 0
-				if output.split(" ")[0] not in ["1", "2", "3", "4", "5"]:
-					found_text = True
-			
-			scores = softmax(generated['scores'][answer_id], dim=-1)
-			if found_text:
-				option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_text_id].item(), scores[0][option2_text_id].item(), scores[0][option3_text_id].item(),
-																							 scores[0][option4_text_id].item(), scores[0][option5_text_id].item())
-			else:
-				option1_score, option2_score, option3_score, option4_score, option5_score = (scores[0][option1_id].item(), scores[0][option2_id].item(), scores[0][option3_id].item(),
-																							 scores[0][option4_id].item(), scores[0][option5_id].item())
-			
+
+			# Get class scores
+			answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
+			answer_tokens_alt = list(logprobs[answer_pos].keys())
+			scores = softmax(answer_logprobs, dim=-1)
+
+
+
 			class_scores = [option1_score, option2_score, option3_score, option4_score, option5_score]
 			
 			if debug:

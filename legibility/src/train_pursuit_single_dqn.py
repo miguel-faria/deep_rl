@@ -446,18 +446,19 @@ def main():
 											 buffer_data=(args.buffer_smart_add, args.buffer_method))
 
 			if use_lower_model and n_preys > 1:
-				prev_model_path = model_path.parent.parent.absolute() / 'best'
-				if (prev_model_path / ('%d-preys' % max(n_preys - 1, 1))).exists():
+				prev_model_path = model_path.parent.absolute() / 'best'
+				logger.info('Model pahth: ' + str(prev_model_path))
+				if (prev_model_path / ('%d-preys_single_model.model' % max(n_preys - 1, 1))).exists():
 					logger.info('Using model trained with %d foods spawned as a baseline' % max(n_preys - 1, 1))
-					curriculum_model_path = str(prev_model_path / ('%d-preys' % max(n_preys - 1, 1)))
+					curriculum_model_path = str(prev_model_path / ('%d-preys_single_model.model' % max(n_preys - 1, 1)))
 				else:
 					logger.info('Model with one less prey not found, training from scratch')
 					curriculum_model_path = ''
 			elif use_higher_model and n_preys < n_preys:
-				next_model_path = model_path.parent.parent.absolute() / 'best'
-				if (next_model_path / ('%d-preys' % min(n_preys + 1, n_preys))).exists():
+				next_model_path = model_path.parent.absolute() / 'best'
+				if (next_model_path / ('%d-preys_single_model.model' % min(n_preys + 1, n_preys))).exists():
 					logger.info('Using model trained with %d foods spawned as a baseline' % min(n_preys + 1, n_preys))
-					curriculum_model_path = str(next_model_path / ('%d-preys' % min(n_preys + 1, n_preys)))
+					curriculum_model_path = str(next_model_path / ('%d-preys_single_model.model' % min(n_preys + 1, n_preys)))
 				else:
 					logger.info('Model with one more prey not found, training from scratch')
 					curriculum_model_path = ''

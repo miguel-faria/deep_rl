@@ -44,55 +44,81 @@ class TeacherModel(ModelVLLM):
 				max_tokens=self._max_tokens,
 				logprobs=self._n_logprobs
 		)
+
+		# Generate answer
 		outputs = self.gen_model.generate(context, gen_params)
-		no_id = self.gen_model.get_tokenizer().encode(' no')[1]
-		yes_id = self.gen_model.get_tokenizer().encode(' yes')[1]
-		end_id = self.gen_model.get_tokenizer().encode(' yes')[1]
-		
-		generated_text = outputs[0].outputs[0].text
-		logprobs = [list(logprob.values())[0] for logprob in outputs[0].outputs[0].logprobs]
-		answer_end = generated_text.index('\n')
-		logprobs_decoded = [logprob.decoded_token.strip() for logprob in logprobs]
-		logprobs_values = Tensor([logprob.logprob for logprob in logprobs])
+
+		# Exclude extra generation from answer
+		nl_id = self.gen_model.get_tokenizer().encode('\n')[1]
+		nldouble_id = self.gen_model.get_tokenizer().encode('\n\n')[1]
+		logprobs = outputs[0].outputs[0].logprobs
+		tokens = outputs[0].outputs[0].token_ids
+		nl_pos = tokens.index(nl_id) if nl_id in tokens else self._max_tokens
+		nldouble_pos = tokens.index(nldouble_id) if nldouble_id in tokens else self._max_tokens
+		answer_end = nl_pos if nl_pos < nldouble_pos else nldouble_pos
+		tokens = tokens[:answer_end]
+		logprobs = logprobs[:answer_end]
 		
 		idx = 1 if "llama" in self._model_name else 0
 		if self._task == "strategy_qa":
-			yes_id, no_id = self.gen_model.encode("yes")[idx], self.gen_model.encode("no")[idx]
-			answer_id = 0
-			generated_tokens = self.gen_model.encode(generated_text)
-			if with_explanation and (yes_id in generated_tokens or no_id in generated_tokens):
-				answer_id = generated_tokens.index(yes_id) - 1 if yes_id in generated_tokens else generated_tokens.index(no_id) - 1
-			scores = softmax(outputs[0].outputs[0].logits[answer_id], dim=-1)
-			
-			yes_score, no_score = scores[0][yes_id].item(), scores[0][no_id].item()
-			
+			# Find model answer to question
+			no_id = self.gen_model.get_tokenizer().encode(' no')[1]
+			yes_id = self.gen_model.get_tokenizer().encode(' yes')[1]
+			no_pos = tokens.index(no_id) if no_id in tokens else self._max_tokens
+			yes_pos = tokens.index(yes_id) if yes_id in tokens else self._max_tokens
+			answer_pos = yes_pos if yes_pos < no_pos else no_pos
+
+			# Get class scores
+			if answer_pos < self._max_tokens:
+				answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
+				answer_tokens_alt = list(logprobs[answer_pos].keys())
+				scores = softmax(answer_logprobs, dim=-1)
+				yes_score, no_score = scores[answer_tokens_alt.index(yes_id)], scores[answer_tokens_alt.index(no_id)]
+
+			else:
+				yes_score = 0.0
+				no_score = 0.0
+
 			class_scores = [yes_score, no_score]
 			if debug:
 				print('Yes score = %s' % yes_score)
 				print('No score = %s' % no_score)
 		
 		elif self._task == "ec_qa":
-			option_ids = [self.gen_model.encode(str(i))[idx] for i in range(1, 6)]
-			generated_tokens = self.gen_model.encode(generated_text)
-			
-			answer_id = 0
-			if with_explanation:
-				for idx, option_id in enumerate(option_ids):
-					if option_id in generated_tokens:
-						answer_id = idx
-						break
-			
-			# Get probabilities for each option (if available)
-			logits = outputs[0].outputs[0].logits[answer_id]
-			scores = softmax(logits, dim=-1)
-			
-			class_scores = [scores[opt_id].item() for opt_id in option_ids]
+			# Find model answer to question
+			opt1_id = self.gen_model.get_tokenizer().encode('1')[1]
+			opt2_id = self.gen_model.get_tokenizer().encode('2')[1]
+			opt3_id = self.gen_model.get_tokenizer().encode('3')[1]
+			opt4_id = self.gen_model.get_tokenizer().encode('4')[1]
+			opt5_id = self.gen_model.get_tokenizer().encode('5')[1]
+			opt1_pos = tokens.index(opt1_id) if opt1_id in tokens else self._max_tokens
+			opt2_pos = tokens.index(opt2_id) if opt2_id in tokens else self._max_tokens
+			opt3_pos = tokens.index(opt3_id) if opt3_id in tokens else self._max_tokens
+			opt4_pos = tokens.index(opt4_id) if opt4_id in tokens else self._max_tokens
+			opt5_pos = tokens.index(opt5_id) if opt5_id in tokens else self._max_tokens
+			answer_pos = min([opt1_pos, opt2_pos, opt3_pos, opt4_pos, opt5_pos])
+
+			# Get class scores
+			if answer_pos < self._max_tokens:
+				answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
+				answer_tokens_alt = list(logprobs[answer_pos].keys())
+				scores = softmax(answer_logprobs, dim=-1)
+				opt1_score = scores[answer_tokens_alt.index(opt1_id)]
+				opt2_score = scores[answer_tokens_alt.index(opt2_id)]
+				opt3_score = scores[answer_tokens_alt.index(opt3_id)]
+				opt4_score = scores[answer_tokens_alt.index(opt4_id)]
+				opt5_score = scores[answer_tokens_alt.index(opt5_id)]
+
+			else:
+				opt1_score = opt2_score = opt3_score = opt4_score = opt5_score = 0.0
+
+			class_scores = [opt1_score, opt2_score, opt3_score, opt4_score, opt5_score]
 			if debug:
-				print('Option1 score = %s' % class_scores[0])
-				print('Option2 score = %s' % class_scores[1])
-				print('Option3 score = %s' % class_scores[2])
-				print('Option4 score = %s' % class_scores[3])
-				print('Option5 score = %s' % class_scores[4])
+				print('Option1 score = %s' % opt1_score)
+				print('Option2 score = %s' % opt2_score)
+				print('Option3 score = %s' % opt3_score)
+				print('Option4 score = %s' % opt4_score)
+				print('Option5 score = %s' % opt5_score)
 		
 		else:
 			raise UnidentifiedTaskError('Task %s not defined' % self._task)
@@ -105,12 +131,14 @@ class TeacherModel(ModelVLLM):
 		
 		else:
 			context = self.get_context(sample, explanation='', ic_samples=ic_samples)
-			tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-			generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
-			output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
-			
-			if "llama" in self._model_name:
-				output = output[len(context):]
+			gen_params = SamplingParams(
+					temperature=0.0,
+					top_k=self._num_beams,
+					max_tokens=self._max_tokens,
+					logprobs=self._n_logprobs
+			)
+			output = self.gen_model.generate(context, gen_params)[0].outputs[0].text
+			output = output[len(context):] if context in output else output
 			output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
 			
 			if "The correct choice is " in output:
@@ -147,9 +175,7 @@ class TeacherModel(ModelVLLM):
 							print("Regenerating with the explanation")
 						context_samples = self._ic_samples[0] if isinstance(self._ic_samples, tuple) else self._ic_samples
 						context = self.explanation_context(sample, context_samples, explanation)
-						tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-						generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
-						output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
+						output = self.gen_model.generate(context, gen_params)[0].outputs[0].text
 						output = output[len(context):] if context in output else output
 						output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
 						prediction = output.split(" ")[0]

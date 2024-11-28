@@ -47,11 +47,11 @@ class TeacherModel(ModelHF):
 				generated_tokens = generated[0].squeeze().tolist()
 				if yes_id in generated_tokens or no_id in generated_tokens:
 					answer_id = generated_tokens.index(yes_id) - 1 if yes_id in generated_tokens else generated_tokens.index(no_id) - 1
+
 			scores = softmax(generated['scores'][answer_id], dim=-1)
-			
 			yes_score, no_score = scores[0][yes_id].item(), scores[0][no_id].item()
-			
 			class_scores = [yes_score, no_score]
+
 			if debug:
 				print('Yes score = %s' % yes_score)
 				print('No score = %s' % no_score)

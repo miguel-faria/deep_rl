@@ -89,39 +89,56 @@ class StudentModel(ModelVLLM):
 			answer_pos = yes_pos if yes_pos < no_pos else no_pos
 			
 			# Get class scores
-			answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
-			answer_tokens_alt = list(logprobs[answer_pos].keys())
-			scores = softmax(answer_logprobs, dim=-1)
-			yes_score, no_score = scores[answer_tokens_alt.index(yes_id)], scores[answer_tokens_alt.index(no_id)]
+			if answer_pos < self._max_tokens:
+				answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
+				answer_tokens_alt = list(logprobs[answer_pos].keys())
+				scores = softmax(answer_logprobs, dim=-1)
+				yes_score, no_score = scores[answer_tokens_alt.index(yes_id)], scores[answer_tokens_alt.index(no_id)]
+
+			else:
+				yes_score = 0.0
+				no_score = 0.0
+
 			class_scores = [yes_score, no_score]
-			
 			if debug:
 				print('Yes score = %s' % yes_score)
 				print('No score = %s' % no_score)
 		
 		elif self._task == "ec_qa":
 			# Find model answer to question
-			option1_id = self.gen_model.get_tokenizer().encode('1')
-			option2_id = self.gen_model.get_tokenizer().encode('2')
-			option3_id = self.gen_model.get_tokenizer().encode('3')
-			option4_id = self.gen_model.get_tokenizer().encode('4')
-			option5_id = self.gen_model.get_tokenizer().encode('5')
+			opt1_id = self.gen_model.get_tokenizer().encode('1')[1]
+			opt2_id = self.gen_model.get_tokenizer().encode('2')[1]
+			opt3_id = self.gen_model.get_tokenizer().encode('3')[1]
+			opt4_id = self.gen_model.get_tokenizer().encode('4')[1]
+			opt5_id = self.gen_model.get_tokenizer().encode('5')[1]
+			opt1_pos = tokens.index(opt1_id) if opt1_id in tokens else self._max_tokens
+			opt2_pos = tokens.index(opt2_id) if opt2_id in tokens else self._max_tokens
+			opt3_pos = tokens.index(opt3_id) if opt3_id in tokens else self._max_tokens
+			opt4_pos = tokens.index(opt4_id) if opt4_id in tokens else self._max_tokens
+			opt5_pos = tokens.index(opt5_id) if opt5_id in tokens else self._max_tokens
+			answer_pos = min([opt1_pos, opt2_pos, opt3_pos, opt4_pos, opt5_pos])
 
 			# Get class scores
-			answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
-			answer_tokens_alt = list(logprobs[answer_pos].keys())
-			scores = softmax(answer_logprobs, dim=-1)
+			if answer_pos < self._max_tokens:
+				answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
+				answer_tokens_alt = list(logprobs[answer_pos].keys())
+				scores = softmax(answer_logprobs, dim=-1)
+				opt1_score = scores[answer_tokens_alt.index(opt1_id)]
+				opt2_score = scores[answer_tokens_alt.index(opt2_id)]
+				opt3_score = scores[answer_tokens_alt.index(opt3_id)]
+				opt4_score = scores[answer_tokens_alt.index(opt4_id)]
+				opt5_score = scores[answer_tokens_alt.index(opt5_id)]
 
+			else:
+				opt1_score = opt2_score = opt3_score = opt4_score = opt5_score = 0.0
 
-
-			class_scores = [option1_score, option2_score, option3_score, option4_score, option5_score]
-			
+			class_scores = [opt1_score, opt2_score, opt3_score, opt4_score, opt5_score]
 			if debug:
-				print('Option1 score = %s' % option1_score)
-				print('Option2 score = %s' % option2_score)
-				print('Option3 score = %s' % option3_score)
-				print('Option4 score = %s' % option4_score)
-				print('Option5 score = %s' % option5_score)
+				print('Option1 score = %s' % opt1_score)
+				print('Option2 score = %s' % opt2_score)
+				print('Option3 score = %s' % opt3_score)
+				print('Option4 score = %s' % opt4_score)
+				print('Option5 score = %s' % opt5_score)
 		
 		else:
 			raise UnidentifiedTaskError('Task %s not defined' % self._task)
@@ -130,32 +147,35 @@ class StudentModel(ModelVLLM):
 	
 	def predict(self, sample: Dict, ic_samples: List[Dict] = None, debug: bool = False, expl: Union[List, str] = None, intervene: bool = False):
 		context = self.get_context(sample=sample, explanation=expl, intervene=intervene, ic_samples=ic_samples)
-		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
-		output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
+		gen_params = SamplingParams(
+				temperature=0.0,
+				top_k=self._num_beams,
+				max_tokens=self._max_tokens,
+				logprobs=self._n_logprobs
+		)
+		output_text = self.gen_model.generate(context, gen_params)[0].outputs[0].text
+		output_text = output_text[len(context):] if context in output_text else output_text
+		output_text = output_text[:output_text.index('\n')].strip() if '\n' in output_text else output_text.strip()
 		
-		if "llama" in self._model_name:
-			output = output[len(context):]
-		output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
+		if self._task == "ec_qa" and "The correct choice is " in output_text:
+			output_text = output_text[len("The correct choice is "):].strip()
 		
-		if self._task == "ec_qa" and "The correct choice is " in output:
-			output = output[len("The correct choice is "):].strip()
-		
-		if not self._use_explanations or (self._explanation_type.find("cot") == -1 and (self._explanation_type.find("chain") == -1 and self._explanation_type.find("thought") == -1)):
+		if (not self._use_explanations or
+				(self._explanation_type.find("cot") == -1 and (self._explanation_type.find("chain") == -1 and self._explanation_type.find("thought") == -1))):
 			if self._task == "ec_qa":
-				if output not in ["1", "2", "3", "4", "5"]:
+				if output_text not in ["1", "2", "3", "4", "5"]:
 					for i, choice in enumerate(sample["options"]):
-						if choice in output:
-							output = str(i + 1)
+						if choice in output_text:
+							output_text = str(i + 1)
 							break
-			prediction = output.split(" ")[0]
-			explanation = " ".join(output.split(" ")[2:])
+			prediction = output_text.split(" ")[0]
+			explanation = " ".join(output_text.split(" ")[2:])
 			if debug:
 				print('Student Prediction = %s' % prediction)
 				print('Student Explanation = %s' % explanation)
 		else:
-			explanation = output[:output.rfind(".") + 1] if self._task != "gsm8k" else output
-			prediction = output.split(" ")[-1]
+			explanation = output_text[:output_text.rfind(".") + 1] if self._task != "gsm8k" else output_text
+			prediction = output_text.split(" ")[-1]
 			if debug:
 				print('Student Prediction = %s' % prediction)
 				print('Student Explanation = %s' % explanation)
@@ -163,7 +183,7 @@ class StudentModel(ModelVLLM):
 			if self._task == "ec_qa":
 				if prediction not in ["1", "2", "3", "4", "5"]:
 					for i, choice in enumerate(sample["options"]):
-						if choice in output:
+						if choice in output_text:
 							prediction = str(i + 1)
 							break
 			
@@ -172,12 +192,10 @@ class StudentModel(ModelVLLM):
 					if debug:
 						print("Regenerating with the explanation")
 					context = self.teacher_explanation_context(sample, explanation)
-					tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
-					generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens)
-					output = self.tokenizer.batch_decode(generated, skip_special_tokens=True)[0].strip()
-					output = output[len(context):] if context in output else output
-					output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
-					prediction = output.split(" ")[-1]
+					output_text = self.gen_model.generate(context, gen_params)[0].outputs[0].text
+					output_text = output_text[len(context):] if context in output_text else output_text
+					output_text = output_text[:output_text.index('\n')].strip() if '\n' in output_text else output_text.strip()
+					prediction = output_text.split(" ")[-1]
 			
 			elif self._task == "gsm8k":
 				prediction = re.sub(r"[^0-9.]", "", prediction)
@@ -192,7 +210,7 @@ class StudentModel(ModelVLLM):
 		
 		return prediction, explanation
 	
-	def predict_batch(self, samples: DataFrame, intervention_indexes_per_budget: List[List[int]] = None, teacher: ModelHF = None, debug: bool = False) -> Tuple[List, List, List]:
+	def predict_batch(self, samples: DataFrame, intervention_indexes_per_budget: List[List[int]] = None, teacher: ModelVLLM = None, debug: bool = False) -> Tuple[List, List, List]:
 		labels = []
 		predictions_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]
 		explanations_per_budget = [[] for _ in range(len(intervention_indexes_per_budget))]

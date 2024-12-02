@@ -5,12 +5,7 @@ from typing import Dict, List, Union, Tuple
 from machine_teaching.models.hf.teacher_model_hf import TeacherModel
 from machine_teaching.models.hf.student_model_hf import StudentModel
 from transformers import PreTrainedModel, PreTrainedTokenizer
-from machine_teaching.models.hf.model_hf import UnidentifiedTaskError
-
-
-class UnidentifiedUtilityMetricError(Exception):
-	"""Raise exception for an intervention strategy type that is not defined"""
-	pass
+from machine_teaching.models.model import UnidentifiedTaskError
 
 
 class TeacherMentalModel(TeacherModel):
@@ -112,17 +107,8 @@ class TeacherMentalModel(TeacherModel):
 			no_inter_context = self.get_student_context(sample, None, False, use_answers)
 			no_inter_scores, no_inter_output = self.predict_prompt(no_inter_context, sample)
 
-			# print('AI simulated answer with no intervention (Mental Model) = %s' % no_inter_output)
-
 			inter_context = self.get_student_context(sample, None, True, use_answers)
 			inter_scores, inter_output = self.predict_prompt(inter_context, sample)
-			
-			# print('No intervention context: ', no_inter_context, '\n')
-			# print('Intervention context: ', inter_context, '\n')
-			
-			# print('AI simulated answer with teacher intervention (Mental Model) = %s' % inter_output)
-			# print('No intervention scores: ', no_inter_scores)
-			# print('Intervention scores: ', inter_scores)
 
 			if self._task == "strategy_qa":
 				if correct_answer == "yes":
@@ -155,8 +141,6 @@ class TeacherMentalModel(TeacherModel):
 				context = self.get_student_context(sample, None, True, use_answers)
 			option_scores, output = self.predict_prompt(context, sample)
 
-			# print('AI simulated answer with %sintervention (Mental Model) = %s' % ('no ' if self._mm_intervention.find('no') != -1 else '', output))
-
 			if self._task == "strategy_qa":
 				if correct_answer == "yes":
 					return output, option_scores[0]
@@ -188,7 +172,7 @@ class TeacherMentalModel(TeacherModel):
 				if self._utility_type.find('no') != -1:
 					class_scores = student.predict_confidence(sample)
 				else:
-					_, explanation = self.gen_model.predict(sample)
+					_, explanation = self.predict(sample, ic_samples=self.teacher_samples)
 					class_scores = student.predict_confidence(sample, with_explanation=True, explanation=explanation)
 				if self._task == 'strategy_qa':
 					if sample["answer"] == "yes":
@@ -205,7 +189,7 @@ class TeacherMentalModel(TeacherModel):
 				class_scores = student.predict_confidence(sample)
 				return min(class_scores)
 			elif self._utility_type.find('utility') != -1 and self._utility_type.find('correct') != -1:
-				_, explanation = self.gen_model.predict(sample)
+				_, explanation = self.predict(sample, ic_samples=self.teacher_samples)
 				intervention_class_scores = student.predict_confidence(sample, with_explanation=True, explanation=explanation)
 				no_intervention_class_scores = student.predict_confidence(sample, with_explanation=False, explanation='')
 				if self._task == 'strategy_qa':
@@ -223,7 +207,7 @@ class TeacherMentalModel(TeacherModel):
 				raise UnidentifiedUtilityMetricError('Utility metric %s not defined' % self._utility_type)
 
 		elif self._utility_type.find('teacher') != -1 and self._utility_type.find('confidence') != -1:
-			class_scores = self.predict_confidence(sample, with_explanation=True)
+			class_scores = self.predict_confidence(sample, with_explanation=True, ic_samples=self.teacher_samples)
 			if self._task == "strategyQA":
 				return class_scores[0] if sample["answer"] == "yes" else class_scores[1]
 			elif self._task == "ecqa":

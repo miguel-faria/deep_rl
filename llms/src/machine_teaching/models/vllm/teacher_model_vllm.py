@@ -36,8 +36,8 @@ class TeacherModel(ModelVLLM):
 			else:
 				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 	
-	def predict_confidence(self, sample: Dict, with_explanation: bool = False, debug: bool = False) -> List[float]:
-		context = self.get_context(sample)
+	def predict_confidence(self, sample: Dict, with_explanation: bool = False, debug: bool = False, ic_samples: List[Dict] = None) -> List[float]:
+		context = self.get_context(sample, explanation='', ic_samples=ic_samples)
 		gen_params = SamplingParams(
 				temperature=0.0,
 				top_k=self._num_beams,

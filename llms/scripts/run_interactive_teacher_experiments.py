@@ -12,6 +12,7 @@ data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 USE_SHELL = False
 
 TASK = 'strategy_qa'
+LLM_LIB = 'vllm'
 DATASET_DIR = data_dir / 'datasets' / 'strategyqa'
 CACHE_DIR = data_dir.parent.absolute() / 'cache'
 TRAIN_FILE = 'train.json'
@@ -39,6 +40,7 @@ USE_DECEPTION = False
 USE_GOLD_LABEL = True
 
 parser = argparse.ArgumentParser(description='Interactive teacher experiments')
+parser.add_argument('--llm-lib', dest='llm_lib', default=LLM_LIB, type=str, choices=['hf', 'vllm'], help='LLM transformer lib to use, either HuggingFace (hf) or vLLM (vllm)')
 parser.add_argument('--budgets', dest='budgets', default=BUDGETS, type=float, nargs='+',
                     help='Interaction budgets to test the teaching. Default: [0, 0.2, 0.4, 0.6, 0.8, 1.0]')
 parser.add_argument('--cache-dir', dest='cache_dir', default=CACHE_DIR, type=str, help='Path to the cache directory, where downladed models are stored')
@@ -64,6 +66,7 @@ input_args = parser.parse_args()
 budgets = input_args.budgets
 cache_dir = input_args.cache_dir
 dataset_dir = input_args.data_dir
+llm_lib = input_args.llm_lib
 intervention_threshold = input_args.intervention_threshold
 max_new_tokens = input_args.max_new_tokens
 max_student_samples = input_args.max_student_samples
@@ -80,9 +83,9 @@ teacher_model = input_args.teacher_model
 
 args = (" --data-dir %s --cache-dir %s --train-filename %s --test-filename %s --val-filename %s --results-path %s --task %s --student-model %s --teacher-model %s"
         " --max-new-tokens %d --n-beams %d --n-ic-samples %d --max-student-samples %d --mm-type %s --intervene-behaviour %s --intervention-utility %s --teacher-explanation-type %s"
-        " --student-explanation-type %s --intervention-threshold %f"
+        " --student-explanation-type %s --intervention-threshold %f --llm-lib %s"
         % (dataset_dir, cache_dir, TRAIN_FILE, TEST_FILE, VALIDATION_FILE, results_file, task, student_model, teacher_model, max_new_tokens, n_beams, n_ics,
-           max_student_samples, mm_type, INTERVENE_BEHAVIOUR, INTERVENTION_UTILITY, teacher_expl_type, student_expl_type, intervention_threshold))
+           max_student_samples, mm_type, INTERVENE_BEHAVIOUR, INTERVENTION_UTILITY, teacher_expl_type, student_expl_type, intervention_threshold, llm_lib))
 args += ((' --use-explanations' if USE_EXPLANATIONS else '') + (' --deceive' if USE_DECEPTION else '') + (' --use-gold-label' if USE_GOLD_LABEL else ''))
 
 commamd = "python " + str(src_dir / 'interactive_mm_experiments.py') + args

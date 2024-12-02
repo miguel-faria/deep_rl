@@ -14,7 +14,7 @@
 #SBATCH --partition=a6000
 
 date;hostname;pwd
-options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te: -- "$@")
+options=$(getopt -o d:,s:,t:,u:,b:,l: -l mm:,se:,te: -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
   data_dir="/mnt/data-artemis/miguelfaria/llms/"
@@ -34,6 +34,7 @@ do
     -t) teacher_model=${2}; shift ;;
     -u) utility=${2}; shift ;;
     -b) budgets+=("${2}"); shift ;;
+    -l) lib=${2}; shift ;;
     -mm) mental_model=${2}; shift ;;
     -se) student_expl=${2}; shift ;;
     -te) teacher_expl=${2}; shift ;;
@@ -50,6 +51,10 @@ fi
 
 if [ -z "$dataset" ]; then
   dataset="strategy_qa"
+fi
+
+if [ -z "$lib" ]; then
+  lib="vllm"
 fi
 
 if [ -z "$student_model" ]; then
@@ -118,7 +123,7 @@ python src/mohit_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache
                                     --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" \
                                     --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4 --n-ic-samples 5 --mm-type "$mental_model" \
                                     --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" --use-explanations \
-                                    --use-gold-label --budgets "${budgets[@]}" > "$out_file"
+                                    --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" > "$out_file"
 
 source "$HOME"/miniconda3/bin/deactivate
 date

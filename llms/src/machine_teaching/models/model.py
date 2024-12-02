@@ -5,6 +5,11 @@ from transformers import PreTrainedModel, PreTrainedTokenizer
 from typing import Dict, List, Union, Tuple
 
 
+class UnidentifiedUtilityMetricError(Exception):
+	"""Raise exception for an intervention strategy type that is not defined"""
+	pass
+
+
 class UnidentifiedTaskError(Exception):
 	"""Raise exception for a task not recognized."""
 	pass

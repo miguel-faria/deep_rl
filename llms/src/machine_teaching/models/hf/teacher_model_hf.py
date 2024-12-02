@@ -4,7 +4,8 @@ import re
 from pandas import DataFrame
 from torch.nn.functional import softmax
 from typing import Dict, List, Tuple, Union
-from machine_teaching.models.hf.model_hf import ModelHF, UnidentifiedTaskError, UnidentifiedExplanationError
+from machine_teaching.models.hf.model_hf import ModelHF
+from machine_teaching.models.model import UnidentifiedTaskError, UnidentifiedExplanationError
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from tqdm import tqdm
 
@@ -34,8 +35,8 @@ class TeacherModel(ModelHF):
 			else:
 				raise UnidentifiedExplanationError("Explanation type '%s' not identified." % self._explanation_type)
 	
-	def predict_confidence(self, sample: Dict, with_explanation: bool = False, debug: bool = False) -> List[float]:
-		context = self.get_context(sample)
+	def predict_confidence(self, sample: Dict, with_explanation: bool = False, debug: bool = False, ic_samples: List[Dict] = None) -> List[float]:
+		context = self.get_context(sample, explanation='', ic_samples=ic_samples)
 		tokens = self.tokenizer([context], return_tensors="pt").to("cuda")
 		generated = self.gen_model.generate(**tokens, num_beams=self._num_beams, max_new_tokens=self._max_tokens, output_scores=True, return_dict_in_generate=True)
 		

@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Union
 from machine_teaching.models.hf.teacher_mental_model_hf import TeacherMentalModel
-from machine_teaching.models.hf.model_hf import UnidentifiedTaskError
+from machine_teaching.models.model import UnidentifiedTaskError
 
 
 class TeacherStaticMentalModel(TeacherMentalModel):

@@ -3,7 +3,7 @@
 from typing import Dict, List, Union, Tuple
 from machine_teaching.models.hf.teacher_mental_model_hf import TeacherMentalModel
 from transformers import PreTrainedModel, PreTrainedTokenizer
-from machine_teaching.models.hf.model_hf import UnidentifiedTaskError
+from machine_teaching.models.model import UnidentifiedTaskError
 
 
 class TeacherInteractiveMentalModel(TeacherMentalModel):

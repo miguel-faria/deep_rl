@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-from machine_teaching.models.model import Model, UnidentifiedTaskError, UnidentifiedExplanationError
+from machine_teaching.models.model import Model
 from pandas import DataFrame
 from vllm import LLM
 from typing import Dict, List, Union, Tuple

@@ -11,6 +11,7 @@ data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 USE_SHELL = False
 
 TASK = 'strategy_qa'
+LLM_LIB = 'vllm'
 DATASET_DIR = data_dir / 'datasets' / 'strategyqa'
 CACHE_DIR = data_dir.parent.absolute() / 'cache'
 TRAIN_FILE = 'train.json'
@@ -35,9 +36,9 @@ USE_DECEPTION = False
 USE_GOLD_LABEL = True
 
 args = (" --data-dir %s --cache-dir %s --train-filename %s --test-filename %s --val-filename %s --results-path %s --task %s --student-model %s --teacher-model %s --max-new-tokens %d"
-		" --n-beams %d --n-ic-samples %d --mm-type %s --intervene-behaviour %s --intervention-utility %s --teacher-explanation-type %s --student-explanation-type %s"
+		" --n-beams %d --n-ic-samples %d --mm-type %s --intervene-behaviour %s --intervention-utility %s --teacher-explanation-type %s --student-explanation-type %s --llm-lib %s"
 		% (DATASET_DIR, CACHE_DIR, TRAIN_FILE, TEST_FILE, VALIDATION_FILE, RESULTS_FILE, TASK, STUDENT_MODEL, TEACHER_MODEL, MAX_TOKENS, N_BEAMS, N_SAMPLES,
-		   MM_TYPE, INTERVENE_BEHAVIOUR, INTERVENTION_UTILITY, TEACHER_EXPLANATION, STUDENT_EXPLANATION))
+		   MM_TYPE, INTERVENE_BEHAVIOUR, INTERVENTION_UTILITY, TEACHER_EXPLANATION, STUDENT_EXPLANATION, LLM_LIB))
 args += ((' --use-explanations' if USE_EXPLANATIONS else '') + (' --deceive' if USE_DECEPTION else '') + (' --use-gold-label' if USE_GOLD_LABEL else ''))
 
 commamd = "python " + str(src_dir / 'mohit_mm_experiments.py') + args

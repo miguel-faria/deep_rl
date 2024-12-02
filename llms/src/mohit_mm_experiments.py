@@ -6,14 +6,17 @@ import torch
 import os
 
 from utilities.dataset_tasks_utils import ECQA, StrategyQA, GSM8k
-from machine_teaching.models.hf.model_hf import UnidentifiedTaskError
-from machine_teaching.models.hf.teacher_model_hf import TeacherModel
-from machine_teaching.models.hf.student_model_hf import StudentModel
-from machine_teaching.models.hf.teacher_mental_model_hf import UnidentifiedUtilityMetricError
-from machine_teaching.models.hf.teacher_static_mental_model_hf import TeacherStaticMentalModel
+from machine_teaching.models.model import UnidentifiedTaskError, UnidentifiedUtilityMetricError
+from machine_teaching.models.hf.teacher_model_hf import TeacherModel as TeacherModelHF
+from machine_teaching.models.vllm.teacher_model_vllm import TeacherModel as TeacherModelVLLM
+from machine_teaching.models.hf.student_model_hf import StudentModel as StudentModelHF
+from machine_teaching.models.vllm.student_model_vllm import StudentModel as StudentModelVLLM
+from machine_teaching.models.hf.teacher_static_mental_model_hf import TeacherStaticMentalModel as TeacherMentalModelHF
+from machine_teaching.models.vllm.teacher_static_mental_model_vllm import TeacherStaticMentalModel as TeacherMentalModelVLLM
 from pathlib import Path
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, LlamaForCausalLM, LlamaTokenizer
-from typing import Tuple, List, Optional, Dict
+from vllm import LLM
+from typing import Tuple, List, Optional, Dict, Union
 from numpy.random import default_rng, Generator
 from tqdm import tqdm
 
@@ -21,8 +24,13 @@ from tqdm import tqdm
 RNG_SEED = 25092024
 
 
+class UnidentifiedLibError(Exception):
+	"""Raise exception for a task not recognized."""
+	pass
+
+
 def get_teacher_model_samples(rng_gen: Generator, train_data: pd.DataFrame, student_samples: List[pd.Series], teacher_expl_type: str, num_samples: int,
-							  student_model: StudentModel, teacher_model: TeacherModel = None) -> List[Dict]:
+							  student_model: Union[StudentModelHF, StudentModelVLLM], teacher_model: Union[TeacherModelHF, TeacherModelVLLM] = None) -> List[Dict]:
 	
 	teacher_samples = []
 	
@@ -54,7 +62,7 @@ def get_teacher_model_samples(rng_gen: Generator, train_data: pd.DataFrame, stud
 
 
 def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task: str, mental_model_type: str, max_samples: int,
-							 student_model: StudentModel, teacher_model: TeacherModel) -> Tuple[List, List]:
+							 student_model: Union[StudentModelHF, StudentModelVLLM], teacher_model: Union[TeacherModelHF, TeacherModelVLLM] = None) -> Tuple[List, List]:
 	
 	shuffle_train = train_data.sample(frac=1, random_state=rng_gen).reset_index(drop=True)
 	
@@ -225,7 +233,8 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 
 
 def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, student_model_path: str, teacher_model_path: str, task: str, use_explanations: bool, student_expl_type: str,
-				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path) -> Tuple[StudentModel, Optional[TeacherModel], Optional[TeacherStaticMentalModel]]:
+				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path,
+				model_lib: str = 'hf') -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
 	
 	rng_gen = default_rng(rng_seed)
 	
@@ -233,52 +242,89 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 	train_idxs = rng_gen.choice(train_data.shape[0], num_samples, replace=False)
 	student_samples = [train_data.iloc[idx].to_dict() for idx in train_idxs]
 	
-	if "llama" in student_model_path:
-		student_gen_model = LlamaForCausalLM.from_pretrained(student_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
-		student_tokenizer = LlamaTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
-	else:
-		student_tokenizer = AutoTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
-		student_gen_model = AutoModelForSeq2SeqLM.from_pretrained(student_model_path, device_map="auto", cache_dir=cache_dir)
-	
-	student_model = StudentModel(student_model_path, student_samples, student_gen_model, student_tokenizer, student_expl_type, task, max_tokens, num_beams, use_explanations)
-	
-	if use_explanations:
-		print('Setting up the Teacher Model')
-		if student_expl_type.find('human') != -1:
-			teacher_model = TeacherModel(teacher_model_path)
-			mental_model = None
+	if model_lib == 'hf':
+		if "llama" in student_model_path:
+			student_gen_model = LlamaForCausalLM.from_pretrained(student_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
+			student_tokenizer = LlamaTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
+		else:
+			student_tokenizer = AutoTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
+			student_gen_model = AutoModelForSeq2SeqLM.from_pretrained(student_model_path, device_map="auto", cache_dir=cache_dir)
+		
+		student_model = StudentModelHF(student_model_path, student_samples, student_gen_model, student_tokenizer, student_expl_type, task, max_tokens, num_beams, use_explanations)
+		
+		if use_explanations:
+			print('Setting up the Teacher Model')
+			if student_expl_type.find('human') != -1:
+				teacher_model = TeacherModelHF(teacher_model_path)
+				mental_model = None
+			
+			else:
+				if "llama" in teacher_model_path:
+					teacher_gen_model = LlamaForCausalLM.from_pretrained(teacher_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
+					teacher_tokenizer = LlamaTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
+				else:
+					teacher_gen_model = AutoModelForSeq2SeqLM.from_pretrained(teacher_model_path, device_map="auto", cache_dir=cache_dir)
+					teacher_tokenizer = AutoTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
+				
+				print('Getting teacher samples')
+				teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
+				print('Creating Teacher Model')
+				teacher_model = TeacherModelHF(teacher_model_path, teacher_samples, teacher_gen_model, teacher_tokenizer, teacher_expl_type, task, max_tokens, num_beams, use_explanations)
+				
+				if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
+					print('Setting up the Teacher Mental Model')
+					print('Getting mental models samples')
+					mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
+					print('Creating Teacher Mental Model')
+					mental_model = TeacherMentalModelHF(teacher_model_path, mm_samples, teacher_gen_model, teacher_tokenizer, teacher_samples, teacher_expl_type, task, max_tokens,
+															num_beams, use_explanations, intervention_utility, mental_model_type)
+				
+				else:
+					mental_model = None
+			
+			return student_model, teacher_model, mental_model
 		
 		else:
-			if "llama" in teacher_model_path:
-				teacher_gen_model = LlamaForCausalLM.from_pretrained(teacher_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
-				teacher_tokenizer = LlamaTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
-			else:
-				teacher_gen_model = AutoModelForSeq2SeqLM.from_pretrained(teacher_model_path, device_map="auto", cache_dir=cache_dir)
-				teacher_tokenizer = AutoTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
-			
-			print('Getting teacher samples')
-			teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
-			print('Creating Teacher Model')
-			teacher_model = TeacherModel(teacher_model_path, teacher_samples, teacher_gen_model, teacher_tokenizer, teacher_expl_type, task, max_tokens, num_beams, use_explanations)
-			
-			if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
-				print('Setting up the Teacher Mental Model')
-				print('Getting mental models samples')
-				mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
-				print('Creating Teacher Mental Model')
-				mental_model = TeacherStaticMentalModel(teacher_model_path, mm_samples, teacher_gen_model, teacher_tokenizer, teacher_samples, teacher_expl_type, task, max_tokens,
-														num_beams, use_explanations, intervention_utility, mental_model_type)
-			
-			else:
-				mental_model = None
+			return student_model, None, None
+	
+	elif model_lib == 'vllm':
+		student_gen_model = LLM(student_model_path)
+		student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams, use_explanations)
 		
-		return student_model, teacher_model, mental_model
+		if use_explanations:
+			print('Setting up the Teacher Model')
+			if student_expl_type.find('human') != -1:
+				teacher_model = TeacherModelHF(teacher_model_path)
+				mental_model = None
+			
+			else:
+				print('Getting teacher samples')
+				teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
+				print('Creating Teacher Model')
+				teacher_gen_model = LLM(teacher_model_path)
+				teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams, use_explanations)
+				
+				if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
+					print('Setting up the Teacher Mental Model')
+					print('Getting mental models samples')
+					mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
+					print('Creating Teacher Mental Model')
+					mental_model = TeacherMentalModelVLLM(teacher_model_path, mm_samples, teacher_gen_model, teacher_samples, teacher_expl_type, task, max_tokens,
+														  num_beams, use_explanations, intervention_utility, mental_model_type)
+				
+				else:
+					mental_model = None
+			
+			return student_model, teacher_model, mental_model
+		
+		else:
+			return student_model, None, None
 	
 	else:
-		return student_model, None, None
+		raise UnidentifiedLibError('LLM lib %s is not defined' % model_lib)
 
 
-def get_intervention_idx_budget(student_model: StudentModel, mental_model: TeacherStaticMentalModel, rng_gen: Generator, budgets: List[float], test_samples: pd.DataFrame,
+def get_intervention_idx_budget(student_model: Union[StudentModelHF, StudentModelVLLM], mental_model: Union[TeacherMentalModelHF, TeacherMentalModelVLLM], rng_gen: Generator, budgets: List[float], test_samples: pd.DataFrame,
 								intervention_utility: str, use_explanation: bool, use_answers: bool, deceive: bool) -> Tuple:
 	intervention_idx_budget = []
 	intercention_conf_budget = []
@@ -375,6 +421,7 @@ def compute_accuracy(labels, predictions):
 def main( ):
 	parser = argparse.ArgumentParser(description='Machine teaching with Theory of Mind based mental models experiments from Mohit Bensal')
 	# Models arguments
+	parser.add_argument('--llm-lib', dest='llm_lib', default='', type=str, choices=['hf', 'vllm'], help='LLM transformer lib to use, either HuggingFace (hf) or vLLM (vllm)')
 	parser.add_argument('--cache-dir', dest='cache_dir', default='', type=str, help='Path to the cache directory, where downladed models are stored')
 	parser.add_argument('--train-filename', dest='train_filename', default='', type=str, help='Filename of the training data')
 	parser.add_argument('--test-filename', dest='test_filename', default='', type=str, help='Filename of the testing data')
@@ -433,7 +480,7 @@ def main( ):
 		if not student_model:
 			student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
 																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
-																	 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir)
+																	 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir, args.llm_lib)
 		
 		else:
 			train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)

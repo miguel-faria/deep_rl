@@ -1,6 +1,6 @@
 #! /usr/bin/env python
 
-from machine_teaching.models.model import Model, UnidentifiedTaskError, UnidentifiedExplanationError
+from machine_teaching.models.model import Model
 from pandas import DataFrame
 from transformers import PreTrainedModel, PreTrainedTokenizer
 from typing import Dict, List, Union, Tuple

@@ -14,7 +14,7 @@
 #SBATCH --partition=a6000
 
 date;hostname;pwd
-options=$(getopt -o d:,s:,t:,u:,b:,l: -l mm:,se:,te: -- "$@")
+options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,lib: -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
   data_dir="/mnt/data-artemis/miguelfaria/llms/"
@@ -34,7 +34,7 @@ do
     -t) teacher_model=${2}; shift ;;
     -u) utility=${2}; shift ;;
     -b) budgets+=("${2}"); shift ;;
-    -l) lib=${2}; shift ;;
+    --lib) lib=${2}; shift ;;
     -mm) mental_model=${2}; shift ;;
     -se) student_expl=${2}; shift ;;
     -te) teacher_expl=${2}; shift ;;

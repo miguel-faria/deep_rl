@@ -236,6 +236,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, max_student_context: int, num_beams: int, cache_dir: Path,
 				model_lib: str = 'hf') -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
 	
+	print('Using %s lib' % model_lib)
 	rng_gen = default_rng(rng_seed)
 	
 	print('Setting up the Student Model')

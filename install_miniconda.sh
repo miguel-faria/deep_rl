@@ -23,5 +23,5 @@ source ~/.bashrc
 
 # Install and initialize mamba 
 conda install -y mamba -c conda-forge
-mamba init
+mamba shell init --shell bash --root-prefix="$CONDA_PREFIX"
 source ~/.bashrc

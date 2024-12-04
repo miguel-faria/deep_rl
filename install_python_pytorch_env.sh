@@ -55,7 +55,7 @@ if [ "$env_type" = "conda" ]; then
 
   mamba update -y -n base conda
   mamba create -y -n "$env_name" python="$python_ver"
-  mamba init
+  mamba shell init --shell bash --root-prefix="$conda_home"
   source "$HOME"/.bashrc
   source "$conda_home"/etc/profile.d/conda.sh
   mamba activate "$env_name"
@@ -76,8 +76,8 @@ if [ "$env_type" = "conda" ]; then
     mamba install -y pytorch torchvision torchaudio cpuonly -c pytorch
   fi
   mamba install -y -c conda-forge stable-baselines3 tensorboard wandb gymnasium pygame
-  mamba install -y -c huggingface transformers
-  mamba install -y -c huggingface datasets
+  mamba install -y -c huggingface -c conda-forge transformers
+  mamba install -y -c huggingface -c conda-forge datasets
   mamba install -y -c conda-forge evaluate accelerate
   python3 -m pip install sentencepiece # vllm
 

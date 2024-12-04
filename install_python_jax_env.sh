@@ -69,7 +69,7 @@ if [ "$env_type" = "conda" ]; then
 
   mamba update -y -n base conda
   mamba create -y -n "$env_name" python="$python_ver"
-  mamba init
+  mamba shell init --shell bash --root-prefix="$conda_home"
   source "$HOME"/.bashrc
   source "$conda_home"/etc/profile.d/conda.sh
   mamba activate "$env_name"

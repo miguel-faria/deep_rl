@@ -31,7 +31,7 @@ if [ -z "$env_type" ]; then
 fi
 
 if [ -z "$conda_home" ]; then
-  conda_home="$HOME"/miniconda3
+  conda_home="$CONDA_HOME"
 fi
 
 if [ -z "$use_llms" ]; then

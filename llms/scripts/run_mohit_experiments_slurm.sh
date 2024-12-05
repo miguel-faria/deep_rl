@@ -92,7 +92,11 @@ fi
 # module load python cuda
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
-source "$HOME"/miniconda3/bin/activate llm_env
+if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
+  source "$CONDA_PREFIX"/bin/activate llm_env
+else
+  source "$CONDA_HOME"/bin/activate llm_env
+fi
 
 cd "$script_path" || exit
 cd .. || exit

@@ -72,7 +72,11 @@ fi
 
 #module load python cuda
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.25
-source "$HOME"/miniconda3/bin/activate drl_env
+if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
+  source "$CONDA_PREFIX"/bin/activate drl_env
+else
+  source "$CONDA_HOME"/bin/activate drl_env
+fi
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   for (( job=1; job<=n_jobs; job++ )); do
     start_test=$(( start_run + (job - 1) * tests_job ))

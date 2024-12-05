@@ -25,7 +25,11 @@ fi
 
 #module load python cuda
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
-source "$CONDA_HOME"/bin/activate drl_env
+if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
+  source "$CONDA_PREFIX"/bin/activate drl_env
+else
+  source "$CONDA_HOME"/bin/activate drl_env
+fi
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 10 --hunters 2 --catch-reward 4 --prey-type idle --batch-size 64 --buffer-size 2500 --iterations 4000 --episode-steps 800 --warmup 800 --limits 1 4 --eps-type log --eps-decay 0.15 --use-lower-curriculum --logs-dir /mnt/scratch-artemis/miguelfaria/logs/pursuit --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
 elif [ "$HOSTNAME" = "hera" ] ; then

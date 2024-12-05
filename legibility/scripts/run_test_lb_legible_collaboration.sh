@@ -25,7 +25,11 @@ fi
 
 #module load python cuda
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
-source "$HOME"/miniconda3/bin/activate drl_env
+if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
+  source "$CONDA_PREFIX"/bin/activate drl_env
+else
+  source "$CONDA_HOME"/bin/activate drl_env
+fi
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   python "$script_path"/run_test_lb_legible_collaboration.py --tests 250 --mode 2 --logs-dir /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
 else

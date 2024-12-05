@@ -32,7 +32,7 @@ else
   source "$CONDA_HOME"/bin/activate drl_env
 fi
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 10 --hunters 2 --catch-reward 4 --prey-type idle --batch-size 64 --buffer-size 2500 --iterations 4000 --episode-steps 800 --warmup 800 --limits 1 4 --eps-type log --eps-decay 0.15 --use-lower-curriculum --logs-dir /mnt/scratch-artemis/miguelfaria/logs/pursuit --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
+  python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 20 --hunters 2 --catch-reward 4 --prey-type idle --batch-size 64 --buffer-size 5000 --iterations 4000 --episode-steps 1000 --warmup 1000 --limits 4 4 --eps-type linear --eps-decay 0.1 --online-lr 0.00005 --use-higher-curriculum --logs-dir /mnt/scratch-artemis/miguelfaria/logs/pursuit --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
 elif [ "$HOSTNAME" = "hera" ] ; then
   nohup python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 20 --hunters 2 --catch-reward 5 --prey-type idle --batch-size 64 --buffer-size 2500 --iterations 4000 --episode-steps 800 --warmup 800 --limits 1 4 --eps-type log --eps-decay 0.175 --use-lower-curriculum --logs-dir /mnt/data-hera1/miguelfaria/deep_rl/logs/pursuit --models-dir /mnt/data-hera1/miguelfaria/deep_rl/models --data-dir /mnt/data-hera1/miguelfaria/deep_rl/data
 else

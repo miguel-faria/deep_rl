@@ -24,18 +24,23 @@ fi
 #export PATH="/opt/cuda/bin:$PATH"
 
 #module load python cuda
-source ~/.bashrc
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  source "$CONDA_PREFIX"/bin/activate drl_env
+  if [ -z "$CONDA_PREFIX_1" ] ; then
+    conda_dir="$CONDA_PREFIX"
+  else
+    conda_dir="$CONDA_PREFIX_1"
+  fi
 else
-  source "$CONDA_HOME"/bin/activate drl_env
+  conda_dir="$CONDA_HOME"
 fi
+
+source "$conda_dir"/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   python "$script_path"/run_test_lb_legible_collaboration.py --tests 250 --mode 2 --logs-dir /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
 else
   python "$script_path"/run_test_lb_legible_collaboration.py --tests 250 --mode 2
 fi
 
-source "$HOME"/miniconda3/bin/deactivate
+conda deactivate
 date

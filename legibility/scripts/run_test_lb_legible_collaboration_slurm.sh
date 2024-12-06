@@ -71,13 +71,18 @@ else
 fi
 
 #module load python cuda
-source ~/.bashrc
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.25
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  source "$CONDA_PREFIX"/bin/activate drl_env
+  if [ -z "$CONDA_PREFIX_1" ] ; then
+    conda_dir="$CONDA_PREFIX"
+  else
+    conda_dir="$CONDA_PREFIX_1"
+  fi
 else
-  source "$CONDA_HOME"/bin/activate drl_env
+  conda_dir="$CONDA_HOME"
 fi
+
+source "$conda_dir"/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   for (( job=1; job<=n_jobs; job++ )); do
     start_test=$(( start_run + (job - 1) * tests_job ))

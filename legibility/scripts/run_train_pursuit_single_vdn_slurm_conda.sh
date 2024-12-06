@@ -24,16 +24,18 @@ fi
 #export PATH="/opt/cuda/bin:$PATH"
 
 #module load python cuda
-echo $CONDA_PREFIX
-source $HOME/.bashrc
-echo $CONDA_PREFIX
-return
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  source "$CONDA_PREFIX"/bin/activate drl_env
+  if [ -z "$CONDA_PREFIX_1" ] ; then
+    conda_dir="$CONDA_PREFIX"
+  else
+    conda_dir="$CONDA_PREFIX_1"
+  fi
 else
-  source "$CONDA_HOME"/bin/activate drl_env
+  conda_dir="$CONDA_HOME"
 fi
+
+source "$conda_dir"/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 20 --hunters 2 --catch-reward 4 --prey-type idle --batch-size 64 --buffer-size 5000 --iterations 4000 --episode-steps 1000 --warmup 1000 --limits 4 4 --eps-type linear --eps-decay 0.1 --online-lr 0.00005 --use-higher-curriculum --logs-dir /mnt/scratch-artemis/miguelfaria/logs/pursuit --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data
 elif [ "$HOSTNAME" = "hera" ] ; then
@@ -42,5 +44,5 @@ else
   python "$script_path"/run_train_pursuit_single_vdn_dqn.py --field-len 20 --hunters 2 --catch-reward 3 --prey-type idle --batch-size 64 --buffer-size 2500 --iterations 2000 --episode-steps 800 --limits 1 1 --eps-type log --start-eps 1.0 --eps-decay 0.175 --use-lower-curriculum
 fi
 
-source "$CONDA_HOME"/bin/deactivate
+conda deactivate
 date

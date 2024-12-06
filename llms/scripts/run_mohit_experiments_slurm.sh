@@ -90,14 +90,19 @@ else
 fi
 
 # module load python cuda
-source ~/.bashrc
 export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
 export PATH="/opt/cuda/bin:$PATH"
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
-  source "$CONDA_PREFIX"/bin/activate llm_env
+  if [ -z "$CONDA_PREFIX_1" ] ; then
+    conda_dir="$CONDA_PREFIX"
+  else
+    conda_dir="$CONDA_PREFIX_1"
+  fi
 else
-  source "$CONDA_HOME"/bin/activate llm_env
+  conda_dir="$CONDA_HOME"
 fi
+
+source "$conda_dir"/bin/activate llm_env
 
 cd "$script_path" || exit
 cd .. || exit

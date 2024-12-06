@@ -24,7 +24,10 @@ fi
 #export PATH="/opt/cuda/bin:$PATH"
 
 #module load python cuda
-source ~/.bashrc
+echo $CONDA_PREFIX
+source $HOME/.bashrc
+echo $CONDA_PREFIX
+return
 export XLA_PYTHON_CLIENT_MEM_FRACTION=0.3
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   source "$CONDA_PREFIX"/bin/activate drl_env

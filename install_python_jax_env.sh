@@ -76,7 +76,7 @@ if [ "$env_type" = "conda" ]; then
   if [ "$cuda_version" = 11 ]; then
     mamba install -y -c conda-forge numpy==1.24.3 ml_dtypes==0.1.0 scipy matplotlib pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv
     mamba install -y -c conda-forge stable-baselines3 tensorboard wandb gymnasium pygame
-    mamba install -y -c conda-forge optax==0.1.5 flax=0.6.10
+    mamba install -y -c conda-forge optax==0.1.5 flax==0.6.1
   else
     mamba install -y -c conda-forge numpy scipy matplotlib pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv
     mamba install -y -c conda-forge stable-baselines3 tensorboard wandb gymnasium pygame
@@ -142,13 +142,16 @@ else
   python3 -m pip install --upgrade pip
   if [ "$cuda_version" = 11 ]; then
     python3 -m pip install numpy==1.26.4 ml_dtypes==0.1.0 scipy matplotlib ipython jupyter pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv-python gym pyglet==1.5.29
+    python3 -m pip install --upgrade "jax[cuda""$cuda_version""_pip]==0.4.14" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html optax==0.1.7 flax==0.7.0 chex==0.1.82 ml-dtypes==0.2.0
+    python3 -m pip install stable-baselines3 tensorboard wandb gymnasium pygame
+    python3 -m pip install --upgrade nvidia-cudnn-cu11==8.9.2.26 nvidia-cufft-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvcc-cu11 nvidia-cuda-runtime-cu11
   else
     python3 -m pip install numpy scipy matplotlib ipython jupyter pandas sympy nose pyyaml termcolor tqdm scikit-learn opencv-python gym pyglet==1.5.29
+    python3 -m pip install --upgrade "jax[cuda""$cuda_version""_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
+    python3 -m pip install optax flax
+    python3 -m pip install stable-baselines3 tensorboard wandb gymnasium pygame
   fi
-  python3 -m pip install --upgrade "jax[cuda""$cuda_version""_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
-  python3 -m pip install optax flax
-  python3 -m pip install stable-baselines3 tensorboard wandb gymnasium pygame
-#  pip3 install --upgrade nvidia-cudnn-cu11 nvidia-cufft-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvcc-cu11 nvidia-cuda-runtime-cu11
+#  python3 -m pip install --upgrade nvidia-cudnn-cu11 nvidia-cufft-cu11 nvidia-cusolver-cu11 nvidia-cusparse-cu11 nvidia-cuda-cupti-cu11 nvidia-cuda-nvcc-cu11 nvidia-cuda-runtime-cu11
 
   if [ "$use_llms" -eq 1 ]; then
       python3 -m pip install transformers datasets evaluate accelerate vllm

@@ -146,5 +146,5 @@ python src/interactive_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" -
                                           --use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" \
                                           --budgets "${budgets[@]}" --llm-lib "$lib" > "$out_file"
 
-source "$HOME"/miniconda3/bin/deactivate
+conda deactivate
 date

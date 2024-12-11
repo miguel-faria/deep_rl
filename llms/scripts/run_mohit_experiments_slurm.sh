@@ -135,5 +135,5 @@ python src/mohit_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache
                                     --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" --use-explanations \
                                     --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" > "$out_file"
 
-source "$HOME"/miniconda3/bin/deactivate
+conda deactivate
 date

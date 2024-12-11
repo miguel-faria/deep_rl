@@ -233,8 +233,12 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 
 
 def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, student_model_path: str, teacher_model_path: str, task: str, use_explanations: bool, student_expl_type: str,
-				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path,
+				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path, n_gpus: int,
 				model_lib: str = 'hf') -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
+	
+	orig_cuda_visible = os.environ.get('CUDA_VISIBLE_DEVICES')
+	avail_gpus = orig_cuda_visible.split(',')
+	n_use_gpus = min(n_gpus, len(avail_gpus))
 	
 	print('Using %s lib' % model_lib)
 	rng_gen = default_rng(rng_seed)
@@ -244,12 +248,13 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 	student_samples = [train_data.iloc[idx].to_dict() for idx in train_idxs]
 	
 	if model_lib == 'hf':
+		student_device = 'auto' if n_use_gpus < 2 else torch.cuda.device(int(avail_gpus[0]))
 		if "llama" in student_model_path:
-			student_gen_model = LlamaForCausalLM.from_pretrained(student_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
+			student_gen_model = LlamaForCausalLM.from_pretrained(student_model_path, cache_dir=cache_dir, device_map=student_device, torch_dtype=torch.float16)
 			student_tokenizer = LlamaTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
 		else:
 			student_tokenizer = AutoTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
-			student_gen_model = AutoModelForSeq2SeqLM.from_pretrained(student_model_path, device_map="auto", cache_dir=cache_dir)
+			student_gen_model = AutoModelForSeq2SeqLM.from_pretrained(student_model_path, device_map=student_device, cache_dir=cache_dir)
 		
 		student_model = StudentModelHF(student_model_path, student_samples, student_gen_model, student_tokenizer, student_expl_type, task, max_tokens, num_beams, use_explanations)
 		
@@ -260,11 +265,12 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 				mental_model = None
 			
 			else:
+				teacher_device = 'auto' if n_use_gpus < 2 else torch.cuda.device(int(avail_gpus[1]))
 				if "llama" in teacher_model_path:
-					teacher_gen_model = LlamaForCausalLM.from_pretrained(teacher_model_path, cache_dir=cache_dir, device_map="auto", torch_dtype=torch.float16)
+					teacher_gen_model = LlamaForCausalLM.from_pretrained(teacher_model_path, cache_dir=cache_dir, device_map=teacher_device, torch_dtype=torch.float16)
 					teacher_tokenizer = LlamaTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
 				else:
-					teacher_gen_model = AutoModelForSeq2SeqLM.from_pretrained(teacher_model_path, device_map="auto", cache_dir=cache_dir)
+					teacher_gen_model = AutoModelForSeq2SeqLM.from_pretrained(teacher_model_path, device_map=teacher_device, cache_dir=cache_dir)
 					teacher_tokenizer = AutoTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
 				
 				print('Getting teacher samples')
@@ -289,19 +295,23 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 			return student_model, None, None
 	
 	elif model_lib == 'vllm':
+		if n_use_gpus > 1:
+			os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[0]
 		student_gen_model = LLM(student_model_path)
 		student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams, use_explanations)
 		
 		if use_explanations:
 			print('Setting up the Teacher Model')
 			if student_expl_type.find('human') != -1:
-				teacher_model = TeacherModelHF(teacher_model_path)
+				teacher_model = TeacherModelVLLM(teacher_model_path)
 				mental_model = None
 			
 			else:
 				print('Getting teacher samples')
 				teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
 				print('Creating Teacher Model')
+				if n_use_gpus > 1:
+					os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[1]
 				teacher_gen_model = LLM(teacher_model_path)
 				teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams, use_explanations)
 				
@@ -316,9 +326,13 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 				else:
 					mental_model = None
 			
+			if n_use_gpus > 1:
+				os.environ["CUDA_VISIBLE_DEVICES"] = orig_cuda_visible
 			return student_model, teacher_model, mental_model
 		
 		else:
+			if n_use_gpus > 1:
+				os.environ["CUDA_VISIBLE_DEVICES"] = orig_cuda_visible
 			return student_model, None, None
 	
 	else:
@@ -451,6 +465,7 @@ def main( ):
 	parser.add_argument('--student-explanation-type', dest='student_expl_type', default='cot', type=str, help='Student model explanation type')
 	parser.add_argument('--deceive', dest='deceive', action='store_true', help='Flag denoting whether teacher gives deceiving explanations')
 	parser.add_argument('--results-path', dest='results_path', default='', type=str, help='Path to the results file')
+	parser.add_argument('--gpus', dest='n_gpus', default=1, type=int, help='Number of GPUs to use')
 	
 	args = parser.parse_args()
 	
@@ -480,8 +495,8 @@ def main( ):
 		print('Loading models')
 		if not student_model:
 			student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
-																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
-																	 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir, args.llm_lib)
+																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type, args.intervention_utility,
+																	 args.max_new_tokens, args.n_beams, args.cache_dir, args.n_gpus, args.llm_lib)
 		
 		else:
 			train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)

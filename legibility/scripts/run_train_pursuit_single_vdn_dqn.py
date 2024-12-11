@@ -110,7 +110,7 @@ use_lower_model = input_args.use_lower_model
 use_higher_model = input_args.use_higher_model
 warmup = input_args.warmup
 
-for i in range(reversed(range(limits[0], limits[1] + 1)) if use_higher_model else range(limits[0], limits[1] + 1)):
+for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else range(limits[0], limits[1] + 1)):
 	n_spawn_preys = i
 	HUNTER_IDS = [('h%d' % (idx + 1)) for idx in range(n_hunters)]
 	PREY_IDS = [('p%d' % (idx + 1)) for idx in range(n_spawn_preys)]

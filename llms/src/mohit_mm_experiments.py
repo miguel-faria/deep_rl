@@ -480,6 +480,7 @@ def main( ):
 	
 	test_samples = task_dataset.get_test_samples() if args.task != 'strategy_qa' else task_dataset.get_validation_samples()
 	train_samples = task_dataset.get_train_samples()
+	print('Assigned gpus = ', os.environ.get('CUDA_VISIBLE_DEVICES'))
 	print('Number of test samples = %d' % test_samples.shape[0])
 	print('Number of train samples = %d' % train_samples.shape[0])
 	

@@ -39,3 +39,7 @@ source "$conda_dir"/bin/activate llm_env
 cd "$script_path" || exit
 cd .. || exit
 
+python tests/test_vllm.py > test_vllm.out
+
+conda deactivate
+date

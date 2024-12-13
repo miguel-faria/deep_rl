@@ -60,7 +60,7 @@ def main():
 	train_idxs = rng_gen.choice(train_samples.shape[0], 5, replace=False)
 	student_samples = [train_samples.iloc[idx].to_dict() for idx in train_idxs]
 	question = test_samples.iloc[rng_gen.choice(test_samples.shape[0])].to_dict()
-	context = cot_context(question, student_samples, 'ec_qa')
+	context = cot_context(question, student_samples, 'strategy_qa')
 
 	print('Making inference with vLLM')
 	outputs = vllm_model.generate(context, gen_params)

@@ -297,7 +297,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 	elif model_lib == 'vllm':
 		if n_use_gpus > 1:
 			os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[0]
-		student_gen_model = LLM(student_model_path)
+		student_gen_model = LLM(student_model_path, gpu_memory_utilization=0.75, enforce_eager=False)
 		student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams, use_explanations)
 		
 		if use_explanations:
@@ -312,7 +312,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 				print('Creating Teacher Model')
 				if n_use_gpus > 1:
 					os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[1]
-				teacher_gen_model = LLM(teacher_model_path)
+				teacher_gen_model = LLM(teacher_model_path, gpu_memory_utilization=0.75, enforce_eager=False)
 				teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams, use_explanations)
 				
 				if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):

@@ -35,9 +35,9 @@ do
     -u) utility=${2}; shift ;;
     -b) budgets+=("${2}"); shift ;;
     --lib) lib=${2}; shift ;;
-    -mm) mental_model=${2}; shift ;;
-    -se) student_expl=${2}; shift ;;
-    -te) teacher_expl=${2}; shift ;;
+    --mm) mental_model=${2}; shift ;;
+    --se) student_expl=${2}; shift ;;
+    --te) teacher_expl=${2}; shift ;;
     (--) shift; break ;;
     (-*) echo "$0: error - unrecognized option $1" 1>&2; exit 1 ;;
     (*) break ;;

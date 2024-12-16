@@ -297,7 +297,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 	elif model_lib == 'vllm':
 		# if n_use_gpus > 1:
 		# 	os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[0]
-		student_gen_model = LLM(student_model_path, gpu_memory_utilization=0.7, tensor_parallel_size=1, enforce_eager=True, download_dir=cache_dir)
+		student_gen_model = LLM(student_model_path, gpu_memory_utilization=0.7, enforce_eager=True, download_dir=cache_dir)
 		student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams, num_logprobs, use_explanations)
 		
 		if use_explanations:

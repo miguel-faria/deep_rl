@@ -8,16 +8,26 @@ from typing import Dict, List, Union, Tuple
 
 class ModelVLLM(Model):
 	
-	def __init__(self, model_name: str, samples: Union[List[Dict], Tuple] = None, gen_model: LLM = None, expl_type: str = '',
-				 task: str = '', max_tokens: int = 10, num_beams: int = 1, num_logprobs: int = 2, use_explanations: bool = True):
+	def __init__(self, model_name: str, samples: Union[List[Dict], Tuple] = None, gen_model: LLM = None, expl_type: str = '', task: str = '', max_tokens: int = 10,
+	             num_beams: int = 1, num_logprobs: int = 2, use_explanations: bool = True, local_model: bool = True, api_key: str = 'token-MtE2024'):
 		
 		super().__init__(model_name, samples, gen_model, expl_type, task, max_tokens, num_beams, use_explanations)
+		self._local_model = local_model
+		self._api_key = api_key
 		self._n_logprobs = num_logprobs
 
 	@property
 	def gen_model(self) -> LLM:
 		return self._gen_model
-	
+
+	@property
+	def local_model(self) -> bool:
+		return self._local_model
+
+	@property
+	def api_key(self) -> str:
+		return self._api_key
+
 	@staticmethod
 	def get_answer_idx(answers: List, answer_id: Union[str, int]) -> int:
 		return len(answers) - answers[-1::-1].index(answer_id) -1

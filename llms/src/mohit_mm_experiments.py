@@ -234,7 +234,7 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 
 def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, student_model_path: str, teacher_model_path: str, task: str, use_explanations: bool, student_expl_type: str,
 				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path, n_gpus: int,
-				model_lib: str = 'hf') -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
+				model_lib: str = 'hf', num_logprobs: int = 2) -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
 	
 	orig_cuda_visible = os.environ.get('CUDA_VISIBLE_DEVICES')
 	avail_gpus = orig_cuda_visible.split(',')
@@ -284,7 +284,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 					mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
 					print('Creating Teacher Mental Model')
 					mental_model = TeacherMentalModelHF(teacher_model_path, mm_samples, teacher_gen_model, teacher_tokenizer, teacher_samples, teacher_expl_type, task, max_tokens,
-															num_beams, use_explanations, intervention_utility, mental_model_type)
+					                                    num_beams, use_explanations, intervention_utility, mental_model_type)
 				
 				else:
 					mental_model = None
@@ -295,10 +295,10 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 			return student_model, None, None
 	
 	elif model_lib == 'vllm':
-		if n_use_gpus > 1:
-			os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[0]
+		# if n_use_gpus > 1:
+		# 	os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[0]
 		student_gen_model = LLM(student_model_path, gpu_memory_utilization=0.5, tensor_parallel_size=2, enforce_eager=True, download_dir=cache_dir)
-		student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams, use_explanations)
+		student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams, num_logprobs, use_explanations)
 		
 		if use_explanations:
 			print('Setting up the Teacher Model')
@@ -310,10 +310,11 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 				print('Getting teacher samples')
 				teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
 				print('Creating Teacher Model')
-				if n_use_gpus > 1:
-					os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[1]
+				# if n_use_gpus > 1:
+				# 	os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[1]
 				teacher_gen_model = LLM(teacher_model_path, gpu_memory_utilization=0.5, tensor_parallel_size=2, enforce_eager=True, download_dir=cache_dir)
-				teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams, use_explanations)
+				teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams,
+				                                 num_logprobs, use_explanations)
 				
 				if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
 					print('Setting up the Teacher Mental Model')
@@ -321,7 +322,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 					mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
 					print('Creating Teacher Mental Model')
 					mental_model = TeacherMentalModelVLLM(teacher_model_path, mm_samples, teacher_gen_model, teacher_samples, teacher_expl_type, task, max_tokens,
-														  num_beams, use_explanations, intervention_utility, mental_model_type)
+														  num_beams, num_logprobs, use_explanations, intervention_utility, mental_model_type)
 				
 				else:
 					mental_model = None

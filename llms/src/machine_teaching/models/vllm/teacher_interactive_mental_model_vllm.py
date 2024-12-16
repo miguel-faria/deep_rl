@@ -9,10 +9,12 @@ from vllm import LLM
 class TeacherInteractiveMentalModel(TeacherMentalModel):
 	
 	def __init__(self, model_name: Union[str, List[str]], intervention_samples: Union[List[Dict], Tuple] = None, gen_model: Union[LLM, List[LLM]] = None,
-				 teacher_samples: List[Dict] = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
-				 use_explanations: bool = True, utility_type: str = '', mm_type: str = 'mm_both', student_context: List[Dict] = None, max_student_context: int = 5):
+				 teacher_samples: List[Dict] = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1, num_logprobs: int = 2,
+				 use_explanations: bool = True, utility_type: str = '', mm_type: str = 'mm_both', student_context: List[Dict] = None, max_student_context: int = 5,
+				 local_model: bool = True, api_key: str = 'token-MtE2024'):
 		
-		super().__init__(model_name, intervention_samples, gen_model, teacher_samples, expl_type, task, max_tokens, num_beams, use_explanations, utility_type, mm_type)
+		super().__init__(model_name, intervention_samples, gen_model, teacher_samples, expl_type, task, max_tokens, num_beams, num_logprobs, use_explanations, utility_type,
+		                 mm_type, local_model, api_key)
 		if student_context is None:
 			self._student_context = []
 		else:

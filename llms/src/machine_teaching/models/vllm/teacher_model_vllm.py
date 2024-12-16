@@ -14,9 +14,9 @@ from tqdm import tqdm
 class TeacherModel(ModelVLLM):
 	
 	def __init__(self, model_name: str, samples: List[Dict] = None, gen_model: LLM = None, expl_type: str = '', task: str = '', max_tokens: int = 10, num_beams: int = 1,
-				 num_logprobs: int = 2, use_explanations: bool = True):
+				 num_logprobs: int = 2, use_explanations: bool = True, local_model: bool = True, api_key: str = 'token-MtE2024'):
 		
-		super().__init__(model_name, samples, gen_model, expl_type, task, max_tokens, num_beams, num_logprobs, use_explanations)
+		super().__init__(model_name, samples, gen_model, expl_type, task, max_tokens, num_beams, num_logprobs, use_explanations, local_model, api_key)
 	
 	def get_context(self, sample: Dict, explanation: Union[List, str] = None, ic_samples: List[Dict] = None) -> str:
 		if ic_samples is None:

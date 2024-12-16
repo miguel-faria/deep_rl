@@ -9,6 +9,7 @@ from machine_teaching.models.model import UnidentifiedTaskError, UnidentifiedExp
 from vllm import LLM, SamplingParams
 from pandas import DataFrame
 from tqdm import tqdm
+from openai import OpenAI
 
 
 class StudentModel(ModelVLLM):
@@ -59,15 +60,26 @@ class StudentModel(ModelVLLM):
 	def predict_confidence(self, sample: Dict, with_explanation: bool = False, explanation: Union[List, str] = None, debug: bool = False) -> List[float]:
 		# Get generation inputs
 		context = self.get_context(sample, explanation=explanation)
-		gen_params = SamplingParams(
-				temperature=0.0,
-				top_k=self._num_beams,
-				max_tokens=self._max_tokens,
-				logprobs=self._n_logprobs
-		)
 		
 		# Generate answer
-		outputs = self.gen_model.generate(context, gen_params)
+		if self.local_model:
+			gen_params = SamplingParams(
+					temperature=0.0,
+					top_k=self._num_beams,
+					max_tokens=self._max_tokens,
+					logprobs=self._n_logprobs
+			)
+			outputs = self.gen_model.generate(context, gen_params)
+
+		else:
+			client = OpenAI(
+					base_url="http://localhost:8000/v1",
+					api_key=self.api_key,
+			)
+			outputs = client.chat.completions.create(
+					model=self.model_name,
+					messages=[{'role': 'user', 'content': context}]
+			)
 		
 		# Exclude extra generation from answer
 		nl_id = self.gen_model.get_tokenizer().encode('\n')[1]

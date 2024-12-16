@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:3
 #SBATCH --time=4:00:00
 #SBATCH --mem-per-cpu=8G
 #SBATCH --qos=gpu-short
@@ -128,6 +128,11 @@ s_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$student_model")")
 t_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$teacher_model")")
 out_file=mohit_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset"_"$(date '+%Y-%m-%d_%H-%M-%S')".out
 results_path="$data_dir"/results/mohit_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset"_"$(date '+%Y-%m-%d_%H-%M-%S')".txt
+
+export VLLM_LOGGING_LEVEL=DEBUG
+export CUDA_LAUNCH_BLOCKING=1
+export NCCL_DEBUG=TRACE
+export VLLM_TRACE_FUNCTION=1
 
 python src/mohit_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
                                     --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" \

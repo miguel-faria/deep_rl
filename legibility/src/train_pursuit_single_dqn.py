@@ -102,6 +102,7 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: TargetPursuitEnv, num_it
 		logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
 		logger.info('Agents: ' + ', '.join(['%s @ (%d, %d)' % (env.agents[hunter].agent_id, *env.agents[hunter].pos) for hunter in env.hunter_ids]))
 		logger.info('Preys: ' + ', '.join(['%s @ (%d, %d)' % (env.agents[prey].agent_id, *env.agents[prey].pos) for prey in env.prey_alive_ids]))
+		logger.info('Objective prey: %s @ (%d, %d)' % (env.target, *env.agents[env.target].pos))
 		while not done:
 			
 			# interact with environment
@@ -116,6 +117,7 @@ def train_pursuit_dqn(dqn_model: SingleModelMADQN, env: TargetPursuitEnv, num_it
 			else:
 				actions = []
 				for a_idx in range(env.n_hunters):
+
 					if dqn_model.agent_dqn.cnn_layer:
 						cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
 						q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.agent_dqn.online_state.params, cnn_obs)[0]

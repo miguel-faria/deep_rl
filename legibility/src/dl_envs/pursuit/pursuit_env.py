@@ -132,7 +132,11 @@ class PursuitEnv(Env):
 	@property
 	def prey_alive_ids(self) -> List[str]:
 		return self._prey_alive_ids
-	
+
+	@property
+	def n_preys_alive(self) -> int:
+		return self._n_preys_alive
+
 	@property
 	def n_hunters(self) -> int:
 		return self._n_hunters

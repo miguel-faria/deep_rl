@@ -109,8 +109,8 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 			dqn_model.agent_dqn.init_network_states(rng_seed, obs[0], optim_learn_rate, initial_model_path)
 	
 	start_time = time.time()
-	epoch = 0
 	sys.stdout.flush()
+	epoch = 0
 	start_record_it = 0
 	start_record_epoch = 0
 	avg_episode_len = []
@@ -143,6 +143,7 @@ def train_legible_dqn(env: FoodCOOPLBForaging, dqn_model: LegibleSingleMADQN, nu
 						                                               obs[a_idx].reshape((1, *cnn_shape)))[0]
 					else:
 						q_values = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_model.goal].params, obs[a_idx])
+
 					if greedy_action:
 						action = q_values.argmax(axis=-1)
 					else:

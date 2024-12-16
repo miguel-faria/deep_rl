@@ -438,7 +438,7 @@ def main( ):
 	parser = argparse.ArgumentParser(description='Machine teaching with Theory of Mind based mental models experiments from Mohit Bensal')
 	# Models arguments
 	parser.add_argument('--llm-lib', dest='llm_lib', default='', type=str, choices=['hf', 'vllm'], help='LLM transformer lib to use, either HuggingFace (hf) or vLLM (vllm)')
-	parser.add_argument('--cache-dir', dest='cache_dir', default='', type=str, help='Path to the cache directory, where downladed models are stored')
+	parser.add_argument('--cache-dir', dest='cache_dir', default='', type=str, help='Path to the cache directory, where downloaded models are stored')
 	parser.add_argument('--train-filename', dest='train_filename', default='', type=str, help='Filename of the training data')
 	parser.add_argument('--test-filename', dest='test_filename', default='', type=str, help='Filename of the testing data')
 	parser.add_argument('--val-filename', dest='val_filename', default='', type=str, help='Filename of the validation data')
@@ -481,6 +481,7 @@ def main( ):
 	
 	test_samples = task_dataset.get_test_samples() if args.task != 'strategy_qa' else task_dataset.get_validation_samples()
 	train_samples = task_dataset.get_train_samples()
+	print('Cache directory: ', args.cache_dir)
 	print('Assigned gpus = ', os.environ.get('CUDA_VISIBLE_DEVICES'))
 	print('Number of test samples = %d' % test_samples.shape[0])
 	print('Number of train samples = %d' % train_samples.shape[0])

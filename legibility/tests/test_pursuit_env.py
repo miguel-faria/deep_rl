@@ -51,7 +51,7 @@ def main():
 		print('Iteration: %d\tStep: %d' % (it + 1, i + 1))
 		actions = []
 		for hunter_id in hunters:
-			print(env.agents[hunter_id].pos)
+			print(env.agents[hunter_id[0]].pos)
 			# if env.agents[hunter_id].pos[1] < field_size[1] - 1:
 			# 	actions += [Action.RIGHT]
 			# elif env.agents[hunter_id].pos[0] < field_size[0] - 1:
@@ -66,7 +66,8 @@ def main():
 		
 		print(' '.join([str(Action(action)) for action in actions]))
 		state, rewards, finished, timeout, _ = env.step(actions)
-		print(state, rewards, finished, timeout)
+		print(state)
+		print(rewards, finished, timeout)
 		print(env.field)
 
 		if finished:

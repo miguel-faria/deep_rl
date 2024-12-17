@@ -23,31 +23,26 @@ USE_DUELING = True
 USE_DDQN = True
 USE_CNN = True
 USE_VDN = True
-USE_TENSORBOARD = True
+USE_TRACKER = True
 LEG_REWARD = 'q_vals'
 
 # Train params
-MAX_CYCLES = 100
 N_ITERATIONS = 400
 BATCH_SIZE = 32
 TRAIN_FREQ = 1
 TARGET_FREQ = 10
-# ALPHA = 0.003566448247686571
 ONLINE_LR = 0.001
 TARGET_LR = 0.1
 INIT_EPS = 1.0
 FINAL_EPS = 0.05
 # EPS_DECAY = 0.7	# for linear eps
 EPS_DECAY = 0.175	# for log eps
-# CYCLE_EPS = 0.925
-CYCLE_EPS = 0.3
 EPS_TYPE = "log"
-CYCLE_TYPE = "linear"
 USE_GPU = True
 RESTART = False
 DEBUG = False
-RESTART_INFO = ["20230724-171745", "food_5x4_cycle_2", 2]
 OPT_VDN = True
+RESTART_INFO = ["20230724-171745", "food_5x4_cycle_2", 2]
 PRECOMP_FRAC = 0.3
 TRAIN_VERSION = 'v1'
 
@@ -69,8 +64,6 @@ parser.add_argument('--buffer-method', dest='buffer_method', type=str, required=
 parser.add_argument('--buffer-smart-add', dest='buffer_smart_add', action='store_true',
 					help='Flag denoting the use of smart sample add to experience replay buffer instead of first-in first-out')
 parser.add_argument('--buffer-size', dest='buffer_size', type=int, required=False, default=BUFFER)
-parser.add_argument('--cycle-eps', dest='cycle_eps', type=float, required=False, default=CYCLE_EPS, help='Epsilon decay for each cycle.')
-parser.add_argument('--cycle-type', dest='cycle_type', type=str, required=False, default=CYCLE_TYPE, help='Type of decay for each cycle starting epsilon.')
 parser.add_argument('--data-dir', dest='data_dir', type=str, default='',
 					help='Directory to retrieve data regarding configs and model performances, if left blank using default location')
 parser.add_argument('--eps-decay', dest='eps_decay', type=float, required=False, default=EPS_DECAY, help='Epsilon decay.')
@@ -104,8 +97,6 @@ input_args = parser.parse_args()
 add_method = input_args.buffer_method
 buffer_size = input_args.buffer_size
 batch_size = input_args.batch_size
-cycle_type = input_args.cycle_type
-cycle_eps = input_args.cycle_eps
 data_dir = input_args.data_dir
 eps_type = input_args.eps_type
 eps_decay = input_args.eps_decay
@@ -137,19 +128,19 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 	else:
 		eps = eps_type
 		decay = eps_decay
-	args = (" --n-agents %d --architecture %s --buffer %d --gamma %f --beta %f --reward %s --iterations %d --max-cycles %d --batch %d --train-freq %d "
-			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --cycle-eps-decay %f --legibility-temp %f "
+	args = (" --n-agents %d --architecture %s --buffer %d --gamma %f --beta %f --reward %s --iterations %d --batch %d --train-freq %d "
+			"--target-freq %d --alpha %f --tau %f --init-eps %f --final-eps %f --eps-decay %f --eps-type %s --warmup-steps %d --legibility-temp %f "
 			"--n-players %d --player-level %d --field-size %d --n-food %d --food-level %d --steps-episode %d --n-foods-spawn %d "
-			% (N_AGENTS, ARQUITECTURE, buffer_size, GAMMA, BETA, leg_reward,                                                                                   	 # DQN parameters
-			   iterations, MAX_CYCLES, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, start_eps, final_eps, decay, eps, warmup, cycle_eps, TEMP,     # Train parameters
-			   N_PLAYERS, PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS))												               	 # Environment parameters
+			% (N_AGENTS, ARQUITECTURE, buffer_size, GAMMA, BETA, leg_reward,                                                                          # DQN parameters
+			   iterations, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, start_eps, final_eps, decay, eps, warmup, TEMP,     # Train parameters
+			   N_PLAYERS, PLAYER_LEVEL, field_len, N_FOODS, FOOD_LVL, max_steps, N_SPAWN_FOODS))												      # Environment parameters
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
-			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TENSORBOARD else "") + (" --vdn" if USE_VDN else "") +
-			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
-			 (" --debug" if DEBUG else "") + (" --use-opt-vdn" if OPT_VDN else "") + (" --n-leg-agents %d" % N_LEG_AGENTS) + (" --fraction %f" % PRECOMP_FRAC) +
-			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --cycle-eps-type %s" % cycle_type) + (" --data-dir %s" % data_dir if data_dir != '' else "") +
-			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") + (" --use-higher-model" if use_higher_model else "") +
-			 (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else "") + (" --tracker-dir %s" % tracker_logs if tracker_logs != '' else "") +
+	         (" --cnn" if USE_CNN else "") + (" --tracker" if USE_TRACKER else "") + (" --vdn" if USE_VDN else "") +
+	         (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
+	         (" --debug" if DEBUG else "") + (" --use-opt-vdn" if OPT_VDN else "") + (" --n-leg-agents %d" % N_LEG_AGENTS) + (" --fraction %f" % PRECOMP_FRAC) +
+	         (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --data-dir %s" % data_dir if data_dir != '' else "") +
+	         (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") + (" --use-higher-model" if use_higher_model else "") +
+	         (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else "") + (" --tracker-dir %s" % tracker_logs if tracker_logs != '' else "") +
 	         (" --train-performance %f" % train_thresh if train_thresh is not None else ""))
 	commamd = "python " + str(src_dir / ('train_lb_legible_dqn%s.py' % ('_' + train_version if train_version != 'v1' else ''))) + args
 	if not USE_SHELL:

@@ -293,16 +293,15 @@ def main():
 	parser.add_argument('--vdn', dest='use_vdn', action='store_true', help='Flag that signals the use of a VDN DQN architecture')
 	parser.add_argument('--cnn', dest='use_cnn', action='store_true', help='Flag that signals the use of a CNN as entry for the DQN architecture')
 	parser.add_argument('--dueling', dest='dueling_dqn', action='store_true', help='Flag that signals the use of a Dueling DQN architecture')
-	parser.add_argument('--tensorboard', dest='use_tensorboard', action='store_true',
-	                    help='Flag the signals the use of a tensorboard summary writer. Expects argument --tensorboardDetails to be present')
+	parser.add_argument('--tracker', dest='use_tracker', action='store_true', help='Flag the signals the use of the wandb performance tracker.')
 	parser.add_argument('--reward', dest='leg_reward', type=str, required=True, choices=['simple', 'reward', 'q_vals', 'info'],
 	                    help='Type of legible reward signal to use from amongst:\n\t\'simple\' - use just the objective saliency as reward'
 	                         '\n\t\'reward\' - weight environment reward with objective saliency\n\t\'q_vals\' - weight agent q_vals with objective saliency'
 	                         '\n\t\'info\' - information based legibility by summing environment reward with objective saliency')
 	
 	# Train parameters
-	parser.add_argument('--train-performance', dest='min_train_performance', type=float, default=MIN_TRAIN_PERFORMANCE, help='Minimum performance threshold to skip model train')
-	parser.add_argument('--max-cycles', dest='max_cycles', type=int, required=True, help='Max number of training cycles.')
+	parser.add_argument('--train-performance', dest='min_train_performance', type=float, default=MIN_TRAIN_PERFORMANCE,
+	                    help='Minimum performance threshold to skip model train')
 	parser.add_argument('--iterations', dest='n_iterations', type=int, required=True, help='Number of iterations to run training')
 	parser.add_argument('--batch', dest='batch_size', type=int, required=True, help='Number of samples in each training batch')
 	parser.add_argument('--train-freq', dest='train_freq', type=int, required=True, help='Number of epochs between each training update')
@@ -313,11 +312,8 @@ def main():
 	parser.add_argument('--final-eps', dest='final_eps', type=float, required=False, default=0.05, help='Minimum exploration rate for training')
 	parser.add_argument('--eps-decay', dest='eps_decay', type=float, required=False, default=0.5, help='Decay rate for the exploration update')
 	parser.add_argument('--legibility-temp', dest='temp', type=float, required=False, default=0.5, help='Temperature parameter for legibility softmax')
-	parser.add_argument('--cycle-eps-decay', dest='cycle_eps_decay', type=float, required=False, default=0.95, help='Decay rate for the exploration update')
 	parser.add_argument('--eps-type', dest='eps_type', type=str, required=False, default='log', choices=['linear', 'exp', 'log', 'epoch'],
 	                    help='Type of exploration rate update to use: linear, exponential (exp), logarithmic (log), epoch based (epoch)')
-	parser.add_argument('--cycle-eps-type', dest='cycle_eps_type', type=str, required=False, default='log', choices=['linear', 'log'],
-	                    help='Type of update for each cycle starting exploration rate: linear, logarithmic (log)')
 	parser.add_argument('--warmup-steps', dest='warmup', type=int, required=False, default=10000, help='Number of epochs to pass before training starts')
 	parser.add_argument('--tensorboard-freq', dest='tensorboard_freq', type=int, required=False, default=1,
 	                    help='Number of epochs between each log in tensorboard. Use only in combination with --tensorboard option')
@@ -355,8 +351,8 @@ def main():
 	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
 	parser.add_argument('--render', dest='use_render', action='store_true', help='Flag that signals the use of the field render while training')
 	parser.add_argument('--n-foods-spawn', dest='n_foods_spawn', type=int, required=True, help='Number of foods to be spawned for training.')
-	
 	args = parser.parse_args()
+
 	# DQN args
 	n_agents = args.n_agents
 	n_leg_agents = args.n_leg_agents
@@ -375,7 +371,6 @@ def main():
 	
 	# Train args
 	train_thresh = args.min_train_performance
-	max_cycles = args.max_cycles
 	n_iterations = args.n_iterations
 	batch_size = args.batch_size
 	train_freq = args.train_freq
@@ -420,7 +415,6 @@ def main():
 	if not use_gpu:
 		jax.config.update('jax_platform_name', 'cpu')
 	
-	# print(gamma, initial_eps, final_eps, eps_decay, eps_type, warmup, learn_rate, target_learn_rate)
 	field_dims = len(field_lengths)
 	if 2 >= field_dims > 0:
 		if field_dims == 1:
@@ -596,9 +590,9 @@ def main():
 				cnn_shape = (0,) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
 				tracker_panel = 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])
 				greedy_actions = False
-				history = train_legible_dqn(env, agent_madqn, n_iterations, n_foods_spawn, batch_size, learn_rate, target_update_rate, initial_eps, final_eps, eps_type,
-				                            leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tensorboard_freq,
-				                            greedy_actions, temp, curriculum_model_path, use_tensorboard, wandb_run, tracker_panel, debug)
+				train_legible_dqn(env, agent_madqn, n_iterations, n_foods_spawn, batch_size, learn_rate, target_update_rate, initial_eps, final_eps, eps_type,
+				                  leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tensorboard_freq,
+				                  greedy_actions, temp, curriculum_model_path, use_tensorboard, wandb_run, tracker_panel, debug)
 				
 				env.close()
 				logger.info('Saving final model')

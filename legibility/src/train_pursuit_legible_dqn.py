@@ -311,6 +311,7 @@ def main():
 						help='Type of prey in the environment, possible types: idle, greedy or random')
 	parser.add_argument('--render', dest='use_render', action='store_true', help='Flag that signals the use of the field render while training')
 	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
+	parser.add_argument('--catch-reward', dest='catch_reward', type=float, required=False, default=5.0, help='Catch reward for catching a prey')
 	args = parser.parse_args()
 
 	# DQN args

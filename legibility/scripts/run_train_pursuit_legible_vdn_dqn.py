@@ -121,7 +121,6 @@ smart_add = input_args.buffer_smart_add
 target_lr = input_args.target_lr
 temp = input_args.temp
 train_thresh = input_args.train_thresh
-train_version = input_args.version
 tracker_logs = input_args.logs
 use_lower_model = input_args.use_lower_model
 use_higher_model = input_args.use_higher_model
@@ -139,7 +138,7 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 			   n_iterations, batch_size, TRAIN_FREQ, TARGET_FREQ, online_lr, target_lr, start_eps, final_eps, eps_decay, eps_type, warmup, temp,        # Train parameters
 			   ' '.join(HUNTER_IDS), ' '.join(PREY_IDS), HUNTER_CLASSES, prey_type, field_len, n_required_hunters, max_steps, catch_reward))            # Environment parameters
 	args += ((" --dueling" if USE_DUELING else "") + (" --ddqn" if USE_DDQN else "") + (" --render" if USE_RENDER else "") + ("  --gpu" if USE_GPU else "") +
-			 (" --cnn" if USE_CNN else "") + (" --tensorboard" if USE_TRACKER else "") + (" --vdn" if USE_VDN else "") +
+			 (" --cnn" if USE_CNN else "") + (" --tracker" if USE_TRACKER else "") + (" --vdn" if USE_VDN else "") +
 			 (" --restart --restart-info %s %s %s" % (RESTART_INFO[0], RESTART_INFO[1], str(RESTART_INFO[2])) if RESTART else "") +
 			 (" --debug" if DEBUG else "") + (" --use-opt-vdn" if OPT_VDN else "") + (" --n-leg-agents %d" % N_LEG_AGENTS) + (" --fraction %f" % PRECOMP_FRAC) +
 			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --data-dir %s" % data_dir if data_dir != '' else "") +

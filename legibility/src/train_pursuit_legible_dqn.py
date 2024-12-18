@@ -60,8 +60,8 @@ def get_target_seqs(targets: List[str]) -> List[Tuple[str]]:
 def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: TargetPursuitEnv, num_iterations: int, batch_size: int, optim_learn_rate: float,
 							  tau: float, initial_eps: float, final_eps: float, eps_type: str, reward_type: str, rng_seed: int, logger: logging.Logger, cnn_shape: Tuple[int],
 							  exploration_decay: float = 0.99, warmup: int = 0, train_freq: int = 1, target_freq: int = 100, tensorboard_frequency: int = 1,
-							  use_render: bool = False, greedy_action: bool = True, sofmax_temp: float = 1.0, initial_model_path: str = '',
-							  use_tracker: bool = False, performance_tracker: Optional[Run] = None, tracker_panel: str = '', debug: bool = False) -> None:
+							  use_render: bool = False, greedy_action: bool = True, sofmax_temp: float = 1.0, initial_model_path: str = '', use_tracker: bool = False,
+							  performance_tracker: Optional[Run] = None, tracker_panel: str = '', debug: bool = False, dqn_target_key: str = '') -> None:
 
 	rng_gen = np.random.default_rng(rng_seed)
 	
@@ -108,7 +108,7 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: TargetPursuitE
 					if a_idx < dqn_model.n_leg_agents:
 						online_params = dqn_model.agent_dqn.online_state.params
 					else:
-						online_params = dqn_model.optimal_models[0].params
+						online_params = dqn_model.optimal_models[dqn_target_key].params
 
 					if dqn_model.agent_dqn.cnn_layer:
 						cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
@@ -148,17 +148,17 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: TargetPursuitE
 						if dqn_target == live_goals[g_idx]:
 							if dqn_model.agent_dqn.cnn_layer:
 								obs_reshape = obs[a_idx].reshape((1, *obs[a_idx].shape))
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[0].params, obs_reshape)[0]
+								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs_reshape)[0]
 							else:
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[0].params, obs[a_idx])
+								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs[a_idx])
 							goal_action_q = q_vals[action]
 						else:
 							goal_obs = env.make_target_grid_obs(live_goals[g_idx])
 							if dqn_model.agent_dqn.cnn_layer:
 								obs_reshape = goal_obs[a_idx].reshape((1, *goal_obs[a_idx].shape))
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[0].params, obs_reshape)[0]
+								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs_reshape)[0]
 							else:
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[0].params, goal_obs[a_idx])
+								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, goal_obs[a_idx])
 						logger.info(np.exp(dqn_model.beta * (q_vals[action] - q_vals.max()) / sofmax_temp))
 						act_q_vals[g_idx] = np.exp(dqn_model.beta * (q_vals[action] - q_vals.max()) / sofmax_temp)
 					if reward_type == 'reward':
@@ -548,7 +548,7 @@ def main():
 			greedy_actions = False
 			train_pursuit_legible_dqn(agent_madqn, env, n_iterations, batch_size, learn_rate, target_update_rate, initial_eps, final_eps, eps_type,
 			                          leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tensorboard_freq, False,
-			                          greedy_actions, temp, curriculum_model_path, use_tracker, wandb_run, tracker_panel, debug)
+			                          greedy_actions, temp, curriculum_model_path, use_tracker, wandb_run, tracker_panel, debug, target_name)
 
 			logger.info('Saving final model')
 			agent_madqn.save_model(('preys-%d' % n_preys), model_path, logger)

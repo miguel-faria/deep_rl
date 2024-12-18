@@ -39,7 +39,7 @@ source "$conda_dir"/bin/activate drl_env
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 15 --iterations 5000 --episode-steps 800 --limits 1 8 --logs-dir /mnt/scratch-artemis/miguelfaria/logs/lb-foraging --models-dir /mnt/data-artemis/miguelfaria/deep_rl/models --data-dir /mnt/data-artemis/miguelfaria/deep_rl/data --eps-type log --eps-decay 0.07 --use-higher-curriculum --version v2 --legible-reward info
 else
-  python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 8 --iterations 600 --episode-steps 800 --limits 2 2 --use-lower-curriculum --eps-type log --eps-decay 0.175 --use-lower-curriculum --legible-reward info
+  python "$script_path"/run_train_lb_vdn_legible_dqn.py --field-len 8 --iterations 600 --episode-steps 800 --limits 2 2 --use-lower-curriculum --eps-type log --eps-decay 0.175 --use-lower-curriculum --legible-reward info --version v2
 fi
 
 conda deactivate

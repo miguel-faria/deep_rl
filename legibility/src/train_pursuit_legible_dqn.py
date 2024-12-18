@@ -147,7 +147,7 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: TargetPursuitE
 					for g_idx in range(n_goals):
 						if dqn_target == live_goals[g_idx]:
 							if dqn_model.agent_dqn.cnn_layer:
-								obs_reshape = obs[a_idx].reshape((1, *obs[a_idx].shape))
+								obs_reshape = obs[a_idx].reshape((1, *cnn_shape))
 								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs_reshape)[0]
 							else:
 								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs[a_idx])
@@ -155,7 +155,7 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: TargetPursuitE
 						else:
 							goal_obs = env.make_target_grid_obs(live_goals[g_idx])
 							if dqn_model.agent_dqn.cnn_layer:
-								obs_reshape = goal_obs[a_idx].reshape((1, *goal_obs[a_idx].shape))
+								obs_reshape = goal_obs[a_idx].reshape((1, *cnn_shape))
 								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs_reshape)[0]
 							else:
 								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, goal_obs[a_idx])
@@ -183,9 +183,9 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: TargetPursuitE
 			
 			# store new samples
 			if dqn_model.use_vdn:
-				dqn_model.replay_buffer.add(obs, next_obs, actions,
-											np.hstack((legible_rewards[:dqn_model.n_leg_agents], rewards[dqn_model.n_leg_agents:env.n_hunters])),
-											finished[0], [infos])
+				hunter_actions = actions[:env.n_hunters]
+				store_rewards = np.hstack((legible_rewards[:dqn_model.n_leg_agents], rewards[dqn_model.n_leg_agents:env.n_hunters]))
+				dqn_model.replay_buffer.add(obs, next_obs, hunter_actions, store_rewards, finished[0], [])
 			else:
 				for a_idx in range(env.n_hunters):
 					dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], [])

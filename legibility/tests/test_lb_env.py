@@ -68,21 +68,22 @@ def main():
 	# print(state)
 	
 	agent_actions = np.zeros((2, 100, 1000))
-	for cycle in range(100):
-		env.seed(RNG_SEED)
-		env.spawn_food(n_food_spawn, food_level)
-		env.spawn_players()
-		state, *_ = env.reset()
-		print(env.field)
-		print(env.foods)
-		agent_state = state[0]
-		state_shape = agent_state.shape
-		# print(state_shape)
-		s_reshape = agent_state.reshape((1, *state_shape[1:], state_shape[0]))
-		# print(s_reshape.shape)
-		# print(s_reshape[0, 0, 0])
-		# env.render()
-		time.sleep(0.5)
+	# for cycle in range(100):
+	env.seed(RNG_SEED)
+	env.spawn_food(n_food_spawn, food_level)
+	env.spawn_players()
+	state, *_ = env.reset()
+	print(env.field)
+	print(env.foods)
+	print(state[0].shape)
+	agent_state = state[0]
+	state_shape = agent_state.shape
+	# print(state_shape)
+	s_reshape = agent_state.reshape((1, *state_shape[1:], state_shape[0]))
+	# print(s_reshape.shape)
+	# print(s_reshape[0, 0, 0])
+	# env.render()
+	time.sleep(0.5)
 		# for i in range(1000):
 		#
 		# 	print('Iteration: %d' % (i + 1))

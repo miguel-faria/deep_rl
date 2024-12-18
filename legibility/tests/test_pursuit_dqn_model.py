@@ -54,6 +54,7 @@ def main():
 	parser.add_argument('--hunters', dest='hunters', type=str, nargs='+', required=True, help='IDs of hunters in the environment')
 	parser.add_argument('--field-size', dest='field_lengths', type=int, nargs='+', required=True, help='Length and width of the field')
 	parser.add_argument('--preys', dest='preys', type=str, nargs='+', required=True, help='IDs of preys in the environment')
+	parser.add_argument('--prey-type', dest='prey_type', type=str, required=True, help='Type of prey agent to use')
 	parser.add_argument('--n-catch', dest='n_catch', type=int, required=True, help='Number of hunters that have to surround the prey to catch it')
 	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
 	
@@ -71,6 +72,7 @@ def main():
 	hunters = args.hunters
 	field_lengths = args.field_lengths
 	preys = args.preys
+	prey_type = args.prey_type
 	n_catch = args.n_catch
 	max_steps = args.max_steps
 	
@@ -93,7 +95,7 @@ def main():
 	log_dir = Path(__file__).parent.absolute().parent.absolute() / 'logs'
 	models_dir = Path(__file__).parent.absolute().parent.absolute() / 'models'
 	log_filename = ('test_pursuit_dqn_%dx%d-field_%d-hunters_%d-catch' % (field_size[0], field_size[1], n_hunters, n_catch)) + '_best'
-	model_path = (models_dir / 'pursuit_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-hunters' % n_hunters)) /  'best'
+	model_path = (models_dir / 'pursuit_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-hunters' % n_hunters)) / ('%s' % prey_type) / 'best'
 	
 	sys.stdout = open(log_dir / (log_filename + '_log.txt'), 'a')
 	sys.stderr = open(log_dir / (log_filename + '_err.txt'), 'w')

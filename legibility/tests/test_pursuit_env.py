@@ -66,7 +66,7 @@ def main():
 		
 		print(' '.join([str(Action(action)) for action in actions]))
 		state, rewards, finished, timeout, _ = env.step(actions)
-		print(state)
+		print(state[0].shape)
 		print(rewards, finished, timeout)
 		print(env.field)
 

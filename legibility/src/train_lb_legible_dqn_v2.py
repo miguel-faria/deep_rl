@@ -365,7 +365,7 @@ def main():
 	use_ddqn = args.use_ddqn
 	use_cnn = args.use_cnn
 	use_vdn = args.use_vdn
-	use_tensorboard = args.use_tensorboard
+	use_tracker  = args.use_tracker
 	tracker_dir = args.tracker_dir
 	leg_reward = args.leg_reward
 	
@@ -380,9 +380,7 @@ def main():
 	initial_eps = args.initial_eps
 	final_eps = args.final_eps
 	eps_decay = args.eps_decay
-	cycle_eps_decay = args.cycle_eps_decay
 	eps_type = args.eps_type
-	cycle_eps_type = args.cycle_eps_type
 	warmup = args.warmup
 	tensorboard_freq = args.tensorboard_freq
 	restart_train = args.restart_train
@@ -390,7 +388,6 @@ def main():
 	debug = args.debug
 	temp = args.temp
 	optim_vdn = args.opt_vdn
-	tags = args.tags if args.tags is not None else ''
 	use_lower_model = args.use_lower_model
 	use_higher_model = args.use_higher_model
 	
@@ -592,7 +589,7 @@ def main():
 				greedy_actions = False
 				train_legible_dqn(env, agent_madqn, n_iterations, n_foods_spawn, batch_size, learn_rate, target_update_rate, initial_eps, final_eps, eps_type,
 				                  leg_reward, RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tensorboard_freq,
-				                  greedy_actions, temp, curriculum_model_path, use_tensorboard, wandb_run, tracker_panel, debug)
+				                  greedy_actions, temp, curriculum_model_path, use_tracker, wandb_run, tracker_panel, debug)
 				
 				env.close()
 				logger.info('Saving final model')

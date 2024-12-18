@@ -80,160 +80,169 @@ def train_pursuit_legible_dqn(dqn_model: LegibleSingleMADQN, env: TargetPursuitE
 	start_record_epoch = 0
 	avg_episode_len = []
 
-	for it in range(num_iterations):
-		if use_render:
-			env.render()
-		done = False
-		episode_rewards = 0
-		episode_q_vals = 0
-		episode_start = epoch
-		avg_loss = []
-		logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
-		logger.info('Hunters: ' + ', '.join(['%s @ (%d, %d)' % (hunter_id, *env.agents[hunter_id].pos) for hunter_id in env.hunter_ids]))
-		logger.info('Number of preys spawn:\t%d' % env.n_preys_alive)
-		logger.info('Starting prey locations: ' + ', '.join(['(%d, %d)' % pos for pos in [env.agents[prey_id].pos for prey_id in env.prey_alive_ids]]))
-		logger.info('Objective prey: %s @ (%d, %d)' % (env.target, *env.agents[env.target].pos))
-		eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
-		dqn_target = env.target
-		while not done:
-
-			# interact with environment
-			explore = rng_gen.random() < eps
-			if explore:
-				actions = np.array(list(env.action_space.sample()[:env.n_hunters]) + [env.agents[prey_id].act(env) for prey_id in env.prey_alive_ids])
-			else:
-				actions = []
-				for a_idx in range(env.n_hunters):
-
-					if a_idx < dqn_model.n_leg_agents:
-						online_params = dqn_model.agent_dqn.online_state.params
-					else:
-						online_params = dqn_model.optimal_models[dqn_target_key].params
-
-					if dqn_model.agent_dqn.cnn_layer:
-						cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
-						q_values = dqn_model.agent_dqn.q_network.apply(online_params, cnn_obs)[0]
-					else:
-						q_values = dqn_model.agent_dqn.q_network.apply(online_params, obs[a_idx])
-					
-					if greedy_action:
-						action = q_values.argmax(axis=-1)
-					else:
-						pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
-						pol = pol / pol.sum()
-						action = rng_gen.choice(range(env.action_space[0].n), p=pol)
-					# action = jax.device_get(action)
-					episode_q_vals += (float(q_values[int(action)]) / env.n_hunters)
-					actions += [action]
-				
-				for prey_id in env.prey_alive_ids:
-					actions += [env.agents[prey_id].act(env)]
-
-				actions = np.array(actions)
-			if debug:
-				logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]) + ' Explored? %r' % explore + '\n')
-			next_obs, rewards, terminated, timeout, infos = env.step(actions)
+	try:
+		for it in range(num_iterations):
 			if use_render:
 				env.render()
-			
-			legible_rewards = np.zeros(dqn_model.num_agents)
-			live_goals = env.prey_alive_ids
-			n_goals = len(env.prey_alive_ids)
-			if n_goals > 1:
-				for a_idx in range(dqn_model.num_agents):
-					act_q_vals = np.zeros(n_goals)
-					action = actions[a_idx]
-					goal_action_q = 0.0
-					for g_idx in range(n_goals):
-						if dqn_target == live_goals[g_idx]:
-							if dqn_model.agent_dqn.cnn_layer:
-								obs_reshape = obs[a_idx].reshape((1, *cnn_shape))
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs_reshape)[0]
-							else:
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs[a_idx])
-							goal_action_q = q_vals[action]
+			done = False
+			episode_rewards = 0
+			episode_q_vals = 0
+			episode_start = epoch
+			avg_loss = []
+			logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
+			logger.info('Hunters: ' + ', '.join(['%s @ (%d, %d)' % (hunter_id, *env.agents[hunter_id].pos) for hunter_id in env.hunter_ids]))
+			logger.info('Number of preys spawn:\t%d' % env.n_preys_alive)
+			logger.info('Starting prey locations: ' + ', '.join(['%s @ (%d, %d)' % (prey_id, *env.agents[prey_id].pos) for prey_id in env.prey_alive_ids]))
+			logger.info('Objective prey: %s @ (%d, %d)' % (env.target, *env.agents[env.target].pos))
+			eps = DQNetwork.eps_update(EPS_TYPE[eps_type], initial_eps, final_eps, exploration_decay, it, num_iterations)
+			dqn_target = env.target
+			while not done:
+	
+				# interact with environment
+				explore = rng_gen.random() < eps
+				if explore:
+					actions = np.array(list(env.action_space.sample()[:env.n_hunters]) + [env.agents[prey_id].act(env) for prey_id in env.prey_alive_ids])
+				else:
+					actions = []
+					for a_idx in range(env.n_hunters):
+	
+						if a_idx < dqn_model.n_leg_agents:
+							online_params = dqn_model.agent_dqn.online_state.params
 						else:
-							goal_obs = env.make_target_grid_obs(live_goals[g_idx])
-							if dqn_model.agent_dqn.cnn_layer:
-								obs_reshape = goal_obs[a_idx].reshape((1, *cnn_shape))
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs_reshape)[0]
-							else:
-								q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, goal_obs[a_idx])
-						logger.info(np.exp(dqn_model.beta * (q_vals[action] - q_vals.max()) / sofmax_temp))
-						act_q_vals[g_idx] = np.exp(dqn_model.beta * (q_vals[action] - q_vals.max()) / sofmax_temp)
-					if reward_type == 'reward':
-						legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_target)] / act_q_vals.sum()) * rewards[a_idx]
-					elif reward_type == 'q_vals':
-						legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_target)] / act_q_vals.sum()) * goal_action_q
-					elif reward_type == 'info':
-						legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_target)] / act_q_vals.sum()) + rewards[a_idx]
-					else:
-						legible_rewards[a_idx] = act_q_vals[live_goals.index(dqn_target)] / act_q_vals.sum()
-			else:
-				for a_idx in range(dqn_model.n_leg_agents):
-					legible_rewards[a_idx] = rewards[a_idx]
-			
-			if terminated or (timeout and infos['preys_left'] > 0) or ('caught_target' in infos.keys() and infos['caught_target']):
-				finished = np.ones(dqn_model.num_agents)
-				legible_rewards = legible_rewards / (1 - dqn_model.agent_dqn.gamma)
-			else:
-				finished = np.zeros(dqn_model.num_agents)
-			
-			# logger.info(str(finished) + '\tTimestep: %d' % env.env_timestep)
-			
-			# store new samples
-			if dqn_model.use_vdn:
-				hunter_actions = actions[:env.n_hunters]
-				store_rewards = np.hstack((legible_rewards[:dqn_model.n_leg_agents], rewards[dqn_model.n_leg_agents:env.n_hunters]))
-				dqn_model.replay_buffer.add(obs, next_obs, hunter_actions, store_rewards, finished[0], [])
-			else:
-				for a_idx in range(env.n_hunters):
-					dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], [])
-			episode_rewards += sum(legible_rewards) / dqn_model.n_leg_agents
-
-			if use_tracker:
-				performance_tracker.log({
-						tracker_panel + "-charts/performance/legible_reward": 	sum(legible_rewards) / dqn_model.n_leg_agents,
-						tracker_panel + "-charts/performance/reward": 			sum(rewards[:env.n_hunters]) / env.n_hunters},
-						step=(epoch + start_record_epoch))
-			obs = next_obs
-			
-			# update Q-network and target network
-			if epoch >= warmup:
-				if epoch % train_freq == 0:
-					loss = jax.device_get(dqn_model.update_model(batch_size, epoch - start_record_epoch, start_time,
-																 tensorboard_frequency, logger, cnn_shape=cnn_shape))
-					avg_loss += [loss]
+							online_params = dqn_model.optimal_models[dqn_target_key].params
+	
+						if dqn_model.agent_dqn.cnn_layer:
+							cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
+							q_values = dqn_model.agent_dqn.q_network.apply(online_params, cnn_obs)[0]
+						else:
+							q_values = dqn_model.agent_dqn.q_network.apply(online_params, obs[a_idx])
+						
+						if greedy_action:
+							action = q_values.argmax(axis=-1)
+						else:
+							pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
+							pol = pol / pol.sum()
+							action = rng_gen.choice(range(env.action_space[0].n), p=pol)
+						# action = jax.device_get(action)
+						episode_q_vals += (float(q_values[int(action)]) / env.n_hunters)
+						actions += [action]
+					
+					for prey_id in env.prey_alive_ids:
+						actions += [env.agents[prey_id].act(env)]
+	
+					actions = np.array(actions)
 				
-				if epoch % target_freq == 0:
-					dqn_model.agent_dqn.update_target_model(tau)
-			
-			epoch += 1
-			sys.stdout.flush()
-			
-			# Check if iteration is over
-			if terminated or timeout:
-				episode_len = epoch - episode_start
-				avg_episode_len += [episode_len]
+				if debug:
+					logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]) + ' Explored? %r' % explore + '\n')
+				
+				next_obs, rewards, terminated, timeout, infos = env.step(actions)
+				
+				if debug:
+					logger.info(env.get_env_log() + 'Terminated? %r ' % terminated + 'Timedout? %r' % timeout + '\n')
+				
+				if use_render:
+					env.render()
+				
+				legible_rewards = np.zeros(dqn_model.num_agents)
+				live_goals = env.prey_ids
+				n_goals = len(env.prey_ids)
+				if n_goals > 1:
+					for a_idx in range(dqn_model.num_agents):
+						act_q_vals = np.zeros(n_goals)
+						action = actions[a_idx]
+						goal_action_q = 0.0
+						for g_idx in range(n_goals):
+							if dqn_target == live_goals[g_idx]:
+								if dqn_model.agent_dqn.cnn_layer:
+									obs_reshape = obs[a_idx].reshape((1, *cnn_shape))
+									q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs_reshape)[0]
+								else:
+									q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs[a_idx])
+								goal_action_q = q_vals[action]
+							else:
+								goal_obs = env.make_target_grid_obs(live_goals[g_idx])
+								if dqn_model.agent_dqn.cnn_layer:
+									obs_reshape = goal_obs[a_idx].reshape((1, *cnn_shape))
+									q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, obs_reshape)[0]
+								else:
+									q_vals = dqn_model.agent_dqn.q_network.apply(dqn_model.optimal_models[dqn_target_key].params, goal_obs[a_idx])
+							act_q_vals[g_idx] = np.exp(dqn_model.beta * (q_vals[action] - q_vals.max()) / sofmax_temp)
+						if reward_type == 'reward':
+							legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_target)] / act_q_vals.sum()) * rewards[a_idx]
+						elif reward_type == 'q_vals':
+							legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_target)] / act_q_vals.sum()) * goal_action_q
+						elif reward_type == 'info':
+							legible_rewards[a_idx] = (act_q_vals[live_goals.index(dqn_target)] / act_q_vals.sum()) + rewards[a_idx]
+						else:
+							legible_rewards[a_idx] = act_q_vals[live_goals.index(dqn_target)] / act_q_vals.sum()
+				else:
+					for a_idx in range(dqn_model.n_leg_agents):
+						legible_rewards[a_idx] = rewards[a_idx]
+				
+				if terminated or ('caught_target' in infos.keys() and infos['caught_target'] == env.target):
+					finished = np.ones(dqn_model.num_agents)
+					legible_rewards = legible_rewards / (1 - dqn_model.agent_dqn.gamma)
+				else:
+					finished = np.zeros(dqn_model.num_agents)
+				
+				# logger.info(str(finished) + '\tTimestep: %d' % env.env_timestep)
+				
+				# store new samples
+				if dqn_model.use_vdn:
+					hunter_actions = actions[:env.n_hunters]
+					store_rewards = np.hstack((legible_rewards[:dqn_model.n_leg_agents], rewards[dqn_model.n_leg_agents:env.n_hunters]))
+					dqn_model.replay_buffer.add(obs, next_obs, hunter_actions, store_rewards, finished[0], [])
+				else:
+					for a_idx in range(env.n_hunters):
+						dqn_model.replay_buffer.add(obs[a_idx], next_obs[a_idx], actions[a_idx], legible_rewards[a_idx], finished[a_idx], [])
+				episode_rewards += sum(legible_rewards[:dqn_model.n_leg_agents]) / dqn_model.n_leg_agents
+	
 				if use_tracker:
 					performance_tracker.log({
-							tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
-							tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
-							tracker_panel + "-charts/performance/episodic_length":     episode_len,
-							tracker_panel + "-charts/performance/avg_episode_length":  np.mean(avg_episode_len),
-							tracker_panel + "-charts/control/iteration":               it,
-							tracker_panel + "-charts/control/exploration":             eps,
-							tracker_panel + "-charts/losses/td_loss":                  sum(avg_loss) / max(len(avg_loss), 1)
-					},
-							step=(it + start_record_it))
-				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
-				env.target = rng_gen.choice(env.prey_ids)
-				dqn_target = env.target
-				obs, *_ = env.reset()
-				done = True
-				episode_rewards = 0
-				episode_start = epoch
-				avg_loss = []
+							tracker_panel + "-charts/performance/legible_reward": 	sum(legible_rewards) / dqn_model.n_leg_agents,
+							tracker_panel + "-charts/performance/reward": 			sum(rewards[:env.n_hunters]) / env.n_hunters},
+							step=(epoch + episode_start))
+				obs = next_obs
+				
+				# update Q-network and target network
+				if epoch >= warmup:
+					if epoch % train_freq == 0:
+						loss = jax.device_get(dqn_model.update_model(batch_size, epoch - start_record_epoch, start_time,
+																	 tensorboard_frequency, logger, cnn_shape=cnn_shape))
+						avg_loss += [loss]
+					
+					if epoch % target_freq == 0:
+						dqn_model.agent_dqn.update_target_model(tau)
+				
+				epoch += 1
+				sys.stdout.flush()
+				
+				# Check if iteration is over
+				if terminated or timeout:
+					episode_len = epoch - episode_start
+					avg_episode_len += [episode_len]
+					if use_tracker:
+						performance_tracker.log({
+								tracker_panel + "-charts/performance/mean_episode_q_vals": episode_q_vals / episode_len,
+								tracker_panel + "-charts/performance/mean_episode_return": episode_rewards / episode_len,
+								tracker_panel + "-charts/performance/episodic_length":     episode_len,
+								tracker_panel + "-charts/performance/avg_episode_length":  np.mean(avg_episode_len),
+								tracker_panel + "-charts/control/iteration":               it,
+								tracker_panel + "-charts/control/exploration":             eps,
+								tracker_panel + "-charts/losses/td_loss":                  sum(avg_loss) / max(len(avg_loss), 1)
+						},
+								step=(it + start_record_it))
+					logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
+					env.target = rng_gen.choice(env.prey_ids)
+					obs, *_ = env.reset()
+					done = True
+					episode_rewards = 0
+					episode_start = epoch
+					epoch = 0
+		
+	except ValueError as err:
+		logger.error(err)
+		return
 	
 
 # noinspection DuplicatedCode
@@ -401,7 +410,7 @@ def main():
 	models_dir = Path(args.models_dir) if args.models_dir != '' else home_dir / 'models'
 	if tracker_dir == '':
 		tracker_dir = log_dir
-	log_filename = (('train_pursuit_single_dqn_%dx%d-field_%d-hunters_%d-preys' % (field_size[0], field_size[1], n_hunters, n_preys)) +
+	log_filename = (('train_pursuit_legible%s_dqn_%dx%d-field_%d-hunters_%d-preys' % ('_vdn' if use_vdn else '', field_size[0], field_size[1], n_hunters, n_preys)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / ('pursuit_legible%s_dqn' % ('_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
 	              ('%d-hunters' % n_hunters) / now.strftime("%Y%m%d-%H%M%S"))
@@ -465,33 +474,34 @@ def main():
 	#####################
 	if train_acc <= train_thresh:
 		try:
-			wandb_run = wandb.init(project='pursuit-legible', entity='miguel-faria',
-					   config={
-						   "field": "%dx%d" % (field_size[0], field_size[1]),
-						   "preys": n_preys,
-						   "hunters": n_hunters,
-						   "legible_agents": n_leg_agents,
-	                       "online_learing_rate": learn_rate,
-	                       "target_learning_rate": target_update_rate,
-	                       "discount": gamma,
-	                       "eps_decay_type": eps_type,
-	                       "eps_decay": eps_decay,
-	                       "dqn_architecture": architecture,
-	                       "iterations": n_iterations,
-	                       "cycles": 1,
-	                       "beta": beta,
-	                       "softmax_temp": temp,
-	                       "buffer_size": buffer_size,
-	                       "buffer_add": "smart" if args.buffer_smart_add else "plain",
-	                       "buffer_add_method": args.buffer_method if args.buffer_smart_add else "standard",
-	                       "reward_type": leg_reward,
-	                       "batch_size": batch_size,
-	                       "curriculum_learning": 'no' if not (use_higher_model or use_higher_model) else ('lower_model' if use_lower_model else 'higher_model')
-					   },
-					   dir=tracker_dir,
-					   name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_preys, prey_type) +
-							 now.strftime("%Y%m%d-%H%M%S")),
-					   sync_tensorboard=True)
+			wandb_run = wandb.init(project='pursuit-legible',
+								   entity='miguel-faria',
+								   config={
+									   "field": "%dx%d" % (field_size[0], field_size[1]),
+									   "preys": n_preys,
+									   "hunters": n_hunters,
+									   "legible_agents": n_leg_agents,
+									   "online_learing_rate": learn_rate,
+									   "target_learning_rate": target_update_rate,
+									   "discount": gamma,
+									   "eps_decay_type": eps_type,
+									   "eps_decay": eps_decay,
+									   "dqn_architecture": architecture,
+									   "iterations": n_iterations,
+									   "beta": beta,
+									   "softmax_temp": temp,
+									   "buffer_size": buffer_size,
+									   "buffer_add": "smart" if args.buffer_smart_add else "plain",
+									   "buffer_add_method": args.buffer_method if args.buffer_smart_add else "standard",
+									   "reward_type": leg_reward,
+									   "batch_size": batch_size,
+									   "curriculum_learning": 'no' if not (use_higher_model or use_higher_model) else ('lower_model' if use_lower_model else 'higher_model')
+								   },
+								   dir=tracker_dir,
+								   name=('%ssingle-l%dx%d-%dh-%dp-%s-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_hunters, n_preys, prey_type) +
+										 now.strftime("%Y%m%d-%H%M%S")),
+								   sync_tensorboard=True,
+								   settings=wandb.Settings(init_timeout=120))
 			logger.info('##########################')
 			logger.info('Starting Pursuit DQN Train')
 			logger.info('##########################')

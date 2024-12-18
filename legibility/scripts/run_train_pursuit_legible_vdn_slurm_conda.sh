@@ -2,7 +2,7 @@
 
 #SBATCH --mail-type=BEGIN,END,FAIL         # Mail events (NONE, BEGIN, END, FAIL, ALL)
 #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
-#SBATCH --job-name=train_legible_single_vdn
+#SBATCH --job-name=train_pursuit_legible_vdn
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks-per-node=1
@@ -41,7 +41,7 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
 elif [ "$HOSTNAME" = "hera" ] ; then
   nohup python "$script_path"/run_train_pursuit_legible_vdn_dqn.py --field-len 10 --hunters 2 --prey-type idle --catch-reward 5 --batch-size 64 --buffer-size 5000 --iterations 15000 --episode-steps 1000 --warmup 1000 --limits 1 4 --eps-type linear --eps-decay 0.27 --legible-reward info --beta 0.8 --legibility-temp 0.1 --online-lr 0.00005 --use-higher-curriculum --logs-dir /mnt/data-hera1/miguelfaria/deep_rl/logs/pursuit --models-dir /mnt/data-hera1/miguelfaria/deep_rl/models --data-dir /mnt/data-hera1/miguelfaria/deep_rl/data
 else
-  python "$script_path"/run_train_pursuit_legible_vdn_dqn.py --field-len 10 --hunters 2 --prey-type idle --catch-reward 5 --batch-size 64 --buffer-size 5000 --iterations 15000 --episode-steps 1000 --warmup 1000 --limits 1 4 --eps-type linear --eps-decay 0.27 --legible-reward info --beta 0.8 --legibility-temp 0.1 --online-lr 0.00005 --use-higher-curriculum
+  python "$script_path"/run_train_pursuit_legible_vdn_dqn.py --field-len 10 --hunters 2 --prey-type idle --catch-reward 5 --batch-size 64 --buffer-size 5000 --iterations 15000 --episode-steps 1000 --warmup 1000 --limits 4 4 --eps-type linear --eps-decay 0.27 --legible-reward info --beta 0.8 --legibility-temp 0.1 --online-lr 0.00005 --use-higher-curriculum
 fi
 
 conda deactivate

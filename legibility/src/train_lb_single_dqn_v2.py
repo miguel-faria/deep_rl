@@ -605,7 +605,6 @@ def main():
 		
 		except KeyboardInterrupt as ks:
 			logger.info('Caught keyboard interrupt, cleaning up and closing.')
-			wandb.finish()
 			with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
 			          mode='r+', encoding='utf-8') as train_file:
 				performance_data = yaml.safe_load(train_file)
@@ -617,6 +616,9 @@ def main():
 						[[sorted_key, performance_data[sorted_key]] for sorted_key in
 						 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
 				yaml.safe_dump(sorted_data, train_file)
+				
+		finally:
+			wandb.finish()
 
 
 if __name__ == '__main__':

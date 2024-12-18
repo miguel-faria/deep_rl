@@ -594,7 +594,7 @@ def main():
 					for h_idx in range(n_hunters):
 						if agent_madqn.agent_dqn.cnn_layer:
 							q_values = agent_madqn.agent_dqn.q_network.apply(agent_madqn.agent_dqn.online_state.params,
-																		   obs[h_idx].reshape((1, *obs[h_idx].shape)))[0]
+																		   obs[h_idx].reshape((1, *cnn_shape)))[0]
 						else:
 							q_values = agent_madqn.agent_dqn.q_network.apply(agent_madqn.agent_dqn.online_state.params, obs[h_idx])
 						action = q_values.argmax(axis=-1)
@@ -624,13 +624,15 @@ def main():
 			logger.info('Passed %d tests out of %d' % (tests_passed, N_TESTS))
 			logger.info('Failed tests history:')
 			logger.info(failed_history)
+			
+			if (tests_passed / N_TESTS) > train_acc:
+				logger.info('Updating best model for current loc')
+				Path.mkdir(model_path.parent.absolute() / 'best', parents=True, exist_ok=True)
+				agent_madqn.save_model('%d-preys' % n_preys, model_path.parent.absolute() / 'best', logger)
+				train_acc = tests_passed / N_TESTS
 
 			wandb_run.finish()
-
-		except KeyboardInterrupt as ks:
-			logger.info('Caught keyboard interrupt, cleaning up and closing.')
-			wandb.finish()
-			with open(data_dir / 'performances' / 'lb_foraging' / ('train_legible%s_performances_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
+			with open(data_dir / 'performances' / 'pursuit' / ('train_legible_performances_%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
 			          mode='r+', encoding='utf-8') as train_file:
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
@@ -642,6 +644,24 @@ def main():
 						[[sorted_key, performance_data[sorted_key]] for sorted_key in
 						 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
 				yaml.safe_dump(sorted_data, train_file)
+
+		except KeyboardInterrupt as ks:
+			logger.info('Caught keyboard interrupt, cleaning up and closing.')
+			with open(data_dir / 'performances' / 'pursuit' / ('train_legible_performances_%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
+			          mode='r+', encoding='utf-8') as train_file:
+				performance_data = yaml.safe_load(train_file)
+				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
+				hunter_idx = str(n_hunters) + '-hunters'
+				prey_idx = str(n_preys) + '-preys'
+				performance_data[field_idx][hunter_idx][prey_idx] = train_acc
+				train_file.seek(0)
+				sorted_data = dict(
+						[[sorted_key, performance_data[sorted_key]] for sorted_key in
+						 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+				yaml.safe_dump(sorted_data, train_file)
+				
+		finally:
+			wandb.finish()
 
 
 if __name__ == '__main__':

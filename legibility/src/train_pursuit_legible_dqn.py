@@ -448,7 +448,6 @@ def main():
 	handler.setFormatter(logging.Formatter('%(name)s %(asctime)s %(levelname)s:\t%(message)s'))
 	err_logger.addHandler(handler)
 	Path.mkdir(model_path, parents=True, exist_ok=True)
-	preys_permutations = list(permutations(prey_ids))
 
 	logger.info('##################################')
 	logger.info('Starting Pursuit Legible DQN Train')
@@ -573,30 +572,37 @@ def main():
 			random.seed(TEST_RNG_SEED)
 			failed_history = []
 			tests_passed = 0
-			testing_prey_lists = [random.choice(preys_permutations) for _ in range(N_TESTS)]
+			testing_prey_lists = [random.choice(prey_ids) for _ in range(N_TESTS)]
 			for n_test in range(N_TESTS):
 				env.reset_init_pos()
+				env.target = testing_prey_lists[n_test]
 				obs, *_ = env.reset()
 				logger.info('Test number %d' % (n_test + 1))
 				logger.info('Prey locations: ' + ', '.join(['(%d, %d)' % env.agents[prey_id].pos for prey_id in env.prey_alive_ids]))
 				logger.info('Agent positions: ' + ', '.join(['(%d, %d)' % env.agents[hunter_id].pos for hunter_id in env.hunter_ids]))
 				logger.info('Testing sequence: ' + ', '.join(testing_prey_lists[n_test]))
-				obs, *_ = env.reset()
+				# obs, *_ = env.reset()
 				epoch = 0
-				agent_reward = [0, 0]
+				agent_reward = [0] * n_hunters
 				game_over = False
 				finished = False
 				timeout = False
-				env.target = testing_prey_lists[n_test]
+				cnn_shape = (0,) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
 				while not game_over:
 
 					actions = []
 					for h_idx in range(n_hunters):
-						if agent_madqn.agent_dqn.cnn_layer:
-							q_values = agent_madqn.agent_dqn.q_network.apply(agent_madqn.agent_dqn.online_state.params,
-																		   obs[h_idx].reshape((1, *cnn_shape)))[0]
+						dqn = agent_madqn.agent_dqn
+						if h_idx < agent_madqn.n_leg_agents:
+							online_params = agent_madqn.agent_dqn.online_state.params
 						else:
-							q_values = agent_madqn.agent_dqn.q_network.apply(agent_madqn.agent_dqn.online_state.params, obs[h_idx])
+							online_params = agent_madqn.optimal_models[agent_madqn.goal].params
+
+						if dqn.cnn_layer:
+							obs_reshape = obs[h_idx].reshape((1, *cnn_shape))
+							q_values = dqn.q_network.apply(online_params, obs_reshape)[0]
+						else:
+							q_values = dqn.q_network.apply(online_params, obs[h_idx])
 						action = q_values.argmax(axis=-1)
 						action = jax.device_get(action)
 						actions += [action]
@@ -618,6 +624,7 @@ def main():
 					logger.info('Number of epochs: %d' % epoch)
 					logger.info('Accumulated reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0], agent_reward[1]))
 					logger.info('Average reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0] / epoch, agent_reward[1] / epoch))
+
 				if timeout:
 					logger.info('Test %d timed out' % (n_test + 1))
 

@@ -71,111 +71,183 @@ class StudentModel(ModelVLLM):
 			)
 			outputs = self.gen_model.generate(context, gen_params)
 
+			# Exclude extra generation from answer
+			nl_id = self.gen_model.get_tokenizer().encode('\n')[1]
+			nldouble_id = self.gen_model.get_tokenizer().encode('\n\n')[1]
+			logprobs = outputs[0].outputs[0].logprobs
+			tokens = outputs[0].outputs[0].token_ids
+			nl_pos = tokens.index(nl_id) if nl_id in tokens else self._max_tokens
+			nldouble_pos = tokens.index(nldouble_id) if nldouble_id in tokens else self._max_tokens
+			answer_end = nl_pos if nl_pos < nldouble_pos else nldouble_pos
+			tokens = tokens[:answer_end]
+			logprobs = logprobs[:answer_end]
+
+			if self._task == "strategy_qa":
+				# Find model answer to question
+				no_id = self.gen_model.get_tokenizer().encode(' no')[1]
+				yes_id = self.gen_model.get_tokenizer().encode(' yes')[1]
+				no_pos = tokens.index(no_id) if no_id in tokens else self._max_tokens
+				yes_pos = tokens.index(yes_id) if yes_id in tokens else self._max_tokens
+				answer_pos = yes_pos if yes_pos < no_pos else no_pos
+
+				# Get class scores
+				if answer_pos < self._max_tokens:
+					answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
+					answer_tokens_alt = list(logprobs[answer_pos].keys())
+					scores = softmax(answer_logprobs, dim=-1)
+					yes_score, no_score = scores[answer_tokens_alt.index(yes_id)], scores[answer_tokens_alt.index(no_id)]
+
+				else:
+					yes_score = 0.0
+					no_score = 0.0
+
+				class_scores = [yes_score, no_score]
+				if debug:
+					print('Yes score = %s' % yes_score)
+					print('No score = %s' % no_score)
+
+			elif self._task == "ec_qa":
+				# Find model answer to question
+				opt1_id = self.gen_model.get_tokenizer().encode('1')[1]
+				opt2_id = self.gen_model.get_tokenizer().encode('2')[1]
+				opt3_id = self.gen_model.get_tokenizer().encode('3')[1]
+				opt4_id = self.gen_model.get_tokenizer().encode('4')[1]
+				opt5_id = self.gen_model.get_tokenizer().encode('5')[1]
+				opt1_pos = tokens.index(opt1_id) if opt1_id in tokens else self._max_tokens
+				opt2_pos = tokens.index(opt2_id) if opt2_id in tokens else self._max_tokens
+				opt3_pos = tokens.index(opt3_id) if opt3_id in tokens else self._max_tokens
+				opt4_pos = tokens.index(opt4_id) if opt4_id in tokens else self._max_tokens
+				opt5_pos = tokens.index(opt5_id) if opt5_id in tokens else self._max_tokens
+				answer_pos = min([opt1_pos, opt2_pos, opt3_pos, opt4_pos, opt5_pos])
+
+				# Get class scores
+				if answer_pos < self._max_tokens:
+					answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
+					answer_tokens_alt = list(logprobs[answer_pos].keys())
+					scores = softmax(answer_logprobs, dim=-1)
+					opt1_score = scores[answer_tokens_alt.index(opt1_id)]
+					opt2_score = scores[answer_tokens_alt.index(opt2_id)]
+					opt3_score = scores[answer_tokens_alt.index(opt3_id)]
+					opt4_score = scores[answer_tokens_alt.index(opt4_id)]
+					opt5_score = scores[answer_tokens_alt.index(opt5_id)]
+
+				else:
+					opt1_score = opt2_score = opt3_score = opt4_score = opt5_score = 0.0
+
+				class_scores = [opt1_score, opt2_score, opt3_score, opt4_score, opt5_score]
+				if debug:
+					print('Option1 score = %s' % opt1_score)
+					print('Option2 score = %s' % opt2_score)
+					print('Option3 score = %s' % opt3_score)
+					print('Option4 score = %s' % opt4_score)
+					print('Option5 score = %s' % opt5_score)
+
+			else:
+				raise UnidentifiedTaskError('Task %s not defined' % self._task)
+
 		else:
-			client = OpenAI(
-					base_url="http://localhost:8000/v1",
-					api_key=self.api_key,
-			)
-			outputs = client.chat.completions.create(
+			client = OpenAI(base_url=self.model_url, api_key=self.api_key)
+			outputs = client.completions.create(
 					model=self.model_name,
-					messages=[{'role': 'user', 'content': context}],
+					prompt=context,
 					max_tokens=self._max_tokens,
-					logprobs=(self._n_logprobs > 0),
-					top_logprobs=self._n_logprobs,
+					logprobs=self._n_logprobs,
 					temperature=self._temperature,
 			)
-			
-		# Exclude extra generation from answer
-		nl_id = self.gen_model.get_tokenizer().encode('\n')[1]
-		nldouble_id = self.gen_model.get_tokenizer().encode('\n\n')[1]
-		logprobs = outputs[0].outputs[0].logprobs
-		tokens = outputs[0].outputs[0].token_ids
-		nl_pos = tokens.index(nl_id) if nl_id in tokens else self._max_tokens
-		nldouble_pos = tokens.index(nldouble_id) if nldouble_id in tokens else self._max_tokens
-		answer_end = nl_pos if nl_pos < nldouble_pos else nldouble_pos
-		tokens = tokens[:answer_end]
-		logprobs = logprobs[:answer_end]
-		
-		if self._task == "strategy_qa":
-			# Find model answer to question
-			no_id = self.gen_model.get_tokenizer().encode(' no')[1]
-			yes_id = self.gen_model.get_tokenizer().encode(' yes')[1]
-			no_pos = tokens.index(no_id) if no_id in tokens else self._max_tokens
-			yes_pos = tokens.index(yes_id) if yes_id in tokens else self._max_tokens
-			answer_pos = yes_pos if yes_pos < no_pos else no_pos
-			
-			# Get class scores
-			if answer_pos < self._max_tokens:
-				answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
-				answer_tokens_alt = list(logprobs[answer_pos].keys())
-				scores = softmax(answer_logprobs, dim=-1)
-				yes_score, no_score = scores[answer_tokens_alt.index(yes_id)], scores[answer_tokens_alt.index(no_id)]
+
+			answer_end = outputs.choices[0].logprobs.tokens.index('\n')
+			answer_logprobs = dict([(key.strip, outputs.choices[0].logprobs.top_logprobs[answer_end - 1][key])
+			                        for key in outputs.choices[0].logprobs.top_logprobs[answer_end -1].keys()])
+			answer_logprobs_keys = [str(key) for key in answer_logprobs.keys()]
+			class_probs = softmax(Tensor(list(answer_logprobs.values())), dim=-1).tolist()
+
+			if self._task == "strategy_qa":
+				if 'yes' in answer_logprobs_keys:
+					yes_score = class_probs[answer_logprobs_keys.index('yes')]
+				else:
+					yes_score = 0.0
+
+				if 'no' in answer_logprobs_keys:
+					no_score = class_probs[answer_logprobs_keys.index('no')]
+				else:
+					no_score = 0.0
+
+				class_scores = [yes_score, no_score]
+				if debug:
+					print('Yes score = %s' % yes_score)
+					print('No score = %s' % no_score)
+
+			elif self._task == "ec_qa":
+
+				if '1' in answer_logprobs_keys:
+					opt1_score = class_probs[answer_logprobs_keys.index('1')]
+				else:
+					opt1_score = 0.0
+
+				if '2' in answer_logprobs_keys:
+					opt2_score = class_probs[answer_logprobs_keys.index('2')]
+				else:
+					opt2_score = 0.0
+
+				if '3' in answer_logprobs_keys:
+					opt3_score = class_probs[answer_logprobs_keys.index('3')]
+				else:
+					opt3_score = 0.0
+
+				if '4' in answer_logprobs_keys:
+					opt4_score = class_probs[answer_logprobs_keys.index('4')]
+				else:
+					opt4_score = 0.0
+
+				if '5' in answer_logprobs_keys:
+					opt5_score = class_probs[answer_logprobs_keys.index('5')]
+				else:
+					opt5_score = 0.0
+
+				class_scores = [opt1_score, opt2_score, opt3_score, opt4_score, opt5_score]
+				if debug:
+					print('Option1 score = %s' % opt1_score)
+					print('Option2 score = %s' % opt2_score)
+					print('Option3 score = %s' % opt3_score)
+					print('Option4 score = %s' % opt4_score)
+					print('Option5 score = %s' % opt5_score)
 
 			else:
-				yes_score = 0.0
-				no_score = 0.0
+				raise UnidentifiedTaskError('Task %s not defined' % self._task)
 
-			class_scores = [yes_score, no_score]
-			if debug:
-				print('Yes score = %s' % yes_score)
-				print('No score = %s' % no_score)
-		
-		elif self._task == "ec_qa":
-			# Find model answer to question
-			opt1_id = self.gen_model.get_tokenizer().encode('1')[1]
-			opt2_id = self.gen_model.get_tokenizer().encode('2')[1]
-			opt3_id = self.gen_model.get_tokenizer().encode('3')[1]
-			opt4_id = self.gen_model.get_tokenizer().encode('4')[1]
-			opt5_id = self.gen_model.get_tokenizer().encode('5')[1]
-			opt1_pos = tokens.index(opt1_id) if opt1_id in tokens else self._max_tokens
-			opt2_pos = tokens.index(opt2_id) if opt2_id in tokens else self._max_tokens
-			opt3_pos = tokens.index(opt3_id) if opt3_id in tokens else self._max_tokens
-			opt4_pos = tokens.index(opt4_id) if opt4_id in tokens else self._max_tokens
-			opt5_pos = tokens.index(opt5_id) if opt5_id in tokens else self._max_tokens
-			answer_pos = min([opt1_pos, opt2_pos, opt3_pos, opt4_pos, opt5_pos])
+			client.close()
 
-			# Get class scores
-			if answer_pos < self._max_tokens:
-				answer_logprobs = Tensor([logprob.logprob for logprob in logprobs[answer_pos].values()])
-				answer_tokens_alt = list(logprobs[answer_pos].keys())
-				scores = softmax(answer_logprobs, dim=-1)
-				opt1_score = scores[answer_tokens_alt.index(opt1_id)]
-				opt2_score = scores[answer_tokens_alt.index(opt2_id)]
-				opt3_score = scores[answer_tokens_alt.index(opt3_id)]
-				opt4_score = scores[answer_tokens_alt.index(opt4_id)]
-				opt5_score = scores[answer_tokens_alt.index(opt5_id)]
-
-			else:
-				opt1_score = opt2_score = opt3_score = opt4_score = opt5_score = 0.0
-
-			class_scores = [opt1_score, opt2_score, opt3_score, opt4_score, opt5_score]
-			if debug:
-				print('Option1 score = %s' % opt1_score)
-				print('Option2 score = %s' % opt2_score)
-				print('Option3 score = %s' % opt3_score)
-				print('Option4 score = %s' % opt4_score)
-				print('Option5 score = %s' % opt5_score)
-		
-		else:
-			raise UnidentifiedTaskError('Task %s not defined' % self._task)
-		
 		return class_scores
 	
 	def predict(self, sample: Dict, ic_samples: List[Dict] = None, debug: bool = False, expl: Union[List, str] = None, intervene: bool = False):
 		context = self.get_context(sample=sample, explanation=expl, intervene=intervene, ic_samples=ic_samples)
-		gen_params = SamplingParams(
-				temperature=0.0,
-				top_k=self._num_beams,
-				max_tokens=self._max_tokens,
-				logprobs=self._n_logprobs
-		)
-		output_text = self.gen_model.generate(context, gen_params)[0].outputs[0].text
+
+		if self.local_model:
+			gen_params = SamplingParams(
+					temperature=0.0,
+					top_k=self._num_beams,
+					max_tokens=self._max_tokens,
+					logprobs=self._n_logprobs
+			)
+			output_text = self.gen_model.generate(context, gen_params)[0].outputs[0].text
+
+		else:
+			client = OpenAI(base_url=self.model_url, api_key=self.api_key)
+			outputs = client.completions.create(
+					model=self.model_name,
+					prompt=context,
+					max_tokens=self._max_tokens,
+					logprobs=self._n_logprobs,
+					temperature=self._temperature,
+			)
+			output_text = outputs.choices[0].text
+
 		output_text = output_text[len(context):] if context in output_text else output_text
 		output_text = output_text[:output_text.index('\n')].strip() if '\n' in output_text else output_text.strip()
-		
+
 		if self._task == "ec_qa" and "The correct choice is " in output_text:
 			output_text = output_text[len("The correct choice is "):].strip()
-		
+
 		if (not self._use_explanations or
 				(self._explanation_type.find("cot") == -1 and (self._explanation_type.find("chain") == -1 and self._explanation_type.find("thought") == -1))):
 			if self._task == "ec_qa":
@@ -195,24 +267,37 @@ class StudentModel(ModelVLLM):
 			if debug:
 				print('Student Prediction = %s' % prediction)
 				print('Student Explanation = %s' % explanation)
-			
+
 			if self._task == "ec_qa":
 				if prediction not in ["1", "2", "3", "4", "5"]:
 					for i, choice in enumerate(sample["options"]):
 						if choice in output_text:
 							prediction = str(i + 1)
 							break
-			
+
 			elif self._task == "strategy_qa":
 				if prediction not in ["no", "yes"]:
 					if debug:
 						print("Regenerating with the explanation")
 					context = self.teacher_explanation_context(sample, explanation)
-					output_text = self.gen_model.generate(context, gen_params)[0].outputs[0].text
+
+					if self.local_model:
+						output_text = self.gen_model.generate(context, gen_params)[0].outputs[0].text
+
+					else:
+						outputs = client.completions.create(
+								model=self.model_name,
+								prompt=context,
+								max_tokens=self._max_tokens,
+								logprobs=self._n_logprobs,
+								temperature=self._temperature,
+						)
+						output_text = outputs.choices[0].text
+
 					output_text = output_text[len(context):] if context in output_text else output_text
 					output_text = output_text[:output_text.index('\n')].strip() if '\n' in output_text else output_text.strip()
 					prediction = output_text.split(" ")[-1]
-			
+
 			elif self._task == "gsm8k":
 				prediction = re.sub(r"[^0-9.]", "", prediction)
 				if prediction == "" or prediction == ".":
@@ -220,10 +305,13 @@ class StudentModel(ModelVLLM):
 						if bool(re.search(r"\d", word)):
 							prediction = re.sub(r"[^0-9.]", "", word)
 							break
-			
+
 			if debug:
 				print('Student Prediction = %s' % prediction)
-		
+
+		if self.local_model:
+			client.close()
+
 		return prediction, explanation
 	
 	def predict_batch(self, samples: DataFrame, intervention_indexes_per_budget: List[List[int]] = None, teacher: ModelVLLM = None, debug: bool = False) -> Tuple[List, List, List]:

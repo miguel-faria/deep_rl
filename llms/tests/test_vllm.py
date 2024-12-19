@@ -51,16 +51,16 @@ def main():
 	test_samples = task_dataset.get_validation_samples()
 	train_samples = task_dataset.get_train_samples()
 	
-	# gen_params = SamplingParams(
-	# 			temperature=0.0,
-	# 			top_k=num_beams,
-	# 			max_tokens=max_tokens,
-	# 			logprobs=1,
-	# 			spaces_between_special_tokens=False,
-	# )
+	gen_params = SamplingParams(
+				temperature=temperature,
+				# top_k=num_beams,
+				max_tokens=max_tokens,
+				logprobs=n_logprobs,
+				spaces_between_special_tokens=False,
+	)
 	
 	print('Setting up vLLM model')
-	tokenizer = AutoTokenizer.from_pretrained(model)
+	# tokenizer = AutoTokenizer.from_pretrained(model)
 	# vllm_model = LLM(model=model, trust_remote_code=True, gpu_memory_utilization=1.0)
 	
 	client = OpenAI(
@@ -75,19 +75,28 @@ def main():
 	context = cot_context(question, student_samples, 'strategy_qa')
 
 	print('Making inference with vLLM')
-	outputs = client.chat.completions.create(
+	outputs = client.completions.create(
 			model=model,
-			messages=[{'role': 'user', 'content': context}],
+			prompt=context,
 			max_tokens=max_tokens,
-			logprobs=(n_logprobs > 0),
-			top_logprobs=n_logprobs,
+			logprobs=n_logprobs,
 			temperature=temperature,
 	)
 	# outputs = vllm_model.generate(context, gen_params)
 	# text = outputs[0].outputs[0].text
+	# logprobs = outputs[0].outputs[0].logprobs
 	# text = text[:text.index('\n')]
-	print(context)
-	print(outputs.choices)
+	# print(text)
+	# print(logprobs)
+	# print('\n')
+	print(outputs.choices[0].text)
+	print('\n')
+	print(outputs.choices[0].logprobs.tokens)
+	print('\n\n')
+	answer_end = outputs.choices[0].logprobs.tokens.index('\n')
+	print(outputs.choices[0].logprobs.tokens[answer_end - 1])
+	print(outputs.choices[0].logprobs.top_logprobs[answer_end - 1])
+	print(dict([(key.strip(), outputs.choices[0].logprobs.top_logprobs[answer_end - 1][key]) for key in outputs.choices[0].logprobs.top_logprobs[answer_end - 1].keys()]))
 	# print(text)
 
 

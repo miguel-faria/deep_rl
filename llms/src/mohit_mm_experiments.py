@@ -233,12 +233,8 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 
 
 def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, student_model_path: str, teacher_model_path: str, task: str, use_explanations: bool, student_expl_type: str,
-				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path, n_gpus: int,
-				model_lib: str = 'hf', num_logprobs: int = 2) -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
-	
-	orig_cuda_visible = os.environ.get('CUDA_VISIBLE_DEVICES')
-	avail_gpus = orig_cuda_visible.split(',')
-	n_use_gpus = min(n_gpus, len(avail_gpus))
+				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path, model_lib: str = 'hf',
+				num_logprobs: int = 2, local_model: bool = True, model_url: str = '', api_key: str = '', temperature: float = 0.0) -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
 	
 	print('Using %s lib' % model_lib)
 	rng_gen = default_rng(rng_seed)
@@ -293,51 +289,85 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 			return student_model, None, None
 	
 	elif model_lib == 'vllm':
-		student_gen_model = LLM(student_model_path, gpu_memory_utilization=0.7, enforce_eager=True, download_dir=cache_dir)
-		student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams, num_logprobs, use_explanations)
-		
-		if use_explanations:
-			print('Setting up the Teacher Model')
-			if student_expl_type.find('human') != -1:
-				teacher_model = TeacherModelVLLM(teacher_model_path)
-				mental_model = None
-			
-			else:
-				print('Getting teacher samples')
-				teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
-				print('Creating Teacher Model')
-				# if n_use_gpus > 1:
-				# 	os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[1]
-				teacher_gen_model = LLM(teacher_model_path, gpu_memory_utilization=0.7, tensor_parallel_size=2, enforce_eager=True, download_dir=cache_dir)
-				teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams,
-				                                 num_logprobs, use_explanations)
-				
-				if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
-					print('Setting up the Teacher Mental Model')
-					print('Getting mental models samples')
-					mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
-					print('Creating Teacher Mental Model')
-					mental_model = TeacherMentalModelVLLM(teacher_model_path, mm_samples, teacher_gen_model, teacher_samples, teacher_expl_type, task, max_tokens,
-														  num_beams, num_logprobs, use_explanations, intervention_utility, mental_model_type)
-				
-				else:
+		if local_model:
+			student_gen_model = LLM(student_model_path, gpu_memory_utilization=0.7, enforce_eager=True, download_dir=cache_dir)
+			student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams,
+			                                 num_logprobs, use_explanations, local_model, temperature, api_key, model_url)
+
+			if use_explanations:
+				print('Setting up the Teacher Model')
+				if student_expl_type.find('human') != -1:
+					teacher_model = TeacherModelVLLM(teacher_model_path)
 					mental_model = None
-			
-			if n_use_gpus > 1:
-				os.environ["CUDA_VISIBLE_DEVICES"] = orig_cuda_visible
-			return student_model, teacher_model, mental_model
-		
+
+				else:
+					print('Getting teacher samples')
+					teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
+					print('Creating Teacher Model')
+					# if n_use_gpus > 1:
+					# 	os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[1]
+					teacher_gen_model = LLM(teacher_model_path, gpu_memory_utilization=0.7, tensor_parallel_size=2, enforce_eager=True, download_dir=cache_dir)
+					teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams,
+					                                 num_logprobs, use_explanations, local_model, temperature, api_key, model_url)
+
+					if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
+						print('Setting up the Teacher Mental Model')
+						print('Getting mental models samples')
+						mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
+						print('Creating Teacher Mental Model')
+						mental_model = TeacherMentalModelVLLM(teacher_model_path, mm_samples, teacher_gen_model, teacher_samples, teacher_expl_type, task, max_tokens,
+															  num_beams, num_logprobs, use_explanations, intervention_utility, mental_model_type, local_model, temperature,
+															  api_key, model_url)
+
+					else:
+						mental_model = None
+
+				return student_model, teacher_model, mental_model
+
+			else:
+				return student_model, None, None
+
 		else:
-			if n_use_gpus > 1:
-				os.environ["CUDA_VISIBLE_DEVICES"] = orig_cuda_visible
-			return student_model, None, None
+			student_model = StudentModelVLLM(student_model_path, student_samples, None, student_expl_type, task, max_tokens, num_beams,
+			                                 num_logprobs, use_explanations, local_model, temperature, api_key, model_url)
+
+			if use_explanations:
+				print('Setting up the Teacher Model')
+				if student_expl_type.find('human') != -1:
+					teacher_model = TeacherModelVLLM(teacher_model_path)
+					mental_model = None
+
+				else:
+					print('Getting teacher samples')
+					teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
+					print('Creating Teacher Model')
+					teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, None, teacher_expl_type, task, max_tokens, num_beams,
+					                                 num_logprobs, use_explanations, local_model, temperature, api_key, model_url)
+
+					if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
+						print('Setting up the Teacher Mental Model')
+						print('Getting mental models samples')
+						mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
+						print('Creating Teacher Mental Model')
+						mental_model = TeacherMentalModelVLLM(teacher_model_path, mm_samples, None, teacher_samples, teacher_expl_type, task, max_tokens,
+															  num_beams, num_logprobs, use_explanations, intervention_utility, mental_model_type, local_model, temperature,
+															  api_key, model_url)
+
+					else:
+						mental_model = None
+
+				return student_model, teacher_model, mental_model
+
+			else:
+				return student_model, None, None
 	
 	else:
 		raise UnidentifiedLibError('LLM lib %s is not defined' % model_lib)
 
 
-def get_intervention_idx_budget(student_model: Union[StudentModelHF, StudentModelVLLM], mental_model: Union[TeacherMentalModelHF, TeacherMentalModelVLLM], rng_gen: Generator, budgets: List[float], test_samples: pd.DataFrame,
-								intervention_utility: str, use_explanation: bool, use_answers: bool, deceive: bool) -> Tuple:
+def get_intervention_idx_budget(student_model: Union[StudentModelHF, StudentModelVLLM], mental_model: Union[TeacherMentalModelHF, TeacherMentalModelVLLM],
+                                rng_gen: Generator, budgets: List[float], test_samples: pd.DataFrame, intervention_utility: str, use_explanation: bool,
+                                use_answers: bool, deceive: bool) -> Tuple:
 	intervention_idx_budget = []
 	intercention_conf_budget = []
 	n_test_samples = test_samples.shape[0]
@@ -433,7 +463,8 @@ def compute_accuracy(labels, predictions):
 def main( ):
 	parser = argparse.ArgumentParser(description='Machine teaching with Theory of Mind based mental models experiments from Mohit Bensal')
 	# Models arguments
-	parser.add_argument('--llm-lib', dest='llm_lib', default='', type=str, choices=['hf', 'vllm'], help='LLM transformer lib to use, either HuggingFace (hf) or vLLM (vllm)')
+	parser.add_argument('--llm-lib', dest='llm_lib', default='', type=str, choices=['hf', 'vllm'],
+	                    help='LLM transformer lib to use, either HuggingFace (hf) or vLLM (vllm)')
 	parser.add_argument('--cache-dir', dest='cache_dir', default='', type=str, help='Path to the cache directory, where downloaded models are stored')
 	parser.add_argument('--train-filename', dest='train_filename', default='', type=str, help='Filename of the training data')
 	parser.add_argument('--test-filename', dest='test_filename', default='', type=str, help='Filename of the testing data')
@@ -445,14 +476,20 @@ def main( ):
 						help='Local or hugging face path to use for the teacher model')
 	parser.add_argument('--use-gold-label', dest='use_gold_label', action='store_true',
 						help='Flag denoting whether teacher uses the expected answers instead of its own')
+	parser.add_argument('--remote', dest='remote_execution', action='store_true', help='Flag denoting LLM is being executed remotely')
+	parser.add_argument('--student-model-url', dest='student_model_url', type=str, default='', help='URL for connection with remote student model')
+	parser.add_argument('--teacher-model-url', dest='teacher_model_url', type=str, default='', help='URL for connection with remote teacher model')
+	parser.add_argument('--api-key', dest='api_key', type=str, default='', help='Api token key to access remote model')
+	parser.add_argument('--max-new-tokens', dest='max_new_tokens', default=100, type=int, help='Maximum number of new tokens when generating answers')
+	parser.add_argument('--n-beams', dest='n_beams', default=1, type=int, help='Number of beams to use in answer generation beam search')
+	parser.add_argument('--n-ic-samples', dest='n_ics', default=4, type=int, help='Number of in-context samples to use for context in the student answers')
+	parser.add_argument('--n-logprobs', dest='num_logprobs', default=5, type=int, help='Number of alternative logprobs generated for each token, required for vLLM')
+	parser.add_argument('--temperature', dest='generation_temperature', default=0.0, type=float, help='Generation temperature parameter')
 
 	# Execution arguments
 	parser.add_argument('--budgets', dest='budgets', default=None, type=float, nargs='+',
 	                    help='Interaction budgets to test the teaching. Default: [0, 0.2, 0.4, 0.6, 0.8, 1.0]')
 	parser.add_argument('--data-dir', dest='data_dir', default='', type=str, help='Path to the directory with the datasets')
-	parser.add_argument('--max-new-tokens', dest='max_new_tokens', default=100, type=int, help='Maximum number of new tokens when generating answers')
-	parser.add_argument('--n-beams', dest='n_beams', default=1, type=int, help='Number of beams to use in answer generation beam search')
-	parser.add_argument('--n-ic-samples', dest='n_ics', default=4, type=int, help='Number of in-context samples to use for context in the student answers')
 	parser.add_argument('--use-explanations', dest='use_explanations', action='store_true',
 						help='Flag denoting whether student is given explanations to help understanding the problem')
 	parser.add_argument('--mm-type', dest='mm_type', default='mm_both', type=str, help='Mental model intervention strategy')
@@ -462,8 +499,7 @@ def main( ):
 	parser.add_argument('--student-explanation-type', dest='student_expl_type', default='cot', type=str, help='Student model explanation type')
 	parser.add_argument('--deceive', dest='deceive', action='store_true', help='Flag denoting whether teacher gives deceiving explanations')
 	parser.add_argument('--results-path', dest='results_path', default='', type=str, help='Path to the results file')
-	parser.add_argument('--gpus', dest='n_gpus', default=1, type=int, help='Number of GPUs to use')
-	
+
 	args = parser.parse_args()
 	
 	if args.task == "strategy_qa":
@@ -494,8 +530,9 @@ def main( ):
 		print('Loading models')
 		if not student_model:
 			student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
-																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type, args.intervention_utility,
-																	 args.max_new_tokens, args.n_beams, args.cache_dir, args.n_gpus, args.llm_lib)
+																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
+																	 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir, args.llm_lib,
+																	 args.num_logprobs, not args.remote, args.api_key, args.model_url, args.generation_temperature)
 		
 		else:
 			train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)
@@ -513,8 +550,8 @@ def main( ):
 		print('Done')
 		
 		print('Getting samples for intervention')
-		intervention_idxs_per_budget, intervention_conf_budget = get_intervention_idx_budget(student_model, mental_model, rng_gen, budgets, test_samples, args.intervention_utility,
-																							 args.use_explanations, args.use_gold_label, args.deceive)
+		intervention_idxs_per_budget, intervention_conf_budget = get_intervention_idx_budget(student_model, mental_model, rng_gen, budgets, test_samples,
+		                                                                                     args.intervention_utility, args.use_explanations, args.use_gold_label, args.deceive)
 		
 		print('Intervention utilities:')
 		for i in range(len(budgets)):

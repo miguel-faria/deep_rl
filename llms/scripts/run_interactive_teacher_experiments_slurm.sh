@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:3
 #SBATCH --time=4:00:00
 #SBATCH --mem-per-cpu=8G
 #SBATCH --qos=gpu-short
@@ -14,7 +14,7 @@
 #SBATCH --partition=a6000
 
 date;hostname;pwd
-options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,ss:,it:,lib: -- "$@")
+options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,ss:,it:,lib:,key:,surl:,turl:,temp:,lp:,remote -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
   data_dir="/mnt/data-artemis/miguelfaria/llms/"
@@ -40,6 +40,12 @@ do
     --te) teacher_expl=${2}; shift ;;
     --ss) student_samples=${2}; shift ;;
     --it) intervention_thresh=${2}; shift ;;
+    --remote) remote_model=1 ;;
+    --key) api_key=${2}; shift ;;
+    --surl) student_model_url=${2}; shift ;;
+    --turl) teacher_model_url=${2}; shift ;;
+    --temp) gen_temperature=${2}; shift ;;
+    --lp) num_logprobs=${2}; shift ;;
     (--) shift; break ;;
     (-*) echo "$0: error - unrecognized option $1" 1>&2; exit 1 ;;
     (*) break ;;
@@ -91,6 +97,26 @@ if [ -z "$student_samples" ]; then
   student_samples=10
 fi
 
+if [ -z "$api_key" ]; then
+    remote_model="token-a1b2c3d4"
+fi
+
+if [ -z "$student_model_url" ]; then
+    student_model_url="http://localhost:8000/v1"
+fi
+
+if [ -z "$teacher_model_url" ]; then
+    teacher_model_url="http://localhost:8000/v1"
+fi
+
+if [ -z "$gen_temperature" ]; then
+    gen_temperature=0.0
+fi
+
+if [ -z "$num_logprobs" ]; then
+    num_logprobs=5
+fi
+
 if [ -n "${SLURM_JOB_ID:-}" ] ; then
   IFS=' '
   read -ra newarr <<< "$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}')"
@@ -139,12 +165,22 @@ t_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$teacher_model")")
 out_file=interactive_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset"_"$(date '+%Y-%m-%d_%H-%M-%S')".out
 results_path="$data_dir"/results/interactive_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset"_"$(date '+%Y-%m-%d_%H-%M-%S')".txt
 
-python src/interactive_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
+if [ -z "$remote_model"  ]; then
+  python src/interactive_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
                                           --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" \
                                           --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4  --n-ic-samples 5 --mm-type "$mental_model" \
                                           --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" \
                                           --use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" \
-                                          --budgets "${budgets[@]}" --llm-lib "$lib" > "$out_file"
+                                          --budgets "${budgets[@]}" --llm-lib "$lib" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
+else
+  python src/interactive_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
+                                          --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" \
+                                          --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4  --n-ic-samples 5 --mm-type "$mental_model" \
+                                          --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" \
+                                          --use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" \
+                                          --budgets "${budgets[@]}" --llm-lib "$lib" --remote --model-url "$model_url" --api-key "$api_key" --temperature "$gen_temperature" \
+                                          --n-logprobs "$num_logprobs" > "$out_file"
+fi
 
 conda deactivate
 date

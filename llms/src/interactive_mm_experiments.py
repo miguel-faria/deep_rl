@@ -233,8 +233,8 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 
 
 def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, student_model_path: str, teacher_model_path: str, task: str, use_explanations: bool, student_expl_type: str,
-				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, max_student_context: int, num_beams: int, cache_dir: Path,
-				model_lib: str = 'hf') -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
+				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, max_student_context: int, num_beams: int, cache_dir: Path,model_lib: str = 'hf',
+				num_logprobs: int = 2, local_model: bool = True, model_url: str = '', api_key: str = '', temperature: float = 0.0) -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
 	
 	print('Using %s lib' % model_lib)
 	rng_gen = default_rng(rng_seed)
@@ -289,38 +289,77 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 			return student_model, None, None
 	
 	elif model_lib == 'vllm':
-		student_gen_model = LLM(student_model_path)
-		student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams, use_explanations)
-		
-		if use_explanations:
-			print('Setting up the Teacher Model')
-			if student_expl_type.find('human') != -1:
-				teacher_model = TeacherModelHF(teacher_model_path)
-				mental_model = None
-			
-			else:
-				
-				print('Getting teacher samples')
-				teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
-				print('Creating Teacher Model')
-				teacher_gen_model = LLM(teacher_model_path)
-				teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams, use_explanations)
-				
-				if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
-					print('Setting up the Teacher Mental Model')
-					print('Getting mental models samples')
-					mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
-					print('Creating Teacher Mental Model')
-					mental_model = TeacherMentalModelVLLM(teacher_model_path, mm_samples, teacher_gen_model, teacher_samples, teacher_expl_type, task, max_tokens,
-														  num_beams, use_explanations, intervention_utility, mental_model_type, None, max_student_context)
-				
-				else:
+		if local_model:
+			student_gen_model = LLM(student_model_path)
+			student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams,
+			                                 num_logprobs, use_explanations, local_model, temperature, api_key, model_url)
+
+			if use_explanations:
+				print('Setting up the Teacher Model')
+				if student_expl_type.find('human') != -1:
+					teacher_model = TeacherModelHF(teacher_model_path)
 					mental_model = None
-			
-			return student_model, teacher_model, mental_model
-		
+
+				else:
+
+					print('Getting teacher samples')
+					teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
+					print('Creating Teacher Model')
+					teacher_gen_model = LLM(teacher_model_path)
+					teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams, num_logprobs,
+					                                 use_explanations, local_model, temperature, api_key, model_url)
+
+					if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
+						print('Setting up the Teacher Mental Model')
+						print('Getting mental models samples')
+						mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
+						print('Creating Teacher Mental Model')
+						mental_model = TeacherMentalModelVLLM(teacher_model_path, mm_samples, teacher_gen_model, teacher_samples, teacher_expl_type, task, max_tokens,
+															  num_beams, num_logprobs, use_explanations, intervention_utility, mental_model_type, None,
+															  max_student_context, local_model, temperature, api_key, model_url)
+
+					else:
+						mental_model = None
+
+				return student_model, teacher_model, mental_model
+
+			else:
+				return student_model, None, None
+
 		else:
-			return student_model, None, None
+			student_model = StudentModelVLLM(student_model_path, student_samples, None, student_expl_type, task, max_tokens, num_beams,
+			                                 num_logprobs, use_explanations, local_model, temperature, api_key, model_url)
+
+			if use_explanations:
+				print('Setting up the Teacher Model')
+				if student_expl_type.find('human') != -1:
+					teacher_model = TeacherModelHF(teacher_model_path)
+					mental_model = None
+
+				else:
+
+					print('Getting teacher samples')
+					teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
+					print('Creating Teacher Model')
+					teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, None, teacher_expl_type, task, max_tokens, num_beams, num_logprobs,
+					                                 use_explanations, local_model, temperature, api_key, model_url)
+
+					if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
+						print('Setting up the Teacher Mental Model')
+						print('Getting mental models samples')
+						mm_samples = get_mental_model_samples(rng_gen, train_data, task, mental_model_type, num_samples, student_model, teacher_model)
+						print('Creating Teacher Mental Model')
+						mental_model = TeacherMentalModelVLLM(teacher_model_path, mm_samples, None, teacher_samples, teacher_expl_type, task, max_tokens,
+															  num_beams, num_logprobs, use_explanations, intervention_utility, mental_model_type, None,
+															  max_student_context, local_model, temperature, api_key, model_url)
+
+					else:
+						mental_model = None
+
+				return student_model, teacher_model, mental_model
+
+			else:
+				return student_model, None, None
 		
 	else:
 		raise UnidentifiedLibError('LLM lib %s is not defined' % model_lib)
@@ -405,6 +444,14 @@ def main( ):
 	parser.add_argument('--use-gold-label', dest='use_gold_label', action='store_true',
 						help='Flag denoting whether teacher uses the expected answers instead of its own')
 	parser.add_argument('--val-filename', dest='val_filename', default='', type=str, help='Filename of the validation data')
+	parser.add_argument('--remote', dest='remote_execution', action='store_true', help='Flag denoting LLM is being executed remotely')
+	parser.add_argument('--model-url', dest='model_url', type=str, default='', help='URL for connection with remote model')
+	parser.add_argument('--api-key', dest='api_key', type=str, default='', help='Api token key to access remote model')
+	parser.add_argument('--max-new-tokens', dest='max_new_tokens', default=100, type=int, help='Maximum number of new tokens when generating answers')
+	parser.add_argument('--n-beams', dest='n_beams', default=1, type=int, help='Number of beams to use in answer generation beam search')
+	parser.add_argument('--max-student-samples', dest='max_student_samples', default=5, type=int, help='Maximum number of students to sample for mental model context')
+	parser.add_argument('--n-ic-samples', dest='n_ics', default=4, type=int, help='Number of in-context samples to use for context in the student answers')
+	parser.add_argument('--temperature', dest='generation_temperature', default=0.0, type=float, help='Generation temperature parameter')
 
 	# Execution arguments
 	parser.add_argument('--budgets', dest='budgets', default=None, type=float, nargs='+',
@@ -415,11 +462,7 @@ def main( ):
 	parser.add_argument('--intervention-utility', dest='intervention_utility', default='mm_both', type=str, help='Mode to determine intervention utility')
 	parser.add_argument('--intervention-threshold', dest='intervention_threshold', default=0.5, type=float,
 						help='Threshold for intervention utility, above which the mental model gives an explanation')
-	parser.add_argument('--max-new-tokens', dest='max_new_tokens', default=100, type=int, help='Maximum number of new tokens when generating answers')
-	parser.add_argument('--max-student-samples', dest='max_student_samples', default=5, type=int, help='Maximum number of students to sample for mental model context')
 	parser.add_argument('--mm-type', dest='mm_type', default='mm_both', type=str, help='Mental model intervention strategy')
-	parser.add_argument('--n-beams', dest='n_beams', default=1, type=int, help='Number of beams to use in answer generation beam search')
-	parser.add_argument('--n-ic-samples', dest='n_ics', default=4, type=int, help='Number of in-context samples to use for context in the student answers')
 	parser.add_argument('--results-path', dest='results_path', default='', type=str, help='Path to the results file')
 	parser.add_argument('--student-explanation-type', dest='student_expl_type', default='cot', type=str, help='Student model explanation type')
 	parser.add_argument('--task', dest='task', default='strategy_qa', choices=['strategy_qa', 'ec_qa', 'gsm8k'], type=str, help='Dataset task to run')
@@ -462,7 +505,8 @@ def main( ):
 		if not student_model:
 			student_model, teacher_model, mental_model = load_models(seed, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
 																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
-																	 args.intervention_utility, args.max_new_tokens, args.max_student_samples, args.n_beams, args.cache_dir, args.llm_lib)
+																	 args.intervention_utility, args.max_new_tokens, args.max_student_samples, args.n_beams, args.cache_dir,
+																	 args.llm_lib, args.num_logprobs, not args.remote, args.api_key, args.model_url, args.generation_temperature)
 		
 		else:
 			rng_gen = default_rng(seed)

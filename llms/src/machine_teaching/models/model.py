@@ -54,6 +54,10 @@ class Model:
 	def explanation_type(self) -> str:
 		return self._explanation_type
 	
+	@property
+	def context_samples(self) -> Union[List[Dict], Tuple]:
+		return self._ic_samples
+	
 	def set_samples(self, samples: Union[List[Dict], Tuple]) -> None:
 		self._ic_samples = samples
 	

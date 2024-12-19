@@ -9,12 +9,13 @@ from typing import Dict, List, Union, Tuple
 class ModelVLLM(Model):
 	
 	def __init__(self, model_name: str, samples: Union[List[Dict], Tuple] = None, gen_model: LLM = None, expl_type: str = '', task: str = '', max_tokens: int = 10,
-	             num_beams: int = 1, num_logprobs: int = 2, use_explanations: bool = True, local_model: bool = True, api_key: str = 'token-MtE2024'):
+	             num_beams: int = 1, num_logprobs: int = 2, use_explanations: bool = True, local_model: bool = True, api_key: str = 'token-MtE2024', temperature: float = 0.0):
 		
 		super().__init__(model_name, samples, gen_model, expl_type, task, max_tokens, num_beams, use_explanations)
 		self._local_model = local_model
 		self._api_key = api_key
 		self._n_logprobs = num_logprobs
+		self._temperature = temperature
 
 	@property
 	def gen_model(self) -> LLM:

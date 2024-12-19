@@ -1,10 +1,12 @@
 #! /usr/bin/env python
 
 from vllm import LLM, SamplingParams
+from transformers import AutoTokenizer
 from utilities.dataset_tasks_utils import StrategyQA, ECQA
 from typing import Tuple, List, Optional, Dict
 from numpy.random import default_rng, Generator
 from pathlib import Path
+from openai import OpenAI
 
 
 def cot_context(test_sample: Dict, ic_samples: List[Dict], task: str) -> str:
@@ -26,10 +28,14 @@ def cot_context(test_sample: Dict, ic_samples: List[Dict], task: str) -> str:
 
 def main():
 
+	# model = 'gpt2'
 	# model = 'google/gemma-2b'
-	model = 'meta-llama/Llama-2-13b-hf'
+	model = 'microsoft/phi-1_5'
+	# model = 'meta-llama/Llama-2-13b-hf'
 	num_beams = 4
 	max_tokens = 100
+	n_logprobs = 5
+	temperature = 0.0
 	data_dir = './data/datasets/strategyqa'
 	# data_dir = './data/datasets/ecqa'
 	cache_dir = './cache'
@@ -45,17 +51,23 @@ def main():
 	test_samples = task_dataset.get_validation_samples()
 	train_samples = task_dataset.get_train_samples()
 	
-	gen_params = SamplingParams(
-				temperature=0.0,
-				top_k=num_beams,
-				max_tokens=max_tokens,
-				logprobs=1,
-				spaces_between_special_tokens=False,
-	)
+	# gen_params = SamplingParams(
+	# 			temperature=0.0,
+	# 			top_k=num_beams,
+	# 			max_tokens=max_tokens,
+	# 			logprobs=1,
+	# 			spaces_between_special_tokens=False,
+	# )
 	
 	print('Setting up vLLM model')
-	vllm_model = LLM(model=model, trust_remote_code=True, gpu_memory_utilization=1.0)
+	tokenizer = AutoTokenizer.from_pretrained(model)
+	# vllm_model = LLM(model=model, trust_remote_code=True, gpu_memory_utilization=1.0)
 	
+	client = OpenAI(
+			api_key='token-a1b2c3',
+			base_url='http://localhost:8000/v1',
+	)
+
 	rng_gen = default_rng(40)
 	train_idxs = rng_gen.choice(train_samples.shape[0], 5, replace=False)
 	student_samples = [train_samples.iloc[idx].to_dict() for idx in train_idxs]
@@ -63,11 +75,20 @@ def main():
 	context = cot_context(question, student_samples, 'strategy_qa')
 
 	print('Making inference with vLLM')
-	outputs = vllm_model.generate(context, gen_params)
-	text = outputs[0].outputs[0].text
-	text = text[:text.index('\n')]
+	outputs = client.chat.completions.create(
+			model=model,
+			messages=[{'role': 'user', 'content': context}],
+			max_tokens=max_tokens,
+			logprobs=(n_logprobs > 0),
+			top_logprobs=n_logprobs,
+			temperature=temperature,
+	)
+	# outputs = vllm_model.generate(context, gen_params)
+	# text = outputs[0].outputs[0].text
+	# text = text[:text.index('\n')]
 	print(context)
-	print(text)
+	print(outputs.choices)
+	# print(text)
 
 
 if __name__ == '__main__':

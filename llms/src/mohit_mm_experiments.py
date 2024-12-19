@@ -248,13 +248,12 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 	student_samples = [train_data.iloc[idx].to_dict() for idx in train_idxs]
 	
 	if model_lib == 'hf':
-		student_device = 'auto' if n_use_gpus < 2 else torch.cuda.device(int(avail_gpus[0]))
 		if "llama" in student_model_path:
-			student_gen_model = LlamaForCausalLM.from_pretrained(student_model_path, cache_dir=cache_dir, device_map=student_device, torch_dtype=torch.float16)
+			student_gen_model = LlamaForCausalLM.from_pretrained(student_model_path, cache_dir=cache_dir, device_map='auto', torch_dtype=torch.float16)
 			student_tokenizer = LlamaTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
 		else:
 			student_tokenizer = AutoTokenizer.from_pretrained(student_model_path, cache_dir=cache_dir, use_fast=False)
-			student_gen_model = AutoModelForSeq2SeqLM.from_pretrained(student_model_path, device_map=student_device, cache_dir=cache_dir)
+			student_gen_model = AutoModelForSeq2SeqLM.from_pretrained(student_model_path, device_map='auto', cache_dir=cache_dir)
 		
 		student_model = StudentModelHF(student_model_path, student_samples, student_gen_model, student_tokenizer, student_expl_type, task, max_tokens, num_beams, use_explanations)
 		
@@ -265,12 +264,11 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 				mental_model = None
 			
 			else:
-				teacher_device = 'auto' if n_use_gpus < 2 else torch.cuda.device(int(avail_gpus[1]))
 				if "llama" in teacher_model_path:
-					teacher_gen_model = LlamaForCausalLM.from_pretrained(teacher_model_path, cache_dir=cache_dir, device_map=teacher_device, torch_dtype=torch.float16)
+					teacher_gen_model = LlamaForCausalLM.from_pretrained(teacher_model_path, cache_dir=cache_dir, device_map='auto', torch_dtype=torch.float16)
 					teacher_tokenizer = LlamaTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
 				else:
-					teacher_gen_model = AutoModelForSeq2SeqLM.from_pretrained(teacher_model_path, device_map=teacher_device, cache_dir=cache_dir)
+					teacher_gen_model = AutoModelForSeq2SeqLM.from_pretrained(teacher_model_path, device_map='auto', cache_dir=cache_dir)
 					teacher_tokenizer = AutoTokenizer.from_pretrained(teacher_model_path, cache_dir=cache_dir, use_fast=False) if teacher_model_path != 'human' else None
 				
 				print('Getting teacher samples')
@@ -295,8 +293,6 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 			return student_model, None, None
 	
 	elif model_lib == 'vllm':
-		# if n_use_gpus > 1:
-		# 	os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[0]
 		student_gen_model = LLM(student_model_path, gpu_memory_utilization=0.7, enforce_eager=True, download_dir=cache_dir)
 		student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams, num_logprobs, use_explanations)
 		

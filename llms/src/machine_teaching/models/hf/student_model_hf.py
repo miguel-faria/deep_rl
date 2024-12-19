@@ -4,7 +4,7 @@ import re
 from torch.nn.functional import softmax
 from typing import Dict, List, Union, Tuple
 from machine_teaching.models.hf.model_hf import ModelHF
-from machine_teaching.models.model import UnidentifiedTaskError
+from machine_teaching.models.model import UnidentifiedTaskError, UnidentifiedExplanationError
 from pandas import DataFrame
 from tqdm import tqdm
 

@@ -64,7 +64,7 @@ class StudentModel(ModelVLLM):
 		# Generate answer
 		if self.local_model:
 			gen_params = SamplingParams(
-					temperature=0.0,
+					temperature=self._temperature,
 					top_k=self._num_beams,
 					max_tokens=self._max_tokens,
 					logprobs=self._n_logprobs
@@ -78,9 +78,13 @@ class StudentModel(ModelVLLM):
 			)
 			outputs = client.chat.completions.create(
 					model=self.model_name,
-					messages=[{'role': 'user', 'content': context}]
+					messages=[{'role': 'user', 'content': context}],
+					max_tokens=self._max_tokens,
+					logprobs=(self._n_logprobs > 0),
+					top_logprobs=self._n_logprobs,
+					temperature=self._temperature,
 			)
-		
+			
 		# Exclude extra generation from answer
 		nl_id = self.gen_model.get_tokenizer().encode('\n')[1]
 		nldouble_id = self.gen_model.get_tokenizer().encode('\n\n')[1]

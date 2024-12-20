@@ -512,7 +512,11 @@ def main( ):
 	test_samples = task_dataset.get_test_samples() if args.task != 'strategy_qa' else task_dataset.get_validation_samples()
 	train_samples = task_dataset.get_train_samples()
 	print('Cache directory: ', args.cache_dir)
-	print('Assigned gpus = ', os.environ.get('CUDA_VISIBLE_DEVICES'))
+	print('Student model is: ' + args.student_model)
+	print('Teacher model is: ' + args.teacher_model)
+	if args.remote_execution:
+		print('Connecting to student model at %s' % args.student_model_url)
+		print('Connecting to teacher model at %s' % args.teacher_model_url)
 	print('Number of test samples = %d' % test_samples.shape[0])
 	print('Number of train samples = %d' % train_samples.shape[0])
 	

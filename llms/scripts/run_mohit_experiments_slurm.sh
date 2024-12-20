@@ -198,13 +198,13 @@ if [ -z "$remote_model"  ]; then
                                     --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
 else
   echo "Serving student model using $lib"
-  CUDA_VISIBLE_DEVICES="$student_gpus" python -m vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
-                                                            --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
+  CUDA_VISIBLE_DEVICES="$student_gpus" vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
+                                                  --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
   student_id=$!
   sleep 5m
   echo "Serving teacher model using $lib"
-  CUDA_VISIBLE_DEVICES="$teacher_gpus" python -m vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
-                                                            --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
+  CUDA_VISIBLE_DEVICES="$teacher_gpus" vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
+                                                  --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
   teacher_id=$!
   sleep 5m
   printf "Launching Mohit\'s experiment script"

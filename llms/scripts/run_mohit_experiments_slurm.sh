@@ -14,7 +14,7 @@
 #SBATCH --partition=a6000
 
 date;hostname;pwd
-options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,lib:,key:,shost:,thost:,sport:,tport:,temp:,lp:,remote -- "$@")
+options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,lib:,key:,sgpu:,tgpu:,shost:,thost:,sport:,tport:,temp:,lp:,remote -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
   data_dir="/mnt/data-artemis/miguelfaria/llms/"
@@ -40,6 +40,8 @@ do
     --te) teacher_expl=${2}; shift ;;
     --remote) remote_model=1 ;;
     --key) api_key=${2}; shift ;;
+    --sgpu) n_student_gpus=${2}; shift ;;
+    --tgpu) n_teacher_gpus=${2}; shift ;;
     --shost) student_host=${2}; shift ;;
     --thost) teacher_host=${2}; shift ;;
     --sport) student_port=${2}; shift ;;
@@ -91,6 +93,14 @@ fi
 
 if [ -z "$api_key" ]; then
     remote_model="token-a1b2c3d4"
+fi
+
+if [ -z "$n_student_gpus" ]; then
+    n_student_gpus="1"
+fi
+
+if [ -z "$n_teacher_gpus" ]; then
+    n_teacher_gpus="2"
 fi
 
 if [ -z "$student_host" ]; then
@@ -174,8 +184,11 @@ results_path="$data_dir"/results/mohit_"$mental_model"_"$t_name"_"$utility"_"$s_
 # export VLLM_TRACE_FUNCTION=1
 
 gpu_usage=1.0
-student_gpus=1
-teacher_gpus=2
+readarray -d "," -t gpus_avail <<< "$CUDA_VISIBLE_DEVICES"
+student_gpus="${starr[@]:0:$n_student_gpus}"
+teacher_gpus="${starr[@]:$n_student_gpus:$n_teacher_gpus}"
+student_gpus="${student_gpus// /,}"
+teacher_gpus="${teacher_gpus// /,}"
 
 if [ -z "$remote_model"  ]; then
   python src/mohit_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
@@ -185,11 +198,13 @@ if [ -z "$remote_model"  ]; then
                                     --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
 else
   echo "Serving student model using $lib"
-  vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" --tensor-parallel-size "$student_gpus" --host "$student_host" --port "$student_port" &
+  CUDA_VISIBLE_DEVICES="$student_gpus" python -m vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
+                                                            --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
   student_id=$!
   sleep 5m
   echo "Serving teacher model using $lib"
-  vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" --tensor-parallel-size "$teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
+  CUDA_VISIBLE_DEVICES="$teacher_gpus" python -m vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
+                                                            --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
   teacher_id=$!
   sleep 5m
   printf "Launching Mohit\'s experiment script"

@@ -14,7 +14,7 @@
 #SBATCH --partition=a6000
 
 date;hostname;pwd
-options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,ss:,it:,lib:,key:,surl:,turl:,temp:,lp:,remote -- "$@")
+options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,ss:,it:,lib:,key:,shost:,thost:,sport:,tport:,temp:,lp:,remote -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
   data_dir="/mnt/data-artemis/miguelfaria/llms/"
@@ -42,8 +42,10 @@ do
     --it) intervention_thresh=${2}; shift ;;
     --remote) remote_model=1 ;;
     --key) api_key=${2}; shift ;;
-    --surl) student_model_url=${2}; shift ;;
-    --turl) teacher_model_url=${2}; shift ;;
+    --shost) student_host=${2}; shift ;;
+    --thost) teacher_host=${2}; shift ;;
+    --sport) student_port=${2}; shift ;;
+    --tport) teacher_host=${2}; shift ;;
     --temp) gen_temperature=${2}; shift ;;
     --lp) num_logprobs=${2}; shift ;;
     (--) shift; break ;;
@@ -101,12 +103,20 @@ if [ -z "$api_key" ]; then
     remote_model="token-a1b2c3d4"
 fi
 
-if [ -z "$student_model_url" ]; then
-    student_model_url="http://localhost:8000/v1"
+if [ -z "$student_host" ]; then
+    student_host="localhost"
 fi
 
-if [ -z "$teacher_model_url" ]; then
-    teacher_model_url="http://localhost:8000/v1"
+if [ -z "$teacher_host" ]; then
+    teacher_host="localhost"
+fi
+
+if [ -z "$student_port" ]; then
+    student_port=15050
+fi
+
+if [ -z "$teacher_port" ]; then
+    teacher_port=15051
 fi
 
 if [ -z "$gen_temperature" ]; then
@@ -116,6 +126,9 @@ fi
 if [ -z "$num_logprobs" ]; then
     num_logprobs=5
 fi
+
+student_model_url="http://$student_host:$student_port/v1"
+teacher_model_url="http://$teacher_host:$teacher_port/v1"
 
 if [ -n "${SLURM_JOB_ID:-}" ] ; then
   IFS=' '
@@ -178,8 +191,8 @@ else
                                           --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4  --n-ic-samples 5 --mm-type "$mental_model" \
                                           --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" \
                                           --use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" \
-                                          --budgets "${budgets[@]}" --llm-lib "$lib" --remote --model-url "$model_url" --api-key "$api_key" --temperature "$gen_temperature" \
-                                          --n-logprobs "$num_logprobs" > "$out_file"
+                                          --budgets "${budgets[@]}" --llm-lib "$lib" --remote --student-model-url "$student_model_url" --teacher_model_url "$teacher_model_url" \
+                                          --api-key "$api_key" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
 fi
 
 conda deactivate

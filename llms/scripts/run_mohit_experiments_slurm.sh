@@ -14,7 +14,7 @@
 #SBATCH --partition=a6000
 
 date;hostname;pwd
-options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,lib:,key:,surl:,turl:shost:,thost:,sport:,tport:,,temp:,lp:,remote -- "$@")
+options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,lib:,key:,shost:,thost:,sport:,tport:,temp:,lp:,remote -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
   data_dir="/mnt/data-artemis/miguelfaria/llms/"
@@ -40,10 +40,8 @@ do
     --te) teacher_expl=${2}; shift ;;
     --remote) remote_model=1 ;;
     --key) api_key=${2}; shift ;;
-    --surl) student_model_url=${2}; shift ;;
-    --turl) teacher_model_url=${2}; shift ;;
     --shost) student_host=${2}; shift ;;
-    --tport) teacher_host=${2}; shift ;;
+    --thost) teacher_host=${2}; shift ;;
     --sport) student_port=${2}; shift ;;
     --tport) teacher_host=${2}; shift ;;
     --temp) gen_temperature=${2}; shift ;;
@@ -95,14 +93,6 @@ if [ -z "$api_key" ]; then
     remote_model="token-a1b2c3d4"
 fi
 
-if [ -z "$student_model_url" ]; then
-    student_model_url="http://localhost:15050/v1"
-fi
-
-if [ -z "$teacher_model_url" ]; then
-    teacher_model_url="http://localhost:15051/v1"
-fi
-
 if [ -z "$student_host" ]; then
     student_host="localhost"
 fi
@@ -126,6 +116,9 @@ fi
 if [ -z "$num_logprobs" ]; then
     num_logprobs=5
 fi
+
+student_model_url="http://$student_host:$student_port/v1"
+teacher_model_url="http://$teacher_host:$teacher_port/v1"
 
 if [ -n "${SLURM_JOB_ID:-}" ] ; then
   IFS=' '
@@ -191,14 +184,17 @@ if [ -z "$remote_model"  ]; then
                                     --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" --use-explanations \
                                     --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
 else
-  vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" --tensor-parallel-size "$student_gpus" --host "$student_host" --port "$student_port"
-  vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" --tensor-parallel-size "$teacher_gpus" --host "$teacher_host" --port "$teacher_port"
+  vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" --tensor-parallel-size "$student_gpus" --host "$student_host" --port "$student_port" &
+  student_id=$!
+  vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" --tensor-parallel-size "$teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
+  teacher_id=$!
   python src/mohit_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
                                     --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" \
                                     --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4 --n-ic-samples 5 --mm-type "$mental_model" \
                                     --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" --use-explanations \
                                     --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --remote --student-model-url "$student_model_url" --teacher_model_url "$teacher_model_url" --api-key "$api_key" --temperature "$gen_temperature" \
                                     --n-logprobs "$num_logprobs" > "$out_file"
+  kill -9 "$student_id" "$teacher_id"
 fi
 
 conda deactivate

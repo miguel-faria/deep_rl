@@ -65,7 +65,7 @@ def main():
 	
 	client = OpenAI(
 			api_key='token-a1b2c3',
-			base_url='http://localhost:8000/v1',
+			base_url='http://localhost:10000/v1',
 	)
 
 	rng_gen = default_rng(40)

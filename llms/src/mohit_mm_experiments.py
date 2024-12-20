@@ -234,7 +234,7 @@ def get_mental_model_samples(rng_gen: Generator, train_data: pd.DataFrame, task:
 
 def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, student_model_path: str, teacher_model_path: str, task: str, use_explanations: bool, student_expl_type: str,
 				teacher_expl_type: str, mental_model_type: str, intervention_utility: str, max_tokens: int, num_beams: int, cache_dir: Path, model_lib: str = 'hf',
-				num_logprobs: int = 2, local_model: bool = True, model_url: str = '', api_key: str = '', temperature: float = 0.0) -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
+				num_logprobs: int = 2, local_model: bool = True, s_model_url: str = '', t_model_url: str = '', api_key: str = '', temperature: float = 0.0) -> Tuple[Union[StudentModelHF, StudentModelVLLM], Optional[Union[TeacherModelHF, TeacherModelVLLM]], Optional[Union[TeacherMentalModelHF, TeacherMentalModelVLLM]]]:
 	
 	print('Using %s lib' % model_lib)
 	rng_gen = default_rng(rng_seed)
@@ -292,7 +292,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 		if local_model:
 			student_gen_model = LLM(student_model_path, gpu_memory_utilization=0.7, enforce_eager=True, download_dir=cache_dir)
 			student_model = StudentModelVLLM(student_model_path, student_samples, student_gen_model, student_expl_type, task, max_tokens, num_beams,
-			                                 num_logprobs, use_explanations, local_model, temperature, api_key, model_url)
+			                                 num_logprobs, use_explanations, local_model, temperature, api_key, s_model_url)
 
 			if use_explanations:
 				print('Setting up the Teacher Model')
@@ -304,11 +304,9 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 					print('Getting teacher samples')
 					teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
 					print('Creating Teacher Model')
-					# if n_use_gpus > 1:
-					# 	os.environ["CUDA_VISIBLE_DEVICES"] = avail_gpus[1]
 					teacher_gen_model = LLM(teacher_model_path, gpu_memory_utilization=0.7, tensor_parallel_size=2, enforce_eager=True, download_dir=cache_dir)
 					teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams,
-					                                 num_logprobs, use_explanations, local_model, temperature, api_key, model_url)
+					                                 num_logprobs, use_explanations, local_model, temperature, api_key, t_model_url)
 
 					if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
 						print('Setting up the Teacher Mental Model')
@@ -317,7 +315,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 						print('Creating Teacher Mental Model')
 						mental_model = TeacherMentalModelVLLM(teacher_model_path, mm_samples, teacher_gen_model, teacher_samples, teacher_expl_type, task, max_tokens,
 															  num_beams, num_logprobs, use_explanations, intervention_utility, mental_model_type, local_model, temperature,
-															  api_key, model_url)
+															  api_key, t_model_url)
 
 					else:
 						mental_model = None
@@ -329,7 +327,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 
 		else:
 			student_model = StudentModelVLLM(student_model_path, student_samples, None, student_expl_type, task, max_tokens, num_beams,
-			                                 num_logprobs, use_explanations, local_model, temperature, api_key, model_url)
+			                                 num_logprobs, use_explanations, local_model, temperature, api_key, s_model_url)
 
 			if use_explanations:
 				print('Setting up the Teacher Model')
@@ -342,7 +340,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 					teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
 					print('Creating Teacher Model')
 					teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, None, teacher_expl_type, task, max_tokens, num_beams,
-					                                 num_logprobs, use_explanations, local_model, temperature, api_key, model_url)
+					                                 num_logprobs, use_explanations, local_model, temperature, api_key, t_model_url)
 
 					if intervention_utility.find('mm') != -1 or (intervention_utility.find('mental') != -1 and intervention_utility.find('model') != -1):
 						print('Setting up the Teacher Mental Model')
@@ -351,7 +349,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 						print('Creating Teacher Mental Model')
 						mental_model = TeacherMentalModelVLLM(teacher_model_path, mm_samples, None, teacher_samples, teacher_expl_type, task, max_tokens,
 															  num_beams, num_logprobs, use_explanations, intervention_utility, mental_model_type, local_model, temperature,
-															  api_key, model_url)
+															  api_key, t_model_url)
 
 					else:
 						mental_model = None
@@ -532,7 +530,7 @@ def main( ):
 			student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
 																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
 																	 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir, args.llm_lib,
-																	 args.num_logprobs, not args.remote, args.api_key, args.model_url, args.generation_temperature)
+																	 args.num_logprobs, not args.remote, args.api_key, args.student_model_url, args.teacher_model_url, args.generation_temperature)
 		
 		else:
 			train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)

@@ -521,6 +521,7 @@ def main():
 				env.seed(TEST_RNG_SEED)
 				np.random.seed(TEST_RNG_SEED)
 				rng_gen = np.random.default_rng(TEST_RNG_SEED)
+				avg_nr_epochs = []
 				for i in range(N_TESTS):
 					env.set_objective(loc)
 					env.spawn_players([player_level] * n_agents)
@@ -562,20 +563,25 @@ def main():
 							env.food_spawn_pos = None
 							env.n_food_spawn = 0
 						
+						else:
+							epoch += 1
+						
 						sys.stdout.flush()
-						epoch += 1
 					
 					if finished:
 						tests_passed += 1
+						avg_nr_epochs += [epoch]
 						logger.info('Test %d finished in success' % (i + 1))
 						logger.info('Number of epochs: %d' % epoch)
 						logger.info('Accumulated reward:\n\t' + '\n\t'.join(['- agent %d: %.2f' % (idx + 1, agent_reward[idx]) for idx in range(n_agents)]))
 						logger.info('Average reward:\n\t' + '\n\t'.join(['- agent %d: %.2f' % (idx + 1, agent_reward[0] / epoch) for idx in range(n_agents)]))
 					if timeout:
 						logger.info('Test %d timed out' % (i + 1))
+						avg_nr_epochs += [epoch]
 				
 				env.close()
 				logger.info('Passed %d tests out of %d for location %dx%d' % (tests_passed, N_TESTS, loc[0], loc[1]))
+				logger.info('Average number of steps per test: %d' % np.mean(avg_nr_epochs))
 				
 				if (tests_passed / N_TESTS) > train_acc['%s, %s' % (loc[0], loc[1])]:
 					logger.info('Updating best model for current loc')

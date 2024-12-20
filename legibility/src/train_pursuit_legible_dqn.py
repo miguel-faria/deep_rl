@@ -570,9 +570,9 @@ def main():
 			env.seed(TEST_RNG_SEED)
 			np.random.seed(TEST_RNG_SEED)
 			random.seed(TEST_RNG_SEED)
-			failed_history = []
 			tests_passed = 0
 			testing_prey_lists = [random.choice(prey_ids) for _ in range(N_TESTS)]
+			avg_nr_epochs = []
 			for n_test in range(N_TESTS):
 				env.reset_init_pos()
 				env.target = testing_prey_lists[n_test]
@@ -614,12 +614,15 @@ def main():
 
 					if finished or timeout:
 						game_over = True
-
+						
+					else:
+						epoch += 1
+					
 					sys.stdout.flush()
-					epoch += 1
 
 				if finished:
 					tests_passed += 1
+					avg_nr_epochs += [epoch]
 					logger.info('Test %d finished in success' % (n_test + 1))
 					logger.info('Number of epochs: %d' % epoch)
 					logger.info('Accumulated reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0], agent_reward[1]))
@@ -627,10 +630,10 @@ def main():
 
 				if timeout:
 					logger.info('Test %d timed out' % (n_test + 1))
+					avg_nr_epochs += [epoch]
 
 			logger.info('Passed %d tests out of %d' % (tests_passed, N_TESTS))
-			logger.info('Failed tests history:')
-			logger.info(failed_history)
+			logger.info('Average number of steps per test: %d' % np.mean(avg_nr_epochs))
 			
 			if (tests_passed / N_TESTS) > train_acc:
 				logger.info('Updating best model for current loc')
@@ -654,7 +657,7 @@ def main():
 
 		except KeyboardInterrupt as ks:
 			logger.info('Caught keyboard interrupt, cleaning up and closing.')
-			with open(data_dir / 'performances' / 'pursuit' / ('train_legible_performances_%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
+			with open(data_dir / 'performances' / 'pursuit' / ('train_legible_performances%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
 			          mode='r+', encoding='utf-8') as train_file:
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])

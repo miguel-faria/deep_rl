@@ -186,6 +186,15 @@ if [ -z "$remote_model"  ]; then
                                           --use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" \
                                           --budgets "${budgets[@]}" --llm-lib "$lib" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
 else
+  echo "Serving student model using $lib"
+  vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" --tensor-parallel-size "$student_gpus" --host "$student_host" --port "$student_port" &
+  student_id=$!
+  sleep 5m
+  echo "Serving teacher model using $lib"
+  vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" --tensor-parallel-size "$teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
+  teacher_id=$!
+  sleep 5m
+  printf "Launching Mohit\'s experiment script"
   python src/interactive_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
                                           --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" \
                                           --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4  --n-ic-samples 5 --mm-type "$mental_model" \
@@ -193,6 +202,7 @@ else
                                           --use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" \
                                           --budgets "${budgets[@]}" --llm-lib "$lib" --remote --student-model-url "$student_model_url" --teacher-model-url "$teacher_model_url" \
                                           --api-key "$api_key" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
+  kill -9 "$student_id" "$teacher_id"
 fi
 
 conda deactivate

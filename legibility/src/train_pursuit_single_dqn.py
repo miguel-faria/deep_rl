@@ -494,6 +494,7 @@ def main():
 			# failed_history = []
 			tests_passed = 0
 			testing_prey_lists = [random.choice(prey_ids) for _ in range(N_TESTS)]
+			avg_nr_epochs = []
 			for n_test in range(N_TESTS):
 				env.reset_init_pos()
 				env.target = testing_prey_lists[n_test]
@@ -530,21 +531,26 @@ def main():
 					
 					if finished or timeout:
 						game_over = True
+						
+					else:
+						epoch += 1
 					
 					sys.stdout.flush()
-					epoch += 1
 				
 				if finished:
 					tests_passed += 1
+					avg_nr_epochs += [epoch]
 					logger.info('Test %d finished in success' % (n_test + 1))
 					logger.info('Number of epochs: %d' % epoch)
 					logger.info('Accumulated reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0], agent_reward[1]))
 					logger.info('Average reward:\n\t- agent 1: %.2f\n\t- agent 2: %.2f' % (agent_reward[0] / epoch, agent_reward[1] / epoch))
 				if timeout:
 					logger.info('Test %d timed out' % (n_test + 1))
+					avg_nr_epochs += [epoch]
 			
 			env.close()
 			logger.info('Passed %d tests out of %d' % (tests_passed, N_TESTS))
+			logger.info('Average number of steps per test: %d' % np.mean(avg_nr_epochs))
 			
 			if (tests_passed / N_TESTS) > train_acc:
 				logger.info('Updating best model for current loc')

@@ -192,7 +192,7 @@ else
                                     --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" \
                                     --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4 --n-ic-samples 5 --mm-type "$mental_model" \
                                     --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" --use-explanations \
-                                    --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --remote --student-model-url "$student_model_url" --teacher_model_url "$teacher_model_url" --api-key "$api_key" --temperature "$gen_temperature" \
+                                    --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --remote --student-model-url "$student_model_url" --teacher-model-url "$teacher_model_url" --api-key "$api_key" --temperature "$gen_temperature" \
                                     --n-logprobs "$num_logprobs" > "$out_file"
   kill -9 "$student_id" "$teacher_id"
 fi

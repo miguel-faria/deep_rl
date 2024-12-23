@@ -580,7 +580,7 @@ def main():
 				logger.info('Test number %d' % (n_test + 1))
 				logger.info('Prey locations: ' + ', '.join(['(%d, %d)' % env.agents[prey_id].pos for prey_id in env.prey_alive_ids]))
 				logger.info('Agent positions: ' + ', '.join(['(%d, %d)' % env.agents[hunter_id].pos for hunter_id in env.hunter_ids]))
-				logger.info('Testing sequence: ' + ', '.join(testing_prey_lists[n_test]))
+				logger.info('Testing sequence: ' + testing_prey_lists[n_test])
 				# obs, *_ = env.reset()
 				epoch = 0
 				agent_reward = [0] * n_hunters
@@ -614,9 +614,11 @@ def main():
 
 					if finished or timeout:
 						game_over = True
-						
-					else:
-						epoch += 1
+					
+					for hunter in range(n_hunters):
+						agent_reward[hunter] += rewards[hunter]
+					
+					epoch += 1
 					
 					sys.stdout.flush()
 

@@ -185,8 +185,8 @@ results_path="$data_dir"/results/mohit_"$mental_model"_"$t_name"_"$utility"_"$s_
 
 gpu_usage=1.0
 readarray -d "," -t gpus_avail <<< "$CUDA_VISIBLE_DEVICES"
-student_gpus="${starr[@]:0:$n_student_gpus}"
-teacher_gpus="${starr[@]:$n_student_gpus:$n_teacher_gpus}"
+student_gpus="${gpus_avail[@]:0:$n_student_gpus}"
+teacher_gpus="${gpus_avail[@]:$n_student_gpus:$n_teacher_gpus}"
 student_gpus="${student_gpus// /,}"
 teacher_gpus="${teacher_gpus// /,}"
 
@@ -198,11 +198,13 @@ if [ -z "$remote_model"  ]; then
                                     --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
 else
   echo "Serving student model using $lib"
+  echo "Student's gpus: $student_gpus"
   CUDA_VISIBLE_DEVICES="$student_gpus" vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
                                                   --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
   student_id=$!
   sleep 5m
   echo "Serving teacher model using $lib"
+  echo "Teacher's gpus: $teacher_gpus"
   CUDA_VISIBLE_DEVICES="$teacher_gpus" vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
                                                   --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
   teacher_id=$!

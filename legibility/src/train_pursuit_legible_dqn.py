@@ -644,7 +644,7 @@ def main():
 				train_acc = tests_passed / N_TESTS
 
 			wandb_run.finish()
-			with open(data_dir / 'performances' / 'pursuit' / ('train_legible_performances_%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
+			with open(data_dir / 'performances' / 'pursuit' / ('train_legible_performances%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
 			          mode='r+', encoding='utf-8') as train_file:
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])

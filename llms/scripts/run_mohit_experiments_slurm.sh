@@ -183,7 +183,7 @@ results_path="$data_dir"/results/mohit_"$mental_model"_"$t_name"_"$utility"_"$s_
 # export NCCL_DEBUG=TRACE
 # export VLLM_TRACE_FUNCTION=1
 
-gpu_usage=1.0
+gpu_usage=0.7
 readarray -d "," -t gpus_avail <<< "$CUDA_VISIBLE_DEVICES"
 student_gpus="${gpus_avail[@]:0:$n_student_gpus}"
 teacher_gpus="${gpus_avail[@]:$n_student_gpus:$n_teacher_gpus}"

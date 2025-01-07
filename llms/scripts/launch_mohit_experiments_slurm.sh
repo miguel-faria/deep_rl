@@ -206,6 +206,12 @@ if [ -z "$remote_model"  ]; then
                                     --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
 else
   if [ "$lib" = "vllm" ]; then
+    echo "Serving teacher model using vLLM"
+    echo "Model is located at http://$teacher_host:$teacher_port/v1"
+    CUDA_VISIBLE_DEVICES="$teacher_gpus" python3 -m vllm.entrypoints.api_server --model "$teacher_model" --download-dir "$cache_dir" --dtype auto --gpu-memory-utilization "$gpu_usage" \
+                                --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
+    teacher_id=$!
+    sleep 1.5m
     echo "Serving student model using vLLM"
     echo "Model is located at http://$student_host:$student_port/v1"
 #    vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
@@ -213,11 +219,6 @@ else
     CUDA_VISIBLE_DEVICES="$student_gpus" python3 -m vllm.entrypoints.api_server --model "$student_model" --download-dir "$cache_dir" --dtype auto --gpu-memory-utilization "$gpu_usage" \
                                 --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
     student_id=$!
-    echo "Serving teacher model using vLLM"
-    echo "Model is located at http://$teacher_host:$teacher_port/v1"
-    CUDA_VISIBLE_DEVICES="$teacher_gpus" python3 -m vllm.entrypoints.api_server --model "$teacher_model" --download-dir "$cache_dir" --dtype auto --gpu-memory-utilization "$gpu_usage" \
-                                --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
-    teacher_id=$!
     sleep 1.5m
   fi
   echo "Launching Mohit's experiment script"

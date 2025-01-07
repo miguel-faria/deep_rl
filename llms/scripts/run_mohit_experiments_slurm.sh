@@ -25,7 +25,7 @@ do
     --shost) student_host=${2}; shift ;;
     --thost) teacher_host=${2}; shift ;;
     --sport) student_port=${2}; shift ;;
-    --tport) teacher_host=${2}; shift ;;
+    --tport) teacher_port=${2}; shift ;;
     --temp) gen_temperature=${2}; shift ;;
     --lp) num_logprobs=${2}; shift ;;
     --usage) gpu_usage=${2}; shift ;;

@@ -534,7 +534,7 @@ def main( ):
 			student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
 																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
 																	 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir, args.llm_lib,
-																	 args.num_logprobs, not args.remote_execution, args.api_key, args.student_model_url, args.teacher_model_url, args.generation_temperature)
+																	 args.num_logprobs, not args.remote_execution, args.student_model_url, args.teacher_model_url, args.api_key, args.generation_temperature)
 		
 		else:
 			train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)

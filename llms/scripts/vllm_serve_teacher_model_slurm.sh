@@ -68,6 +68,32 @@ if [ -z "$gpu_usage" ]; then
     gpu_usage=0.7
 fi
 
+if [ -n "${SLURM_JOB_ID:-}" ] ; then
+  IFS=' '
+  read -ra newarr <<< "$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}')"
+  script_path=$(dirname "${newarr[0]}")
+else
+  script_path="$( cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 ; pwd -P )"
+fi
+
+# module load python cuda
+export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
+export PATH="/opt/cuda/bin:$PATH"
+if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
+  if [ -z "$CONDA_PREFIX_1" ] ; then
+    conda_dir="$CONDA_PREFIX"
+  else
+    conda_dir="$CONDA_PREFIX_1"
+  fi
+else
+  conda_dir="$CONDA_HOME"
+fi
+
+source "$conda_dir"/bin/activate llm_env
+
 echo "Serving teacher model using vLLM"
 vllm serve "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
-                            --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
+                            --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port"
+
+conda deactivate
+date

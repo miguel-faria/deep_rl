@@ -68,7 +68,24 @@ if [ -z "$gpu_usage" ]; then
     gpu_usage=0.7
 fi
 
+# module load python cuda
+export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
+export PATH="/opt/cuda/bin:$PATH"
+if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
+  if [ -z "$CONDA_PREFIX_1" ] ; then
+    conda_dir="$CONDA_PREFIX"
+  else
+    conda_dir="$CONDA_PREFIX_1"
+  fi
+else
+  conda_dir="$CONDA_HOME"
+fi
+
+source "$conda_dir"/bin/activate llm_env
 
 echo "Serving student model using vLLM"
 vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
-                            --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
+                            --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port"
+
+conda deactivate
+date

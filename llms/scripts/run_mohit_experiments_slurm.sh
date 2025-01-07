@@ -123,10 +123,11 @@ if [ -z "$remote_model" ]; then
                                                           --key "$api_key" --sgpu "$n_student_gpus" --tgpu "$n_teacher_gpus" --shost "$student_host" --thost "$teacher_host" --sport "$student_port" \
                                                           --tport "$teacher_port" --temp "$gen_temperature" --lp "$num_logprobs" --usage "$gpu_usage"
 else
+  echo "Teacher host at $teacher_host port at $teacher_port"
   sbatch "$script_path"/vllm_serve_teacher_model_slurm.sh -t "$teacher_model" -u "$gpu_usage" --key "$api_key" --gpu "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" --temp "$gen_temperature"
-  sbatch "$script_path"/launch_mohit_experiments_slurm.sh -d "$dataset" -s "$student_model" -t "$teacher_model" -u "$utility" --mm "$mental_model" --se "$student_expl" --te "$teacher_expl" --lib "$lib" \
-                                                          --key "$api_key" --sgpu "$n_student_gpus" --tgpu "$n_teacher_gpus" --shost "$student_host" --thost "$teacher_host" --sport "$student_port" \
-                                                          --tport "$teacher_port" --temp "$gen_temperature" --lp "$num_logprobs" --usage "$gpu_usage" --remote
+#  sbatch "$script_path"/launch_mohit_experiments_slurm.sh -d "$dataset" -s "$student_model" -t "$teacher_model" -u "$utility" --mm "$mental_model" --se "$student_expl" --te "$teacher_expl" --lib "$lib" \
+#                                                          --key "$api_key" --sgpu "$n_student_gpus" --tgpu "$n_teacher_gpus" --shost "$student_host" --thost "$teacher_host" --sport "$student_port" \
+#                                                          --tport "$teacher_port" --temp "$gen_temperature" --lp "$num_logprobs" --usage "$gpu_usage" --remote
 fi
 
 date

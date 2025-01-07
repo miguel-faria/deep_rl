@@ -84,6 +84,7 @@ fi
 source "$conda_dir"/bin/activate llm_env
 
 echo "Serving student model using vLLM"
+echo "Model is located at http://$student_host:$student_port/v1"
 vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
                             --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port"
 

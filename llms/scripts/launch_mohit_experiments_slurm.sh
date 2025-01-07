@@ -210,7 +210,7 @@ else
     vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
                                 --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
     student_id=$!
-    sleep 5m
+    sleep 1.5m
   fi
   echo "Launching Mohit's experiment script"
   python src/mohit_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \

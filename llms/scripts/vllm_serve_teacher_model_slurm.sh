@@ -31,7 +31,7 @@ do
     --key) api_key=${2}; shift ;;
     --gpu) n_teacher_gpus=${2}; shift ;;
     --host) teacher_host=${2}; shift ;;
-    --port) teacher_host=${2}; shift ;;
+    --port) teacher_port=${2}; shift ;;
     --temp) gen_temperature=${2}; shift ;;
     (--) shift; break ;;
     (-*) echo "$0: error - unrecognized option $1" 1>&2; exit 1 ;;

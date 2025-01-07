@@ -192,11 +192,11 @@ results_path="$data_dir"/results/mohit_"$mental_model"_"$t_name"_"$utility"_"$s_
 # export NCCL_DEBUG=TRACE
 # export VLLM_TRACE_FUNCTION=1
 
-#readarray -d "," -t gpus_avail <<< "$CUDA_VISIBLE_DEVICES"
-#student_gpus="${gpus_avail[@]:0:$n_student_gpus}"
-#teacher_gpus="${gpus_avail[@]:$n_student_gpus:$n_teacher_gpus}"
-#student_gpus="${student_gpus// /,}"
-#teacher_gpus="${teacher_gpus// /,}"
+readarray -d "," -t gpus_avail <<< "$CUDA_VISIBLE_DEVICES"
+student_gpus="${gpus_avail[@]:0:$n_student_gpus}"
+teacher_gpus="${gpus_avail[@]:$n_student_gpus:$n_teacher_gpus}"
+student_gpus="${student_gpus// /,}"
+teacher_gpus="${teacher_gpus// /,}"
 
 if [ -z "$remote_model"  ]; then
   python src/mohit_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
@@ -207,9 +207,17 @@ if [ -z "$remote_model"  ]; then
 else
   if [ "$lib" = "vllm" ]; then
     echo "Serving student model using vLLM"
-    vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
+    echo "Model is located at http://$student_host:$student_port/v1"
+#    vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
+#                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
+    CUDA_VISIBLE_DEVICES="$student_gpus" python3 -m vllm.entrypoints.api_server --model "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
                                 --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
     student_id=$!
+    echo "Serving teacher model using vLLM"
+    echo "Model is located at http://$teacher_host:$teacher_port/v1"
+    CUDA_VISIBLE_DEVICES="$teacher_gpus" python3 -m vllm.entrypoints.api_server --model "$teacher_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
+                                --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
+    teacher_id=$!
     sleep 1.5m
   fi
   echo "Launching Mohit's experiment script"
@@ -220,7 +228,7 @@ else
                                     --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --remote --student-model-url "$student_model_url" --teacher-model-url "$teacher_model_url" --api-key "$api_key" \
                                     --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
   if [ "$lib" = "vllm" ]; then
-    kill -9 "$student_id"
+    kill -9 "$student_id" "$teacher_id"
   fi
 fi
 

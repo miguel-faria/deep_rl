@@ -4,7 +4,7 @@
 #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
 #SBATCH --job-name=mohit_explanation_exec
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=1
+#SBATCH --cpus-per-task=4
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:3
 #SBATCH --time=4:00:00

@@ -4,6 +4,7 @@ import argparse
 import pandas as pd
 import torch
 import os
+import json
 
 from utilities.dataset_tasks_utils import ECQA, StrategyQA, GSM8k
 from machine_teaching.models.model import UnidentifiedTaskError, UnidentifiedUtilityMetricError
@@ -522,64 +523,69 @@ def main( ):
 	
 	budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] if args.budgets is None else args.budgets
 	student_model, teacher_model, mental_model = None, None, None
-	results_file = open(args.results_path, "w", encoding="utf-8-sig")
+	with open(args.results_path, "r") as results_file:
+		results = json.load(results_file)
+	
+	tested_seeds = list(results.keys())
 	
 	for seed in [41, 42, 43]:
 		
-		print('Starting trials for seed: %d' % seed)
-		rng_gen = default_rng(seed)
-		
-		print('Loading models')
-		if not student_model:
-			student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
-																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
-																	 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir, args.llm_lib,
-																	 args.num_logprobs, not args.remote_execution, args.student_model_url, args.teacher_model_url, args.api_key,
-																	 args.generation_temperature)
+		if seed in tested_seeds:
+			continue
 		
 		else:
-			train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)
-			student_samples = [train_samples.iloc[idx].to_dict() for idx in train_idxs]
-			student_model.set_samples(student_samples)
+			results[seed] = {}
+			print('Starting trials for seed: %d' % seed)
+			rng_gen = default_rng(seed)
 			
-			if args.use_explanations:
-				if args.teacher_expl_type.find('human') == -1:
-					teacher_samples = get_teacher_model_samples(rng_gen, train_samples, student_samples, args.teacher_expl_type, args.n_ics, student_model)
-					teacher_model.set_samples(teacher_samples)
+			print('Loading models')
+			if not student_model:
+				student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
+																		 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
+																		 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir, args.llm_lib,
+																		 args.num_logprobs, not args.remote_execution, args.student_model_url, args.teacher_model_url, args.api_key,
+																		 args.generation_temperature)
+			
+			else:
+				train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)
+				student_samples = [train_samples.iloc[idx].to_dict() for idx in train_idxs]
+				student_model.set_samples(student_samples)
 				
-				if args.intervention_utility.find('mm') != -1 or (args.intervention_utility.find('mental') != -1 and args.intervention_utility.find('model') != -1):
-					mm_samples = get_mental_model_samples(rng_gen, train_samples, args.task, args.mm_type, args.n_ics, student_model, teacher_model)
-					mental_model.set_samples(mm_samples)
-		print('Done')
-		
-		print('Getting samples for intervention')
-		intervention_idxs_per_budget, intervention_conf_budget = get_intervention_idx_budget(student_model, mental_model, rng_gen, budgets, test_samples,
-		                                                                                     args.intervention_utility, args.use_explanations, args.use_gold_label, args.deceive)
-		
-		print('Intervention utilities:')
-		for i in range(len(budgets)):
-			if budgets[i] > 0:
-				print('Budget %f: max = %f\tmin = %f' % (budgets[i], max(intervention_conf_budget[i]), min(intervention_conf_budget[i])))
-		
-		print('Getting predictions for each budget level')
-		predictions_per_budget, _, labels = student_model.predict_batch(test_samples, intervention_idxs_per_budget, teacher_model)
-		
-		print('Computing accuracies')
-		if not args.use_explanations:
-			accuracy = compute_accuracy(labels, predictions_per_budget[0])
-			print("Accuracy = %f\n" % accuracy)
-			results_file.write("Seed = %d\n" % seed)
-			results_file.write("Accuracy = %f\n" % accuracy)
-			results_file.flush()
-			os.fsync(results_file.fileno())
-		else:
-			for budget_index, budget in enumerate(budgets):
-				accuracy = compute_accuracy(labels, predictions_per_budget[budget_index])
-				print("Accuracy for budget %f = %f" % (budget, accuracy))
-				results_file.write("Seed = %d\n" % seed)
-				results_file.write("Accuracy for budget %f = %f" % (budget, accuracy))
-				results_file.flush()
-				os.fsync(results_file.fileno())
+				if args.use_explanations:
+					if args.teacher_expl_type.find('human') == -1:
+						teacher_samples = get_teacher_model_samples(rng_gen, train_samples, student_samples, args.teacher_expl_type, args.n_ics, student_model)
+						teacher_model.set_samples(teacher_samples)
+					
+					if args.intervention_utility.find('mm') != -1 or (args.intervention_utility.find('mental') != -1 and args.intervention_utility.find('model') != -1):
+						mm_samples = get_mental_model_samples(rng_gen, train_samples, args.task, args.mm_type, args.n_ics, student_model, teacher_model)
+						mental_model.set_samples(mm_samples)
+			print('Done')
+			
+			print('Getting samples for intervention')
+			intervention_idxs_per_budget, intervention_conf_budget = get_intervention_idx_budget(student_model, mental_model, rng_gen, budgets, test_samples,
+																								 args.intervention_utility, args.use_explanations, args.use_gold_label, args.deceive)
+			
+			print('Intervention utilities:')
+			for i in range(len(budgets)):
+				if budgets[i] > 0:
+					print('Budget %f: max = %f\tmin = %f' % (budgets[i], max(intervention_conf_budget[i]), min(intervention_conf_budget[i])))
+			
+			print('Getting predictions for each budget level')
+			predictions_per_budget, _, labels = student_model.predict_batch(test_samples, intervention_idxs_per_budget, teacher_model)
+			
+			print('Computing accuracies')
+			if not args.use_explanations:
+				accuracy = compute_accuracy(labels, predictions_per_budget[0])
+				print("Accuracy = %f\n" % accuracy)
+				results[seed][0] = accuracy
+			else:
+				for budget_index, budget in enumerate(budgets):
+					accuracy = compute_accuracy(labels, predictions_per_budget[budget_index])
+					print("Accuracy for budget %f = %f" % (budget, accuracy))
+					results[seed][budget] = accuracy
+			
+			with open(args.results_path, "w") as results_file:
+				results_file.write(json.dumps(results))
 
 
 if __name__ == '__main__':

@@ -14,7 +14,7 @@
 #SBATCH --partition=a6000
 
 date;hostname;pwd
-options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,lib:,key:,sgpu:,tgpu:,shost:,thost:,sport:,tport:,temp:,lp:,usage:,remote -- "$@")
+options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,lib:,key:,sgpu:,tgpu:,shost:,thost:,sport:,tport:,temp:,lp:,usage:,results:,remote -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
   data_dir="/mnt/data-artemis/miguelfaria/llms/"
@@ -49,6 +49,7 @@ do
     --temp) gen_temperature=${2}; shift ;;
     --lp) num_logprobs=${2}; shift ;;
     --usage) gpu_usage=${2}; shift ;;
+    --results) results_path="$data_dir"/results/${2}; shift ;;
     (--) shift; break ;;
     (-*) echo "$0: error - unrecognized option $1" 1>&2; exit 1 ;;
     (*) break ;;
@@ -136,6 +137,10 @@ if [ -z "$gpu_usage" ]; then
     gpu_usage=0.7
 fi
 
+if [ -z "$results_path" ]; then
+    results_path="$data_dir"/results/mohit_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset".txt
+fi
+
 student_model_url="http://$student_host:$student_port/v1"
 teacher_model_url="http://$teacher_host:$teacher_port/v1"
 
@@ -185,7 +190,6 @@ fi
 s_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$student_model")")
 t_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$teacher_model")")
 out_file=mohit_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset"_"$(date '+%Y-%m-%d_%H-%M-%S')".out
-results_path="$data_dir"/results/mohit_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset"_"$(date '+%Y-%m-%d_%H-%M-%S')".txt
 
 # export VLLM_LOGGING_LEVEL=DEBUG
 # export CUDA_LAUNCH_BLOCKING=1

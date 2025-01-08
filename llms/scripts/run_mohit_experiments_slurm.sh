@@ -1,7 +1,27 @@
 #!/bin/bash
 
+#SBATCH --mail-type=BEGIN,END,FAIL         # Mail events (NONE, BEGIN, END, FAIL, ALL)
+#SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
+#SBATCH --job-name=mohit_explanation_exec
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --ntasks-per-node=1
+#SBATCH --gres=gpu:3
+#SBATCH --time=24:00:00
+#SBATCH --mem-per-cpu=8G
+#SBATCH --qos=gpu-medium
+#SBATCH --output="job-%x-%j.out"
+#SBATCH --partition=a6000
+
 date;hostname;pwd
 options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,lib:,key:,sgpu:,tgpu:,shost:,thost:,sport:,tport:,temp:,lp:,usage:,remote -- "$@")
+if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
+  cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
+  data_dir="/mnt/data-artemis/miguelfaria/llms/"
+else
+  cache_dir="./cache"
+  data_dir="./data"
+fi
 
 eval set -- "$options"
 budgets=()
@@ -116,19 +136,102 @@ if [ -z "$gpu_usage" ]; then
     gpu_usage=0.7
 fi
 
-script_path="$( cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 ; pwd -P )"
+student_model_url="http://$student_host:$student_port/v1"
+teacher_model_url="http://$teacher_host:$teacher_port/v1"
 
-if [ -z "$remote_model" ]; then
-  sbatch "$script_path"/launch_mohit_experiments_slurm.sh -d "$dataset" -s "$student_model" -t "$teacher_model" -u "$utility" --mm "$mental_model" --se "$student_expl" --te "$teacher_expl" --lib "$lib" \
-                                                          --key "$api_key" --sgpu "$n_student_gpus" --tgpu "$n_teacher_gpus" --shost "$student_host" --thost "$teacher_host" --sport "$student_port" \
-                                                          --tport "$teacher_port" --temp "$gen_temperature" --lp "$num_logprobs" --usage "$gpu_usage"
+if [ -n "${SLURM_JOB_ID:-}" ] ; then
+  IFS=' '
+  read -ra newarr <<< "$(scontrol show job "$SLURM_JOB_ID" | awk -F= '/Command=/{print $2}')"
+  script_path=$(dirname "${newarr[0]}")
 else
-  echo "Student host at $student_host port at $student_port"
-  echo "Teacher host at $teacher_host port at $teacher_port"
-#  sbatch "$script_path"/vllm_serve_teacher_model_slurm.sh -t "$teacher_model" -u "$gpu_usage" --key "$api_key" --gpu "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" --temp "$gen_temperature"
-  sbatch "$script_path"/launch_mohit_experiments_slurm.sh -d "$dataset" -s "$student_model" -t "$teacher_model" -u "$utility" --mm "$mental_model" --se "$student_expl" --te "$teacher_expl" --lib "$lib" \
-                                                          --key "$api_key" --sgpu "$n_student_gpus" --tgpu "$n_teacher_gpus" --shost "$student_host" --thost "$teacher_host" --sport "$student_port" \
-                                                          --tport "$teacher_port" --temp "$gen_temperature" --lp "$num_logprobs" --usage "$gpu_usage" --remote
+  script_path="$( cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 ; pwd -P )"
 fi
 
+# module load python cuda
+export LD_LIBRARY_PATH="/opt/cuda/lib64:$LD_LIBRARY_PATH"
+export PATH="/opt/cuda/bin:$PATH"
+if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
+  if [ -z "$CONDA_PREFIX_1" ] ; then
+    conda_dir="$CONDA_PREFIX"
+  else
+    conda_dir="$CONDA_PREFIX_1"
+  fi
+else
+  conda_dir="$CONDA_HOME"
+fi
+
+source "$conda_dir"/bin/activate llm_env
+
+cd "$script_path" || exit
+cd .. || exit
+
+if [ "$dataset" = "ec_qa" ]; then
+  dataset_dir="datasets/ecqa"
+  train_file="data_train.csv"
+  test_file="data_test.csv"
+  val_file="data_val.csv"
+elif [ "$dataset" = "gsm8k" ]; then
+  dataset_dir="datasets/gsm8k"
+  train_file="train.jsonl"
+  test_file="test.jsonl"
+  val_file=""
+else
+  dataset_dir="datasets/strategyqa"
+  train_file="train.json"
+  test_file="test.json"
+  val_file="validation.json"
+fi
+
+s_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$student_model")")
+t_name=$(sed 's/-/_/g' <<< "$(sed 's/\//_/g' <<< "$teacher_model")")
+out_file=mohit_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset"_"$(date '+%Y-%m-%d_%H-%M-%S')".out
+results_path="$data_dir"/results/mohit_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset"_"$(date '+%Y-%m-%d_%H-%M-%S')".txt
+
+# export VLLM_LOGGING_LEVEL=DEBUG
+# export CUDA_LAUNCH_BLOCKING=1
+# export NCCL_DEBUG=TRACE
+# export VLLM_TRACE_FUNCTION=1
+
+readarray -d "," -t gpus_avail <<< "$CUDA_VISIBLE_DEVICES"
+student_gpus="${gpus_avail[@]:0:$n_student_gpus}"
+teacher_gpus="${gpus_avail[@]:$n_student_gpus:$n_teacher_gpus}"
+student_gpus="${student_gpus// /,}"
+teacher_gpus="${teacher_gpus// /,}"
+
+if [ -z "$remote_model"  ]; then
+  python src/mohit_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
+                                    --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" \
+                                    --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4 --n-ic-samples 5 --mm-type "$mental_model" \
+                                    --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" --use-explanations \
+                                    --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
+else
+  if [ "$lib" = "vllm" ]; then
+    echo "Serving teacher model using vLLM"
+    echo "Model is located at http://$teacher_host:$teacher_port/v1"
+    CUDA_VISIBLE_DEVICES="$teacher_gpus" python3 -m vllm.entrypoints.openai.api_server --model "$teacher_model" --download-dir "$cache_dir" --dtype auto --gpu-memory-utilization "$gpu_usage" \
+                                --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
+    teacher_id=$!
+    sleep 1.5m
+    echo "Serving student model using vLLM"
+    echo "Model is located at http://$student_host:$student_port/v1"
+#    vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
+#                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
+    CUDA_VISIBLE_DEVICES="$student_gpus" python3 -m vllm.entrypoints.openai.api_server --model "$student_model" --download-dir "$cache_dir" --dtype auto --gpu-memory-utilization "$gpu_usage" \
+                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
+    student_id=$!
+    sleep 1.5m
+  fi
+  echo "Launching Mohit's experiment script"
+  python src/mohit_mm_experiments.py --data-dir "$data_dir"/"$dataset_dir" --cache-dir "$cache_dir" --train-filename "$train_file" --test-filename "$test_file" \
+                                    --val-filename "$val_file" --results-path "$results_path" --task "$dataset" --student-model "$student_model" \
+                                    --teacher-model "$teacher_model" --max-new-tokens 100 --n-beams 4 --n-ic-samples 5 --mm-type "$mental_model" \
+                                    --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" --use-explanations \
+                                    --use-gold-label --budgets "${budgets[@]}" --llm-lib "$lib" --remote --student-model-url "$student_model_url" --teacher-model-url "$teacher_model_url" --api-key "$api_key" \
+                                    --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
+  if [ "$lib" = "vllm" ]; then
+    kill -9 "$student_id" "$teacher_id"
+  fi
+fi
+
+conda deactivate
 date

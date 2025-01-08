@@ -7,9 +7,9 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gres=gpu:1
-#SBATCH --time=2-00:00:00
+#SBATCH --time=4-00:00:00
 #SBATCH --mem=4G
-#SBATCH --qos=gpu-medium
+#SBATCH --qos=gpu-long
 #SBATCH --output="job-%x-%j.out"
 #SBATCH --partition=a6000
 date;hostname;pwd

@@ -304,7 +304,7 @@ def load_models(rng_seed: int, train_data: pd.DataFrame, num_samples: int, stude
 					print('Getting teacher samples')
 					teacher_samples = get_teacher_model_samples(rng_gen, train_data, student_samples, teacher_expl_type, num_samples, student_model)
 					print('Creating Teacher Model')
-					teacher_gen_model = LLM(teacher_model_path, gpu_memory_utilization=0.7, tensor_parallel_size=2, enforce_eager=True, download_dir=cache_dir)
+					teacher_gen_model = LLM(teacher_model_path, gpu_memory_utilization=0.7, enforce_eager=True, download_dir=cache_dir)
 					teacher_model = TeacherModelVLLM(teacher_model_path, teacher_samples, teacher_gen_model, teacher_expl_type, task, max_tokens, num_beams,
 					                                 num_logprobs, use_explanations, local_model, temperature, api_key, t_model_url)
 
@@ -534,7 +534,8 @@ def main( ):
 			student_model, teacher_model, mental_model = load_models(RNG_SEED, task_dataset.get_train_samples(), args.n_ics, args.student_model, args.teacher_model, args.task,
 																	 args.use_explanations, args.student_expl_type, args.teacher_expl_type, args.mm_type,
 																	 args.intervention_utility, args.max_new_tokens, args.n_beams, args.cache_dir, args.llm_lib,
-																	 args.num_logprobs, not args.remote_execution, args.student_model_url, args.teacher_model_url, args.api_key, args.generation_temperature)
+																	 args.num_logprobs, not args.remote_execution, args.student_model_url, args.teacher_model_url, args.api_key,
+																	 args.generation_temperature)
 		
 		else:
 			train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)

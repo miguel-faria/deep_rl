@@ -232,7 +232,7 @@ class StudentModel(ModelVLLM):
 			output_text = self.gen_model.generate(context, gen_params)[0].outputs[0].text
 
 		else:
-			print('Model url: %s\tModel api key: %s ' % (self.model_url, self.api_key))
+			# print('Model url: %s\tModel api key: %s ' % (self.model_url, self.api_key))
 			client = OpenAI(base_url=self.model_url, api_key=self.api_key)
 			outputs = client.completions.create(
 					model=self.model_name,

@@ -51,7 +51,7 @@ do
     --temp) gen_temperature=${2}; shift ;;
     --lp) num_logprobs=${2}; shift ;;
     --usage) gpu_usage=${2}; shift ;;
-    --results) results_path="$data_dir"/results/${2}; shift ;;
+    --results) results_path="$data_dir"results/${2}; shift ;;
     (--) shift; break ;;
     (-*) echo "$0: error - unrecognized option $1" 1>&2; exit 1 ;;
     (*) break ;;
@@ -148,7 +148,7 @@ if [ -z "$gpu_usage" ]; then
 fi
 
 if [ -z "$results_path" ]; then
-    results_path="$data_dir"/results/mohit_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset".txt
+    results_path="$data_dir"results/mohit_"$mental_model"_"$t_name"_"$utility"_"$s_name"_"$dataset".txt
 fi
 
 student_model_url="http://$student_host:$student_port/v1"

@@ -495,9 +495,12 @@ def main( ):
 	budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] if args.budgets is None else args.budgets
 	# budgets = [0.6]
 	student_model, teacher_model, mental_model = None, None, None
-	
-	with open(args.results_path, "r") as results_file:
-		results = json.load(results_file)
+	try:
+		with open(args.results_path, "r") as results_file:
+			results = json.load(results_file)
+	except FileNotFoundError:
+		print('File %s not found, creating an empty results dictionary' % args.results_path)
+		results = {}
 	
 	tested_seeds = list(results.keys())
 	

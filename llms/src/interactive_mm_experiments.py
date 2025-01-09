@@ -449,8 +449,10 @@ def main( ):
 	parser.add_argument('--api-key', dest='api_key', type=str, default='', help='Api token key to access remote model')
 	parser.add_argument('--max-new-tokens', dest='max_new_tokens', default=100, type=int, help='Maximum number of new tokens when generating answers')
 	parser.add_argument('--n-beams', dest='n_beams', default=1, type=int, help='Number of beams to use in answer generation beam search')
-	parser.add_argument('--max-student-samples', dest='max_student_samples', default=5, type=int, help='Maximum number of students to sample for mental model context')
+	parser.add_argument('--max-student-samples', dest='max_student_samples', default=5, type=int,
+	                    help='Maximum number of students to sample for mental model context')
 	parser.add_argument('--n-ic-samples', dest='n_ics', default=4, type=int, help='Number of in-context samples to use for context in the student answers')
+	parser.add_argument('--n-logprobs', dest='num_logprobs', default=5, type=int, help='Number of alternative logprobs generated for each token, required for vLLM')
 	parser.add_argument('--temperature', dest='generation_temperature', default=0.0, type=float, help='Generation temperature parameter')
 
 	# Execution arguments
@@ -493,6 +495,7 @@ def main( ):
 	print('Teacher mental model: %s' % args.mm_type)
 	print('Teacher explanation type: %s' % args.teacher_expl_type)
 	print('Teacher minimum intervention threshold: %f' % args.intervention_threshold)
+	print('Mental model samples: %d' % args.max_student_samples)
 	
 	budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] if args.budgets is None else args.budgets
 	testing_seeds = [41, 42, 43] if args.seeds is None else args.seeds

@@ -14,7 +14,7 @@
 #SBATCH --partition=a6000
 
 date;hostname;pwd
-options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,ss:,it:,lib:,key:,sgpu:,tgpu:,shost:,thost:,sport:,tport:,temp:,lp:,usage:,results:,remote -- "$@")
+options=$(getopt -o d:,s:,t:,u:,b: -l mm:,se:,te:,ss:,it:,lib:,key:,seed:,sgpu:,tgpu:,shost:,thost:,sport:,tport:,temp:,lp:,usage:,results:,remote -- "$@")
 if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
   cache_dir="/mnt/scratch-artemis/miguelfaria/llms/checkpoints"
   data_dir="/mnt/data-artemis/miguelfaria/llms/"
@@ -25,6 +25,7 @@ fi
 
 eval set -- "$options"
 budgets=()
+seeds=()
 
 while [ $# -gt 0 ]
 do
@@ -34,6 +35,7 @@ do
     -t) teacher_model=${2}; shift ;;
     -u) utility=${2}; shift ;;
     -b) budgets+=("${2}"); shift ;;
+    --seed) seeds+=("${2}"); shift ;;
     --lib) lib=${2}; shift ;;
     --mm) mental_model=${2}; shift ;;
     --se) student_expl=${2}; shift ;;
@@ -61,6 +63,10 @@ done
 
 if [ ${#budgets[@]} -eq 0 ]; then
   budgets=("0" "0.2" "0.4" "0.6" "0.8" "1.0")
+fi
+
+if [ ${#seeds[@]} -eq 0 ]; then
+  seeds=("41" "42" "43")
 fi
 
 if [ -z "$dataset" ]; then
@@ -219,15 +225,15 @@ else
     echo "Serving teacher model using vLLM"
     echo "Model is located at http://$teacher_host:$teacher_port/v1"
     CUDA_VISIBLE_DEVICES="$teacher_gpus" python3 -m vllm.entrypoints.openai.api_server --model "$teacher_model" --download-dir "$cache_dir" --dtype auto --gpu-memory-utilization "$gpu_usage" \
-                                --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" &
+                                --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" --disable-log-stats &
     teacher_id=$!
     sleep 1.5m
     echo "Serving student model using vLLM"
     echo "Model is located at http://$student_host:$student_port/v1"
 #    vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
-#                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
+#                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" --disable-log-stats &
     CUDA_VISIBLE_DEVICES="$student_gpus" python3 -m vllm.entrypoints.openai.api_server --model "$student_model" --download-dir "$cache_dir" --dtype auto --gpu-memory-utilization "$gpu_usage" \
-                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" &
+                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" --disable-log-stats &
     student_id=$!
     sleep 1.5m
   fi
@@ -238,7 +244,7 @@ else
                                           --intervention-utility "$utility" --teacher-explanation-type "$teacher_expl" --student-explanation-type "$student_expl" \
                                           --use-explanations --use-gold-label --intervention-threshold "$intervention_thresh" --max-student-samples "$student_samples" \
                                           --budgets "${budgets[@]}" --llm-lib "$lib" --remote --student-model-url "$student_model_url" --teacher-model-url "$teacher_model_url" \
-                                          --api-key "$api_key" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" > "$out_file"
+                                          --api-key "$api_key" --temperature "$gen_temperature" --n-logprobs "$num_logprobs" --seeds "${seeds[@]}" > "$out_file"
   kill -9 "$student_id" "$teacher_id"
 fi
 

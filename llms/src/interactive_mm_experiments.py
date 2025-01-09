@@ -456,6 +456,8 @@ def main( ):
 	# Execution arguments
 	parser.add_argument('--budgets', dest='budgets', default=None, type=float, nargs='+',
 	                    help='Interaction budgets to test the teaching. Default: [0, 0.2, 0.4, 0.6, 0.8, 1.0]')
+	parser.add_argument('--seeds', dest='seeds', default=None, type=int, nargs='+',
+	                    help='Interaction budgets to test the teaching. Default: [41, 42, 43]')
 	parser.add_argument('--data-dir', dest='data_dir', default='', type=str, help='Path to the directory with the datasets')
 	parser.add_argument('--debug', dest='debug', action='store_true', help='Flag that denotes the print of debug information')
 	parser.add_argument('--intervene-behaviour', dest='intervene_behaviour', default='teacher', type=str, help='Teacher intervention behaviour')
@@ -493,6 +495,7 @@ def main( ):
 	print('Teacher minimum intervention threshold: %f' % args.intervention_threshold)
 	
 	budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] if args.budgets is None else args.budgets
+	testing_seeds = [41, 42, 43] if args.seeds is None else args.seeds
 	# budgets = [0.6]
 	student_model, teacher_model, mental_model = None, None, None
 	try:
@@ -505,7 +508,7 @@ def main( ):
 	tested_seeds = list(results.keys())
 	print('Tested seeds: ', tested_seeds)
 
-	for seed in [41, 42, 43]:
+	for seed in testing_seeds:
 
 		if str(seed) in tested_seeds:
 			print('Seed %d already tested, skipping' % seed)

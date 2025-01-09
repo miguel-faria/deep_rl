@@ -488,6 +488,8 @@ def main( ):
 	# Execution arguments
 	parser.add_argument('--budgets', dest='budgets', default=None, type=float, nargs='+',
 	                    help='Interaction budgets to test the teaching. Default: [0, 0.2, 0.4, 0.6, 0.8, 1.0]')
+	parser.add_argument('--seeds', dest='seeds', default=None, type=int, nargs='+',
+	                    help='Interaction budgets to test the teaching. Default: [41, 42, 43]')
 	parser.add_argument('--data-dir', dest='data_dir', default='', type=str, help='Path to the directory with the datasets')
 	parser.add_argument('--use-explanations', dest='use_explanations', action='store_true',
 						help='Flag denoting whether student is given explanations to help understanding the problem')
@@ -522,6 +524,7 @@ def main( ):
 	print('Number of train samples = %d' % train_samples.shape[0])
 	
 	budgets = [0.0, 0.2, 0.4, 0.6, 0.8, 1.0] if args.budgets is None else args.budgets
+	testing_seeds = [41, 42, 43] if args.seeds is None else args.seeds
 	student_model, teacher_model, mental_model = None, None, None
 	try:
 		with open(args.results_path, "r") as results_file:
@@ -533,7 +536,7 @@ def main( ):
 	tested_seeds = list(results.keys())
 	print('Tested seeds: ', tested_seeds)
 	
-	for seed in [41, 42, 43]:
+	for seed in testing_seeds:
 		
 		if str(seed) in tested_seeds:
 			print('Seed %d already tested, skipping' % seed)

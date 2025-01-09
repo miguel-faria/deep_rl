@@ -518,7 +518,9 @@ def main( ):
 			continue
 		
 		else:
+			results[seed] = {}
 			print('Starting trials for seed: %d' % seed)
+			rng_gen = default_rng(seed)
 			
 			print('Loading models')
 			if not student_model:
@@ -529,7 +531,6 @@ def main( ):
 																		 args.generation_temperature)
 			
 			else:
-				rng_gen = default_rng(seed)
 				train_idxs = rng_gen.choice(train_samples.shape[0], args.n_ics, replace=False)
 				student_samples = [train_samples.iloc[idx].to_dict() for idx in train_idxs]
 				student_model.set_samples(student_samples)

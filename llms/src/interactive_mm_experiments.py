@@ -503,10 +503,12 @@ def main( ):
 		results = {}
 	
 	tested_seeds = list(results.keys())
-	
+	print('Tested seeds: ', tested_seeds)
+
 	for seed in [41, 42, 43]:
-		
-		if seed in tested_seeds:
+
+		if str(seed) in tested_seeds:
+			print('Seed %d already tested, skipping' % seed)
 			continue
 		
 		else:

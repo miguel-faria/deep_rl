@@ -225,15 +225,15 @@ else
     echo "Serving teacher model using vLLM"
     echo "Model is located at http://$teacher_host:$teacher_port/v1"
     CUDA_VISIBLE_DEVICES="$teacher_gpus" python3 -m vllm.entrypoints.openai.api_server --model "$teacher_model" --download-dir "$cache_dir" --dtype auto --gpu-memory-utilization "$gpu_usage" \
-                                --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" --disable-log-stats &
+                                --tensor-parallel-size "$n_teacher_gpus" --host "$teacher_host" --port "$teacher_port" --disable-log-requests &
     teacher_id=$!
     sleep 1.5m
     echo "Serving student model using vLLM"
     echo "Model is located at http://$student_host:$student_port/v1"
 #    vllm serve "$student_model" --download-dir "$cache_dir" --dtype auto --api-key "$api_key" --gpu-memory-utilization "$gpu_usage" \
-#                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" --disable-log-stats &
+#                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" --disable-log-requests &
     CUDA_VISIBLE_DEVICES="$student_gpus" python3 -m vllm.entrypoints.openai.api_server --model "$student_model" --download-dir "$cache_dir" --dtype auto --gpu-memory-utilization "$gpu_usage" \
-                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" --disable-log-stats &
+                                --tensor-parallel-size "$n_student_gpus" --host "$student_host" --port "$student_port" --disable-log-requests &
     student_id=$!
     sleep 1.5m
   fi

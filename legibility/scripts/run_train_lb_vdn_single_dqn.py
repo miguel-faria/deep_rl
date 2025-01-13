@@ -55,6 +55,7 @@ PLAYER_LEVEL = 1
 FOOD_LVL = 2
 WARMUP_STEPS = STEPS_EPISODE * 2
 USE_RENDER = False
+FORCE_COOP = True
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--batch-size', dest='batch_size', type=int, required=False, default=BATCH_SIZE)
@@ -135,7 +136,7 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 			 (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --data-dir %s" % data_dir if data_dir != '' else "") +
 			 (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") + (" --use-higher-model" if use_higher_model else "") +
 			 (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else "") + (" --tracker-dir %s" % tracker_logs if tracker_logs != '' else "") +
-			 (" --train-performance %f" % train_thresh if train_thresh is not None else ""))
+			 (" --train-performance %f" % train_thresh if train_thresh is not None else "") + (" --force-coop" if FORCE_COOP else ""))
 	commamd = "python " + str(src_dir / ('train_lb_single_dqn%s.py' % ('_' + train_version if train_version != 'v1' else ''))) + args
 	if not USE_SHELL:
 		commamd = shlex.split(commamd)

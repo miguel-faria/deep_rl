@@ -5,7 +5,7 @@ from typing import Dict, List, Union, Tuple
 from machine_teaching.models.hf.teacher_model_hf import TeacherModel
 from machine_teaching.models.hf.student_model_hf import StudentModel
 from transformers import PreTrainedModel, PreTrainedTokenizer
-from machine_teaching.models.model import UnidentifiedTaskError
+from machine_teaching.models.model import UnidentifiedTaskError, UnidentifiedUtilityMetricError
 
 
 class TeacherMentalModel(TeacherModel):

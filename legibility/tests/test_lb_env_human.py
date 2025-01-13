@@ -2,7 +2,6 @@
 import numpy as np
 import flax.linen as nn
 import yaml
-import cv2
 
 from dl_envs.lb_foraging.lb_foraging_coop import FoodCOOPLBForaging
 from dl_envs.lb_foraging.lb_foraging import LBForagingEnv
@@ -23,7 +22,7 @@ def main():
 	player_level = 1
 	field_size = (8, 8)
 	n_foods = 8
-	n_foods_spawn = 6
+	n_foods_spawn = 2
 	sight = 8
 	max_steps = 5000
 	food_level = 2
@@ -41,7 +40,6 @@ def main():
 	use_tensorboard = False
 	use_render = True
 	architecture = 'v3'
-	force_coop = False
 	tensorboard_details = []
 	with open(data_dir / 'configs' / 'lbforaging_plan_configs.yaml') as file:
 		config_params = yaml.full_load(file)
@@ -67,8 +65,8 @@ def main():
 	optim_dir = (models_dir / 'lb_coop_legible_vdn_dqn' / ('%dx%d-field' % (field_size[0], field_size[1])) / ('%d-agents' % n_agents) /
 				 ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / 'best')
 	obj_food = food_locs[0]
-	env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, force_coop, food_level, RNG_SEED, food_locs,
-	                         use_encoding=True, agent_center=True, grid_observation=use_cnn, use_render=use_render, render_mode=['rgb_array', 'human'])
+	env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs,
+	                         use_encoding=True, agent_center=True, grid_observation=use_cnn, use_render=use_render)
 	# env = LBForagingEnv(n_agents, player_level, field_size, n_foods, sight, max_steps, True, render_mode=['rgb_array', 'human'], grid_observation=True)
 	if isinstance(env.observation_space, MultiBinary):
 		obs_space = MultiBinary([*env.observation_space.shape[1:]])
@@ -92,15 +90,14 @@ def main():
 	# 	env.food_spawn_pos = foods_spawn
 	rng_gen = np.random.default_rng(RNG_SEED)
 	env.set_objective(obj_food)
-	env.seed()
+	env.seed(seed=123456799)
 	env.spawn_food(n_foods_spawn, food_level)
 	env.spawn_players()
 	print('Food objective is (%d,%d)' % (obj_food[0], obj_food[1]))
 	print('Foods spawned: ' + str(obj_food) + ' ' +  str(env.food_spawn_pos))
 	obs, *_ = env.reset(seed=123456789)
 	print(env.get_full_env_log())
-	frame = env.render()
-	# cv2.imwrite(data_dir / 'stills' / 'lb_frame.png', cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+	env.render()
 	input()
 	
 	for i in range(100):

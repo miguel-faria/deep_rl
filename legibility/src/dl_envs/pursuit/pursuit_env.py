@@ -169,6 +169,10 @@ class PursuitEnv(Env):
 	def max_timesteps(self) -> int:
 		return self._max_timesteps
 	
+	@property
+	def n_catch(self) -> int:
+		return self._n_catch
+	
 	#######################
 	### UTILITY METHODS ###
 	#######################

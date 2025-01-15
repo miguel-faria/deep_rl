@@ -84,7 +84,7 @@ class LimitedCOOPLBForaging(LBForagingEnv):
 			for pos in self._pos_food_spawn:
 				row, col = pos
 				if self.field[row, col] == CellEntity.EMPTY:
-					food_lvl = min_level if min_level == max_level else self.np_random.integers(min_level, max_level)
+					food_lvl = min_level if min_level == max_level else self.np_random.integers(min_level, max_level + 1)
 					new_food = Food()
 					new_food.setup(pos, food_lvl, food_count + 1)
 					self.field[row, col] = CellEntity.FOOD
@@ -98,7 +98,7 @@ class LimitedCOOPLBForaging(LBForagingEnv):
 			for pos in self._foods_pos:
 				row, col = pos
 				if self.field[row, col] == CellEntity.EMPTY:
-					food_lvl = min_level if min_level == max_level else self._np_random.integers(min_level, max_level)
+					food_lvl = min_level if min_level == max_level else self._np_random.integers(min_level, max_level + 1)
 					new_food = Food()
 					new_food.setup(pos, food_lvl, food_count + 1)
 					self.field[row, col] = CellEntity.FOOD
@@ -629,7 +629,7 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 				pos = self._foods_pos[idx]
 				row, col = pos
 				if self.field[row, col] == CellEntity.EMPTY:
-					food_lvl = min_level if min_level == max_level else self.np_random.integers(min_level, max_level)
+					food_lvl = min_level if min_level == max_level else self.np_random.integers(min_level, max_level + 1)
 					new_food = Food()
 					new_food.setup(pos, food_lvl, food_count + 1)
 					self.field[row, col] = CellEntity.FOOD
@@ -643,7 +643,7 @@ class FoodCOOPLBForaging(LimitedCOOPLBForaging):
 			for pos in self._foods_pos:
 				row, col = pos
 				if self.field[row, col] == CellEntity.EMPTY:
-					food_lvl = min_level if min_level == max_level else self.np_random.integers(min_level, max_level)
+					food_lvl = min_level if min_level == max_level else self.np_random.integers(min_level, max_level + 1)
 					new_food = Food()
 					new_food.setup(pos, food_lvl, food_count + 1)
 					self.field[row, col] = CellEntity.FOOD

@@ -82,6 +82,7 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 	rng_gen = np.random.default_rng(rng_seed)
 	
 	# Setup DQNs for training
+	# env.set_objective(env.foods[rng_gen.integers(n_foods_spawn)].position)
 	env.spawn_players([env.max_player_level] * env.n_players)
 	env.spawn_food(n_foods_spawn, env.max_food_level)
 	obs, *_ = env.reset()
@@ -205,6 +206,7 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 						                        step=(it + start_record_it))
 				logger.info("Episode over:\tLength: %d\tEpsilon: %.5f\tReward: %f" % (epoch - episode_start, eps, episode_rewards))
 				# Reset params that determine how foods are spawn
+				env.set_objective(env.foods[rng_gen.integers(n_foods_spawn)].position)
 				env.food_spawn_pos = None
 				env.n_food_spawn = 0
 				env.spawn_food(n_foods_spawn, env.max_food_level)
@@ -359,13 +361,13 @@ def main():
 	models_dir = Path(args.models_dir) if args.models_dir != '' else home_dir / 'models'
 	if tracker_dir == '':
 		tracker_dir = log_dir
-	log_filename = (('train_lb_coop_single_v2_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents,
+	log_filename = (('train_lb_coop_single_v3_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents,
 	                                                                                               n_foods_spawn, food_level)) +
 	                '_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / ('lb_coop%s_single%s_dqn' % ('_mixed' if not force_coop else '', '_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
 	              ('%d-agents' % n_agents) / ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / now.strftime("%Y%m%d-%H%M%S"))
 	
-	with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa%s.yaml' % ('_vdn' if use_vdn else '', str(n_agents), '_mixed' if not force_coop else '')),
+	with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa%s_all_foods.yaml' % ('_vdn' if use_vdn else '', str(n_agents), '_mixed' if not force_coop else '')),
 	          mode='r+', encoding='utf-8') as train_file:
 		train_performances = yaml.safe_load(train_file)
 		field_idx = str(field_size[0]) + 'x' + str(field_size[1])
@@ -379,12 +381,6 @@ def main():
 			food_locs = [tuple(x) for x in config_params['food_locs'][dict_idx]]
 		else:
 			food_locs = [tuple(x) for x in product(range(field_size[0]), range(field_size[1]))]
-		trained_keys = list(train_acc.keys())
-		locs_train = []
-		for loc in food_locs:
-			key = '%s, %s' % (loc[0], loc[1])
-			if key not in trained_keys or (key in trained_keys and train_acc[key] < train_thresh):
-				locs_train += [loc]
 	
 	with open(data_dir / 'configs' / 'q_network_architectures.yaml') as architecture_file:
 		arch_data = yaml.safe_load(architecture_file)
@@ -410,8 +406,6 @@ def main():
 	err_logger.addHandler(handler)
 	Path.mkdir(model_path, parents=True, exist_ok=True)
 	
-	logger.info(os.environ.items())
-	
 	logger.info('##############################')
 	logger.info('Starting LB Foraging DQN Train')
 	logger.info('##############################')
@@ -420,7 +414,7 @@ def main():
 	####################
 	## Training Model ##
 	####################
-	if len(locs_train) > 0:
+	if train_acc < train_thresh:
 		try:
 			wandb_run = wandb.init(
 					project='lb-foraging-optimal', entity='miguel-faria',
@@ -444,181 +438,181 @@ def main():
 							"full_cooperation": force_coop
 					},
 					dir=tracker_dir,
-					name=('%s%ssingle_v2-l%dx%d-%df-' % ('mixed-' if not force_coop else '', 'vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
+					name=('%s%ssingle_v3-l%dx%d-%df-' % ('mixed-' if not force_coop else '', 'vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
 					      now.strftime("%Y%m%d-%H%M%S")),
 					sync_tensorboard=True)
-			logger.info('Starting training for different food locations')
-			for loc in locs_train:
-				logger.info('Training for location: %d, %d' % (loc[0], loc[1]))
-				logger.info('Environment setup')
-				env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, force_coop, food_level, RNG_SEED, food_locs,
-				                         use_encoding=True, agent_center=True, grid_observation=use_cnn)
-				env.seed(RNG_SEED)
-				env.set_objective(loc)
-				logger.info('Setup multi-agent DQN')
-				agent_action_space = env.action_space[0]
-				if isinstance(env.observation_space, MultiBinary):
-					obs_space = MultiBinary([*env.observation_space.shape[1:]])
-				else:
-					obs_space = env.observation_space[0]
-				if use_vdn:
-					action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
-					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space, env.observation_space, use_gpu,
-					                               dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
-					                               buffer_data=(args.buffer_smart_add, args.buffer_method))
-				else:
-					agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space, obs_space, use_gpu,
-					                               dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
-					                               buffer_data=(args.buffer_smart_add, args.buffer_method))
-				if restart_train:
-					logger.info('Load trained model')
-					agent_madqn.load_model(restart_info[1], model_path.parent.absolute() / restart_info[0], logger,
-					                       env.observation_space[0].shape if not use_cnn else (1, *env.observation_space[0].shape))
-				else:
-					logger.info('Starting train')
-				
-				if use_lower_model and n_foods_spawn > 1:
-					prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (max(n_foods_spawn - 1, 1), food_level)) / 'best'
-					if (prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
-						logger.info('Using model trained with %d foods spawned as a baseline' % (max(n_foods_spawn - 1, 1)))
-						curriculum_model_path = str(prev_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
-					else:
-						logger.info('Model with one less food item not found, training from scratch')
-						curriculum_model_path = ''
-				elif use_higher_model and n_foods_spawn < n_foods:
-					next_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (min(n_foods_spawn + 1, n_foods), food_level)) / 'best'
-					if (next_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1]))).exists():
-						logger.info('Using model trained with %d foods spawned as a baseline' % (min(n_foods_spawn + 1, n_foods)))
-						curriculum_model_path = str(next_model_path / ('food_%dx%d_single_model.model' % (loc[0], loc[1])))
-					else:
-						logger.info('Model with one more food item not found, training from scratch')
-						curriculum_model_path = ''
-				else:
-					logger.info('Training model from scratch')
-					curriculum_model_path = ''
-				
+			logger.info('Starting training model location agnostic')
+			logger.info('Environment setup')
+			env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, force_coop, food_level, RNG_SEED, food_locs,
+									 use_encoding=True, agent_center=True, grid_observation=use_cnn)
+			env.seed(RNG_SEED)
+			logger.info('Setup multi-agent DQN')
+			agent_action_space = env.action_space[0]
+			if isinstance(env.observation_space, MultiBinary):
+				obs_space = MultiBinary([*env.observation_space.shape[1:]])
+			else:
+				obs_space = env.observation_space[0]
+			if use_vdn:
+				action_space = MultiDiscrete([agent_action_space.n] * env.n_players)
+				agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, action_space, env.observation_space, use_gpu,
+											   dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
+											   buffer_data=(args.buffer_smart_add, args.buffer_method))
+			else:
+				agent_madqn = SingleModelMADQN(n_agents, agent_action_space.n, n_layers, nn.relu, layer_sizes, buffer_size, gamma, agent_action_space, obs_space, use_gpu,
+											   dueling_dqn, use_ddqn, use_vdn, use_cnn, False, cnn_properties=cnn_properties,
+											   buffer_data=(args.buffer_smart_add, args.buffer_method))
+			if restart_train:
+				logger.info('Load trained model')
+				agent_madqn.load_model(restart_info[1], model_path.parent.absolute() / restart_info[0], logger,
+									   env.observation_space[0].shape if not use_cnn else (1, *env.observation_space[0].shape))
+			else:
 				logger.info('Starting train')
-				cnn_shape = (0, ) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
-				tracker_panel = 'l%dx%d-%df-t%dx%d' % (field_size[0], field_size[1], n_foods_spawn, loc[0], loc[1])
-				greedy_actions = False
-				train_lb_model(env, agent_madqn, n_iterations, max_steps * n_iterations, n_foods_spawn, batch_size, online_lr, target_lr, initial_eps, final_eps, eps_type,
-				               RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tracker_frq, use_render, greedy_actions, args.ep_log,
-				               curriculum_model_path, use_tracker, wandb_run, tracker_panel, debug)
-				
-				env.close()
-				logger.info('Saving final model')
-				agent_madqn.save_model(('food_%dx%d' % (loc[0], loc[1])), model_path, logger)
-				
-				####################
-				## Testing Model ##
-				####################
-				logger.info('Testing for location: %dx%d' % (loc[0], loc[1]))
-				env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, TEST_RNG_SEED, food_locs,
-				                         use_encoding=True, agent_center=True, grid_observation=use_cnn)
-				if isinstance(env.observation_space, MultiBinary):
-					obs_space = MultiBinary([*env.observation_space.shape[1:]])
+			
+			if use_lower_model and n_foods_spawn > 1:
+				prev_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (max(n_foods_spawn - 1, 1), food_level)) / 'best'
+				if (prev_model_path / 'all_foods_single_model.model').exists():
+					logger.info('Using model trained with %d foods spawned as a baseline' % (max(n_foods_spawn - 1, 1)))
+					curriculum_model_path = str(prev_model_path / 'all_foods_single_model.model')
 				else:
-					obs_space = env.observation_space[0]
-				cnn_shape = (0, ) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
-				tests_passed = 0
-				env.seed(TEST_RNG_SEED)
-				np.random.seed(TEST_RNG_SEED)
-				rng_gen = np.random.default_rng(TEST_RNG_SEED)
-				avg_nr_epochs = []
-				for i in range(N_TESTS):
-					env.set_objective(loc)
-					env.spawn_players([player_level] * n_agents)
-					env.spawn_food(n_foods_spawn, food_level)
-					logger.info('Test number %d' % (i + 1))
-					logger.info('Agents: ' + ', '.join(['%s @ (%d, %d) with level %d' % (player.player_id, *player.position, player.level) for player in env.players]))
-					logger.info('Number of food spawn:\t%d' % n_foods_spawn)
-					logger.info('Food locations: ' + ', '.join(['(%d, %d)' % pos for pos in ([loc] + env.food_spawn_pos if n_foods_spawn < n_foods else food_locs)]))
-					logger.info('Agent positions: ' + ', '.join(['(%d, %d)' % p.position for p in env.players]))
-					obs, *_ = env.reset()
-					epoch = 0
-					agent_reward = [0] * n_agents
-					game_over = False
-					finished = False
-					timeout = False
-					while not game_over:
-						
-						actions = []
-						for a_idx in range(agent_madqn.num_agents):
-							dqn = agent_madqn.agent_dqn
-							if use_cnn:
-								cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
-								q_values = dqn.q_network.apply(dqn.online_state.params, cnn_obs)[0]
-							else:
-								q_values = dqn.q_network.apply(dqn.online_state.params, obs[a_idx])
-							pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
-							pol = pol / pol.sum()
-							action = rng_gen.choice(range(env.action_space[0].n), p=pol)
-							action = jax.device_get(action)
-							actions += [action]
-						actions = np.array(actions)
-						next_obs, rewards, finished, timeout, infos = env.step(actions)
-						logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]))
-						agent_reward = [agent_reward[idx] + rewards[idx] for idx in range(n_agents)]
-						obs = next_obs
-						
-						if finished or timeout:
-							game_over = True
-							env.food_spawn_pos = None
-							env.n_food_spawn = 0
-						
-						else:
-							epoch += 1
-						
-						sys.stdout.flush()
+					logger.info('Model with one less food item not found, training from scratch')
+					curriculum_model_path = ''
+			elif use_higher_model and n_foods_spawn < n_foods:
+				next_model_path = model_path.parent.parent.absolute() / ('%d-foods_%d-food-level' % (min(n_foods_spawn + 1, n_foods), food_level)) / 'best'
+				if (next_model_path / 'all_foods_single_model.model').exists():
+					logger.info('Using model trained with %d foods spawned as a baseline' % (min(n_foods_spawn + 1, n_foods)))
+					curriculum_model_path = str(next_model_path / 'all_foods_single_model.model')
+				else:
+					logger.info('Model with one more food item not found, training from scratch')
+					curriculum_model_path = ''
+			else:
+				logger.info('Training model from scratch')
+				curriculum_model_path = ''
+			
+			logger.info('Starting train')
+			cnn_shape = (0, ) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
+			tracker_panel = 'l%dx%d-%df' % (field_size[0], field_size[1], n_foods_spawn)
+			greedy_actions = False
+			train_lb_model(env, agent_madqn, n_iterations, max_steps * n_iterations, n_foods_spawn, batch_size, online_lr, target_lr, initial_eps, final_eps, eps_type,
+						   RNG_SEED, logger, cnn_shape, eps_decay, warmup, train_freq, target_freq, tracker_frq, use_render, greedy_actions, args.ep_log,
+						   curriculum_model_path, use_tracker, wandb_run, tracker_panel, debug)
+			
+			env.close()
+			logger.info('Saving final model')
+			agent_madqn.save_model('all_foods', model_path, logger)
+				
+			####################
+			## Testing Model ##
+			####################
+			logger.info('Testing trained model')
+			env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, TEST_RNG_SEED, food_locs,
+									 use_encoding=True, agent_center=True, grid_observation=use_cnn)
+			if isinstance(env.observation_space, MultiBinary):
+				obs_space = MultiBinary([*env.observation_space.shape[1:]])
+			else:
+				obs_space = env.observation_space[0]
+			cnn_shape = (0, ) if not agent_madqn.agent_dqn.cnn_layer else (*obs_space.shape[1:], obs_space.shape[0])
+			tests_passed = 0
+			env.seed(TEST_RNG_SEED)
+			np.random.seed(TEST_RNG_SEED)
+			rng_gen = np.random.default_rng(TEST_RNG_SEED)
+			avg_nr_epochs = []
+			for i in range(N_TESTS):
+				env.spawn_players([player_level] * n_agents)
+				env.spawn_food(n_foods_spawn, food_level)
+				logger.info('Test number %d' % (i + 1))
+				logger.info('Agents: ' + ', '.join(['%s @ (%d, %d) with level %d' % (player.player_id, *player.position, player.level) for player in env.players]))
+				logger.info('Number of food spawn:\t%d' % n_foods_spawn)
+				logger.info('Food items: ' + ', '.join(['(%d, %d) with level: %d' % (*food.position, food.level) for food in env.foods]))
+				logger.info('Food objective: (%d, %d)' % env.obj_food)
+				obs, *_ = env.reset()
+				epoch = 0
+				agent_reward = [0] * n_agents
+				game_over = False
+				finished = False
+				timeout = False
+				while not game_over:
 					
-					if finished:
-						tests_passed += 1
-						avg_nr_epochs += [epoch]
-						logger.info('Test %d finished in success' % (i + 1))
-						logger.info('Number of epochs: %d' % epoch)
-						logger.info('Accumulated reward:\n\t' + '\n\t'.join(['- agent %d: %.2f' % (idx + 1, agent_reward[idx]) for idx in range(n_agents)]))
-						logger.info('Average reward:\n\t' + '\n\t'.join(['- agent %d: %.2f' % (idx + 1, agent_reward[0] / epoch) for idx in range(n_agents)]))
-					if timeout:
-						logger.info('Test %d timed out' % (i + 1))
-						avg_nr_epochs += [epoch]
+					actions = []
+					for a_idx in range(agent_madqn.num_agents):
+						dqn = agent_madqn.agent_dqn
+						if use_cnn:
+							cnn_obs = obs[a_idx].reshape((1, *cnn_shape))
+							q_values = dqn.q_network.apply(dqn.online_state.params, cnn_obs)[0]
+						else:
+							q_values = dqn.q_network.apply(dqn.online_state.params, obs[a_idx])
+						pol = np.isclose(q_values, q_values.max(), rtol=1e-10, atol=1e-10).astype(int)
+						pol = pol / pol.sum()
+						action = rng_gen.choice(range(env.action_space[0].n), p=pol)
+						action = jax.device_get(action)
+						actions += [action]
+					actions = np.array(actions)
+					next_obs, rewards, finished, timeout, infos = env.step(actions)
+					logger.info(env.get_env_log() + 'Actions: ' + str([Action(act).name for act in actions]))
+					agent_reward = [agent_reward[idx] + rewards[idx] for idx in range(n_agents)]
+					obs = next_obs
+					
+					if finished or timeout:
+						game_over = True
+						loc = env.foods[rng_gen.integers(n_foods_spawn)].position
+						env.set_objective(loc)
+						env.food_spawn_pos = None
+						env.n_food_spawn = 0
+					
+					else:
+						epoch += 1
+					
+					sys.stdout.flush()
 				
-				env.close()
-				logger.info('Passed %d tests out of %d for location %dx%d' % (tests_passed, N_TESTS, loc[0], loc[1]))
-				logger.info('Average number of steps per test: %d' % np.mean(avg_nr_epochs))
-				
-				if (tests_passed / N_TESTS) > train_acc['%s, %s' % (loc[0], loc[1])]:
-					logger.info('Updating best model for current loc')
-					Path.mkdir(model_path.parent.absolute() / 'best', parents=True, exist_ok=True)
-					agent_madqn.save_model(('food_%dx%d' % (loc[0], loc[1])), model_path.parent.absolute() / 'best', logger)
-					train_acc['%s, %s' % (loc[0], loc[1])] = tests_passed / N_TESTS
-				
-				agent_madqn = None
-				del env
-				del agent_madqn
-				gc.collect()
+				if finished:
+					tests_passed += 1
+					avg_nr_epochs += [epoch]
+					logger.info('Test %d finished in success' % (i + 1))
+					logger.info('Number of epochs: %d' % epoch)
+					logger.info('Accumulated reward:\n\t' + '\n\t'.join(['- agent %d: %.2f' % (idx + 1, agent_reward[idx]) for idx in range(n_agents)]))
+					logger.info('Average reward:\n\t' + '\n\t'.join(['- agent %d: %.2f' % (idx + 1, agent_reward[idx] / epoch) for idx in range(n_agents)]))
+				if timeout:
+					logger.info('Test %d timed out' % (i + 1))
+					avg_nr_epochs += [epoch]
 			
-				logger.info('Updating best training performances record with %dx%d results' % (loc[0], loc[1]))
-				with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa%s.yaml' % ('_vdn' if use_vdn else '', str(n_agents), '_mixed' if not force_coop else '')),
-						  mode='r+', encoding='utf-8') as train_file:
-					performance_data = yaml.safe_load(train_file)
-					field_idx = str(field_size[0]) + 'x' + str(field_size[1])
-					food_idx = str(n_foods_spawn) + '-food'
-					performance_data[field_idx][food_idx] = train_acc
-					train_file.seek(0)
-					sorted_data = dict(
-							[[sorted_key, performance_data[sorted_key]] for sorted_key in
-							 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
-					yaml.safe_dump(sorted_data, train_file)
+			env.close()
+			logger.info('Passed %d tests out of %d' % (tests_passed, N_TESTS))
+			logger.info('Average number of steps per test: %d' % np.mean(avg_nr_epochs))
 			
+			if (tests_passed / N_TESTS) > train_acc:
+				logger.info('Updating best model for current loc')
+				Path.mkdir(model_path.parent.absolute() / 'best', parents=True, exist_ok=True)
+				agent_madqn.save_model('all_foods', model_path.parent.absolute() / 'best', logger)
+				train_acc = tests_passed / N_TESTS
+			
+			agent_madqn = None
+			del env
+			del agent_madqn
+			gc.collect()
+		
+			logger.info('Updating best training performances record with %dx%d results' % (loc[0], loc[1]))
+			with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa%s_all_foods.yaml' % ('_vdn' if use_vdn else '', str(n_agents),
+																												  '_mixed' if not force_coop else '')),
+					  mode='r+', encoding='utf-8') as train_file:
+				performance_data = yaml.safe_load(train_file)
+				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
+				food_idx = str(n_foods_spawn) + '-food'
+				performance_data[field_idx][food_idx] = train_acc
+				train_file.seek(0)
+				sorted_data = dict(
+						[[sorted_key, performance_data[sorted_key]] for sorted_key in
+						 [str(t[0]) + 'x' + str(t[1]) for t in sorted([tuple([int(x) for x in key.split('x')]) for key in performance_data.keys()])]])
+				yaml.safe_dump(sorted_data, train_file)
+		
 			wandb_run.finish()
 		
 		except KeyboardInterrupt as ks:
 			logger.info('Caught keyboard interrupt, cleaning up and closing.')
-			with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa%s.yaml' % ('_vdn' if use_vdn else '', str(n_agents), '_mixed' if not force_coop else '')),
+			with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa%s_all_foods.yaml' % ('_vdn' if use_vdn else '', str(n_agents),
+																												  '_mixed' if not force_coop else '')),
 			          mode='r+', encoding='utf-8') as train_file:
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])
-				food_idx = str(n_foods) + '-food'
+				food_idx = str(n_foods_spawn) + '-food'
 				performance_data[field_idx][food_idx] = train_acc
 				train_file.seek(0)
 				sorted_data = dict(

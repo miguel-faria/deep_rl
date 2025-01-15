@@ -398,8 +398,6 @@ def main():
 	err_logger.addHandler(handler)
 	Path.mkdir(model_path, parents=True, exist_ok=True)
 	
-	logger.info(os.environ.items())
-	
 	logger.info('##############################')
 	logger.info('Starting LB Foraging DQN Train')
 	logger.info('##############################')

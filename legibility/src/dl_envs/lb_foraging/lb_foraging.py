@@ -332,6 +332,10 @@ class LBForagingEnv(Env):
 	def use_render(self) -> bool:
 		return self._use_render
 
+	@property
+	def force_coop(self) -> bool:
+		return self._force_coop
+
 	@field.setter
 	def field(self, new_field: np.ndarray) -> None:
 		self._field = new_field

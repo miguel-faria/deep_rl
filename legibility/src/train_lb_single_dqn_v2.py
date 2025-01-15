@@ -106,7 +106,7 @@ def train_lb_model(env: FoodCOOPLBForaging, dqn_model: SingleModelMADQN, num_ite
 		logger.info("Iteration %d out of %d" % (it + 1, num_iterations))
 		logger.info('Agents: ' + ', '.join(['%s @ (%d, %d) with level %d' % (player.player_id, *player.position, player.level) for player in env.players]))
 		logger.info('Number of food spawn:\t%d' % n_foods_spawn)
-		logger.info('Food locations: ' + ', '.join(['(%d, %d)' % pos for pos in ([env.obj_food] + env.food_spawn_pos if n_foods_spawn < env.max_foods else env.food_pos)]))
+		logger.info('Food items: ' + ', '.join(['(%d, %d) with level: %d' % (*food.position, food.level) for food in env.foods]))
 		logger.info('Food objective: (%d, %d)' % env.obj_food)
 		while not done:
 			
@@ -283,6 +283,7 @@ def main():
 	parser.add_argument('--steps-episode', dest='max_steps', type=int, required=True, help='Maximum number of steps an episode can to take')
 	parser.add_argument('--render', dest='use_render', action='store_true', help='Flag that signals the use of the field render while training')
 	parser.add_argument('--n-foods-spawn', dest='n_foods_spawn', type=int, required=True, help='Number of foods to be spawned for training.')
+	parser.add_argument('--no-force-coop', dest='no_force_coop', action='store_true', help='Flag denoting that the agents do not need to pick all items in full cooperation')
 	
 	args = parser.parse_args()
 	# DQN args
@@ -326,6 +327,7 @@ def main():
 	max_steps = args.max_steps
 	use_render = args.use_render
 	n_foods_spawn = args.n_foods_spawn
+	force_coop = not args.no_force_coop
 	
 	try:
 		assert not (use_higher_model and use_lower_model)
@@ -360,10 +362,10 @@ def main():
 	log_filename = (('train_lb_coop_single_v2_dqn_%dx%d-field_%d-agents_%d-foods_%d-food-level' % (field_size[0], field_size[1], n_agents,
 	                                                                                               n_foods_spawn, food_level)) +
 	                '_' + now.strftime("%Y%m%d-%H%M%S"))
-	model_path = (models_dir / ('lb_coop_single%s_dqn' % ('_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
+	model_path = (models_dir / ('lb_coop%s_single%s_dqn' % ('_mixed' if not force_coop else '', '_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
 	              ('%d-agents' % n_agents) / ('%d-foods_%d-food-level' % (n_foods_spawn, food_level)) / now.strftime("%Y%m%d-%H%M%S"))
 	
-	with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
+	with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa%s.yaml' % ('_vdn' if use_vdn else '', str(n_agents), '_mixed' if not force_coop else '')),
 	          mode='r+', encoding='utf-8') as train_file:
 		train_performances = yaml.safe_load(train_file)
 		field_idx = str(field_size[0]) + 'x' + str(field_size[1])
@@ -408,8 +410,6 @@ def main():
 	err_logger.addHandler(handler)
 	Path.mkdir(model_path, parents=True, exist_ok=True)
 	
-	logger.info(os.environ.items())
-	
 	logger.info('##############################')
 	logger.info('Starting LB Foraging DQN Train')
 	logger.info('##############################')
@@ -423,32 +423,33 @@ def main():
 			wandb_run = wandb.init(
 					project='lb-foraging-optimal', entity='miguel-faria',
 					config={
-	                       "field": "%dx%d" % (field_size[0], field_size[1]),
-	                       "agents": n_agents,
-	                       "foods": n_foods,
-	                       "online_learing_rate": online_lr,
-	                       "target_learning_rate": target_lr,
-	                       "discount": gamma,
-	                       "eps_decay": eps_type,
-	                       "eps_rate": eps_decay,
-	                       "dqn_architecture": architecture,
-	                       "iterations": n_iterations,
-	                       "cycles": 1,
-	                       "buffer_size": buffer_size,
-	                       "buffer_add": "smart" if args.buffer_smart_add else "plain",
-	                       "buffer_add_method": args.buffer_method if args.buffer_smart_add else "fifo",
-	                       "batch_size": batch_size,
-	                       "curriculum_learning": 'no' if not (use_higher_model or use_lower_model) else ('lower_model' if use_lower_model else 'higher_model')
+							"field": "%dx%d" % (field_size[0], field_size[1]),
+							"agents": n_agents,
+							"foods": n_foods,
+							"online_learing_rate": online_lr,
+							"target_learning_rate": target_lr,
+							"discount": gamma,
+							"eps_decay": eps_type,
+							"eps_rate": eps_decay,
+							"dqn_architecture": architecture,
+							"iterations": n_iterations,
+							"cycles": 1,
+							"buffer_size": buffer_size,
+							"buffer_add": "smart" if args.buffer_smart_add else "plain",
+							"buffer_add_method": args.buffer_method if args.buffer_smart_add else "fifo",
+							"batch_size": batch_size,
+							"curriculum_learning": 'no' if not (use_higher_model or use_lower_model) else ('lower_model' if use_lower_model else 'higher_model'),
+							"full_cooperation": force_coop
 					},
 					dir=tracker_dir,
-					name=('%ssingle_v2-l%dx%d-%df-' % ('vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
+					name=('%s%ssingle_v2-l%dx%d-%df-' % ('mixed-' if not force_coop else '', 'vdn-' if use_vdn else 'independent-', field_size[0], field_size[1], n_foods_spawn) +
 					      now.strftime("%Y%m%d-%H%M%S")),
 					sync_tensorboard=True)
 			logger.info('Starting training for different food locations')
 			for loc in locs_train:
 				logger.info('Training for location: %d, %d' % (loc[0], loc[1]))
 				logger.info('Environment setup')
-				env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, True, food_level, RNG_SEED, food_locs,
+				env = FoodCOOPLBForaging(n_agents, player_level, field_size, n_foods, sight, max_steps, force_coop, food_level, RNG_SEED, food_locs,
 				                         use_encoding=True, agent_center=True, grid_observation=use_cnn)
 				env.seed(RNG_SEED)
 				env.set_objective(loc)
@@ -595,7 +596,7 @@ def main():
 				gc.collect()
 			
 				logger.info('Updating best training performances record with %dx%d results' % (loc[0], loc[1]))
-				with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
+				with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa%s.yaml' % ('_vdn' if use_vdn else '', str(n_agents), '_mixed' if not force_coop else '')),
 						  mode='r+', encoding='utf-8') as train_file:
 					performance_data = yaml.safe_load(train_file)
 					field_idx = str(field_size[0]) + 'x' + str(field_size[1])
@@ -611,7 +612,7 @@ def main():
 		
 		except KeyboardInterrupt as ks:
 			logger.info('Caught keyboard interrupt, cleaning up and closing.')
-			with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa.yaml' % ('_vdn' if use_vdn else '', str(n_agents))),
+			with open(data_dir / 'performances' / 'lb_foraging' / ('train_performances%s_%sa%s.yaml' % ('_vdn' if use_vdn else '', str(n_agents), '_mixed' if not force_coop else '')),
 			          mode='r+', encoding='utf-8') as train_file:
 				performance_data = yaml.safe_load(train_file)
 				field_idx = str(field_size[0]) + 'x' + str(field_size[1])

@@ -24,9 +24,6 @@ do
     --foods) max_foods=${2}; shift ;;
     --spawn) max_spawn_foods=${2}; shift ;;
     --field) field_len=${2}; shift ;;
-    --hunters) n_hunters=${2}; shift ;;
-    --preys) n_preys=${2}; shift ;;
-    --type) prey_type=${2}; shift ;;
     (--) shift; break ;;
     (-*) echo "$0: error - unrecognized option $1" 1>&2; exit 1 ;;
     (*) break ;;
@@ -50,20 +47,16 @@ if [ -z "$tests_job" ]; then
   tests_job=10
 fi
 
+if [ -z "$max_foods" ]; then
+  max_foods=8
+fi
+
+if [ -z "$max_spawn_foods" ]; then
+  max_spawn_foods=6
+fi
+
 if [ -z "$field_len" ]; then
-  field_len=10
-fi
-
-if [ -z "$n_hunters" ]; then
-  n_hunters=2
-fi
-
-if [ -z "$n_preys" ]; then
-  n_preys=4
-fi
-
-if [ -z "$prey_type" ]; then
-  prey_type="idle"
+  field_len=8
 fi
 
 n_tests=$(( max_tests - start_run))
@@ -108,7 +101,7 @@ if [ "$HOSTNAME" = "artemis" ] || [ "$HOSTNAME" = "poseidon" ] ; then
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
-#SBATCH --job-name=test_lb_legible_collaboration_${test_mode}_${job}_${start_test}_${end_test}
+#SBATCH --job-name=test_pursuit_legible_collaboration_${test_mode}_${job}_${start_test}_${end_test}
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --tasks-per-node=1
@@ -127,7 +120,7 @@ EOF
 #!/bin/bash
 #SBATCH --mail-type=BEGIN,END,FAIL
 #SBATCH --mail-user=miguel.faria@tecnico.ulisboa.pt
-#SBATCH --job-name=test_lb_legible_collaboration_${test_mode}_${job}_${start_test}_${end_test}
+#SBATCH --job-name=test_pursuit_legible_collaboration_${test_mode}_${job}_${start_test}_${end_test}
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --tasks-per-node=1
@@ -137,7 +130,7 @@ EOF
 #SBATCH --qos=gpu-short
 #SBATCH --output=job-%x-%j.out
 #SBATCH --partition=a6000
-python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} --start-run ${start_test} --mode ${test_mode} --field-len ${field_len} --hunters "$n_hunters" --preys "$n_preys" --prey-type "$prey_type" --logs-dir ${logs_dir} --models-dir ${models_dir} --data-dir ${data_dir}
+python ${script_path}/run_test_lb_legible_collaboration.py --tests ${end_test} --start-run ${start_test} --mode ${test_mode} --field-len ${field_len} --max-foods ${max_foods} --spawn-foods ${max_spawn_foods} --logs-dir ${logs_dir} --models-dir ${models_dir} --data-dir ${data_dir}
 EOF
 
     fi
@@ -145,7 +138,7 @@ EOF
     echo "Job ID: "$job_id""
   done
 else
-  python "$script_path"/run_test_lb_legible_collaboration.py --tests "$max_tests" --mode "$test_mode" --hunters "$n_hunters" --preys "$n_preys" --prey-type "$prey_type"
+  python "$script_path"/run_test_lb_legible_collaboration.py --tests "$max_tests" --mode "$test_mode"
 fi
 
 conda deactivate

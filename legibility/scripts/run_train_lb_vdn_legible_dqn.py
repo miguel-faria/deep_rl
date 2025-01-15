@@ -80,6 +80,7 @@ parser.add_argument('--tracker-dir', dest='logs', type=str, required=False, defa
 parser.add_argument('--logs-dir', dest='logs_dir', type=str, default='', help='Directory to store logs, if left blank stored in default location')
 parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
 					help='Directory to store trained models and load optimal models, if left blank stored in default location')
+parser.add_argument('--no-force-coop', dest='no_force_coop', action='store_true', help='Flag denoting that the agents do not need to pick all items in full cooperation')
 parser.add_argument('--online-lr', dest='online_lr', type=float, default=ONLINE_LR, help='Learning rate for the online model.')
 parser.add_argument('--start-eps', dest='start_eps', type=float, required=False, default=INIT_EPS, help='Starting value for exploration epsilon greedy.')
 parser.add_argument('--target-lr', dest='target_lr', type=float, default=TARGET_LR, help='Learning rate for the target model.')
@@ -108,6 +109,7 @@ limits = input_args.limits
 logs_dir = input_args.logs_dir
 models_dir = input_args.models_dir
 max_steps = input_args.max_steps
+no_force_coop = input_args.no_force_coop
 online_lr = input_args.online_lr
 start_eps = input_args.start_eps
 smart_add = input_args.buffer_smart_add
@@ -141,15 +143,15 @@ for i in (reversed(range(limits[0], limits[1] + 1)) if use_higher_model else ran
 	         (" --models-dir %s" % models_dir if models_dir != '' else "") + (" --data-dir %s" % data_dir if data_dir != '' else "") +
 	         (" --logs-dir %s" % logs_dir if logs_dir != '' else "") + (" --use-lower-model" if use_lower_model else "") + (" --use-higher-model" if use_higher_model else "") +
 	         (" --buffer-smart-add --buffer-method %s" % add_method if smart_add else "") + (" --tracker-dir %s" % tracker_logs if tracker_logs != '' else "") +
-	         (" --train-performance %f" % train_thresh if train_thresh is not None else ""))
-	commamd = "python " + str(src_dir / ('train_lb_legible_dqn%s.py' % ('_' + train_version if train_version != 'v1' else ''))) + args
+	         (" --train-performance %f" % train_thresh if train_thresh is not None else "") + (' --no-force-coop' if no_force_coop else ''))
+	command = "python " + str(src_dir / ('train_lb_legible_dqn%s.py' % ('_' + train_version if train_version != 'v1' else ''))) + args
 	if not USE_SHELL:
-		commamd = shlex.split(commamd)
+		command = shlex.split(command)
 		
-	print(commamd)
+	print(command)
 	start_time = time.time()
 	try:
-		subprocess.run(commamd, shell=USE_SHELL, check=True)
+		subprocess.run(command, shell=USE_SHELL, check=True)
 	
 	except subprocess.CalledProcessError as e:
 		print(e.output)

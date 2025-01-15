@@ -413,9 +413,9 @@ def main():
 	log_filename = (('train_pursuit_legible%s_dqn_%dx%d-field_%d-hunters_%d-preys' % ('_vdn' if use_vdn else '', field_size[0], field_size[1], n_hunters, n_preys)) +
 					'_' + now.strftime("%Y%m%d-%H%M%S"))
 	model_path = (models_dir / ('pursuit_legible%s_dqn' % ('_vdn' if use_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
-	              ('%d-hunters' % n_hunters) / now.strftime("%Y%m%d-%H%M%S"))
+	              ('%d-hunters' % n_hunters) / ('%s-prey' % prey_type) / now.strftime("%Y%m%d-%H%M%S"))
 	optim_dir = (models_dir / ('pursuit_single%s_dqn' % ('_vdn' if optim_vdn else '')) / ('%dx%d-field' % (field_size[0], field_size[1])) /
-	             ('%d-hunters' % n_hunters) / ('%s' % prey_type) / 'best')
+	             ('%d-hunters' % n_hunters) / ('%s-prey' % prey_type) / 'best')
 
 	with open(data_dir / 'performances' / 'pursuit' / ('train_legible_performances%s%s.yaml' % ('_' + prey_type, '_vdn' if use_vdn else '')),
 			  mode='r+', encoding='utf-8') as train_file:

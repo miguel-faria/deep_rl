@@ -392,7 +392,7 @@ def get_intervention_idx_budget(student_model: Union[StudentModelHF, StudentMode
 			sample_confidence_pairs = []
 			for idx, sample in tqdm(test_samples.iterrows(), desc='Test Samples', total=test_samples.shape[0]):
 				confidence_scores = mental_model.intervention_utility(sample.to_dict(), student_model, use_answers)
-				print('Sample %d has scores: ' % int(idx), confidence_scores)
+				# print('Sample %d has scores: ' % int(idx), confidence_scores)
 				sample_confidence_pairs.append((idx, confidence_scores))
 			
 			if intervention_utility.find('student') != -1 and intervention_utility.find('confidence') != -1:

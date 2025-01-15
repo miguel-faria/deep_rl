@@ -144,7 +144,7 @@ class TeacherMentalModel(TeacherModel):
 			output = output[:output.index('\n')].strip() if '\n' in output else output.strip()
 
 			answer_end = outputs.choices[0].logprobs.tokens.index('\n')
-			answer_logprobs = dict([(key.strip, outputs.choices[0].logprobs.top_logprobs[answer_end - 1][key])
+			answer_logprobs = dict([(str(key).strip(), outputs.choices[0].logprobs.top_logprobs[answer_end - 1][key])
 			                        for key in outputs.choices[0].logprobs.top_logprobs[answer_end -1].keys()])
 			answer_logprobs_keys = [str(key) for key in answer_logprobs.keys()]
 			class_probs = softmax(Tensor(list(answer_logprobs.values())), dim=-1).tolist()

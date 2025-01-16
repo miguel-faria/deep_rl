@@ -32,7 +32,7 @@ def get_history_entry(obs: np.ndarray, actions: List[int], hunter_ids: List[str]
 
 
 def main():
-	parser = argparse.ArgumentParser(description='Test DQN model for Astro waste disposal game.')
+	parser = argparse.ArgumentParser(description='Test DQN model for for pursuit environment.')
 	
 	# Multi-agent DQN params
 	parser.add_argument('--nlayers', dest='n_layers', type=int, required=True, help='Number of layers for the neural net in the DQN')

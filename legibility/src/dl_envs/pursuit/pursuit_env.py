@@ -293,7 +293,7 @@ class PursuitEnv(Env):
 					next_positions[a_pos] = [a_id]
 		cant_move = {'hunter': [], 'prey': []}
 		for a_pos, a_ids in next_positions.items():
-			if len(next_positions[a_pos]) > 1:
+			if len(a_ids) > 1:
 				for a_id in a_ids:
 					cant_move['hunter' if self._agents[a_id].agent_type == AgentType.HUNTER else 'prey'].append(a_id)
 		
@@ -317,12 +317,12 @@ class PursuitEnv(Env):
 	####################
 	def get_full_env_log(self) -> str:
 	
-		log = 'Environment state:\nPlayer\'s states:\n'
+		log = 'Environment state:\nHunter\'s states:\n'
 		for hunter_id in self.hunter_ids:
 			hunter = self._agents[hunter_id]
 			log += '\t- hunter %s at (%d, %d) is %s\n' % (hunter_id, hunter.pos[0], hunter.pos[1], "alive" if hunter.alive else "dead")
 		
-		log += 'Food\'s states:\n'
+		log += 'Prey\'s states:\n'
 		for prey_id in self.prey_ids:
 			prey = self._agents[prey_id]
 			log += '\t- prey %s at (%d, %d) is %s\n' % (prey_id, prey.pos[0], prey.pos[1], "alive" if prey.alive else "dead")
@@ -334,12 +334,12 @@ class PursuitEnv(Env):
 	
 	def get_env_log(self) -> str:
 		
-		log = 'Environment state:\nPlayer\'s states:\n'
+		log = 'Environment state:\nHunter\'s states:\n'
 		for hunter_id in self.hunter_ids:
 			hunter = self._agents[hunter_id]
 			log += '\t- hunter %s at (%d, %d) is %s\n' % (hunter_id, hunter.pos[0], hunter.pos[1], "alive" if hunter.alive else "dead")
 		
-		log += 'Food\'s states:\n'
+		log += 'Prey\'s states:\n'
 		for prey_id in self.prey_ids:
 			prey = self._agents[prey_id]
 			log += '\t- prey %s at (%d, %d) is %s\n' % (prey_id, prey.pos[0], prey.pos[1], "alive" if prey.alive else "dead")

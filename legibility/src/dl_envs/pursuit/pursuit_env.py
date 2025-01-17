@@ -11,7 +11,6 @@ from itertools import product
 from gymnasium.utils import seeding
 from gymnasium.spaces import Space, Box, MultiBinary, MultiDiscrete
 
-from deep_rl.legibility.scripts.run_train_pursuit_single_vdn_dqn import prey_type
 from dl_envs.pursuit.agents.target_agent import TargetAgent
 from dl_envs.pursuit.agents.greedy_prey import GreedyPrey
 from dl_envs.pursuit.agents.random_prey import RandomPrey

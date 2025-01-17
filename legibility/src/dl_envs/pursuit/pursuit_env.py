@@ -383,12 +383,12 @@ class PursuitEnv(Env):
 			for prey in self._prey_ids:
 				agent_pos = tuple(self._np_random.choice(valid_pos))
 				while self._field[agent_pos[0], agent_pos[1]] != 0 or any([self._field[pos[0], pos[1]] != 0 for pos in self.adj_pos(agent_pos)]):
-					valid_pos.remove(valid_pos)
+					valid_pos.remove(agent_pos)
 					agent_pos = tuple(self._np_random.choice(valid_pos))
 				self._agents[prey].pos = agent_pos
 				self._agents[prey].alive = True
 				self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
-				valid_pos.remove(valid_pos)
+				valid_pos.remove(agent_pos)
 
 		else:
 			for prey in self._prey_ids:

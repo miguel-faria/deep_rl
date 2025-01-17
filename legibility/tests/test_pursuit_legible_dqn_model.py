@@ -41,7 +41,7 @@ def main():
 	use_ddqn = True
 	use_cnn = True
 	use_render = True
-	n_hunters = 2
+	n_hunters = 3
 	n_legible_agents = 1
 	n_preys = 4
 	n_spawn_preys = 4

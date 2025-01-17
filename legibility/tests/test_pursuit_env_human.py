@@ -1,12 +1,15 @@
 #! /usr/bin/env python
 import numpy as np
+import cv2
 
+from pathlib import Path
 from dl_envs.pursuit.pursuit_env import PursuitEnv, Action, TargetPursuitEnv
 
 
 RNG_SEED = 12072023
 ACTION_MAP = {4: 'None', 0: 'Up', 1: 'Down', 2: 'Left', 3: 'Right'}
 KEY_MAP = {'w': 0, 's': 1, 'a': 2, 'd': 3, 'q': 4}
+
 
 def main():
 	
@@ -28,9 +31,11 @@ def main():
 		hunters += [(hunter_ids[idx], 1)]
 	for idx in range(n_preys):
 		preys += [(prey_ids[idx], 0)]
+	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 	
-	# env = PursuitEnv(hunters, preys, field_size, hunter_sight, n_catch, max_steps)
-	env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids[0], n_catch, max_steps, use_layer_obs=True, agent_centered=True)
+	env = PursuitEnv(hunters, preys, field_size, hunter_sight, n_catch, max_steps, render_mode=['human', 'rgb_array'])
+	# env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids[0], n_catch, max_steps, use_layer_obs=True, agent_centered=True,
+	#                        render_mode=['human', 'rgb_array'])
 	env.seed(RNG_SEED)
 	n_hunters = len(hunters)
 	n_preys = len(preys)
@@ -42,10 +47,12 @@ def main():
 	for prey in prey_ids:
 		prey_idx = prey_ids.index(prey)
 		init_pos_prey[prey] = (max(field_size[0] - (prey_idx // n_preys) - 1, 0), max(field_size[1] - (prey_idx % n_preys) - 1, 0))
-	env.spawn_hunters(init_pos_hunter)
-	env.spawn_preys(init_pos_prey)
+	# env.spawn_hunters(init_pos_hunter)
+	# env.spawn_preys(init_pos_prey)
 	state, *_ = env.reset()
-	env.render()
+	frame = env.render()
+	cv2.imwrite(data_dir / 'stills' / 'pursuit_frame.png', cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), [cv2.IMWRITE_PNG_COMPRESSION, 0])
+	input()
 	
 	for i in range(max_steps * 2):
 		

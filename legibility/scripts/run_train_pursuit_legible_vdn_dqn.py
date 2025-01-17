@@ -84,7 +84,6 @@ parser.add_argument('--models-dir', dest='models_dir', type=str, default='',
 parser.add_argument('--online-lr', dest='online_lr', type=float, default=ONLINE_LR, help='Learning rate for the online model.')
 parser.add_argument('--prey-type', dest='prey_type', type=str, required=False, choices=['idle', 'random', 'greedy'], default=PREY_TYPE,
                     help='Type of prey to be caught')
-parser.add_argument('--required-hunters', dest='n_required_hunters', type=int, required=False, default=N_REQUIRED_HUNTER, help='Number of hunters to spawn')
 parser.add_argument('--start-eps', dest='start_eps', type=float, required=False, default=INIT_EPS, help='Starting value for exploration epsilon greedy.')
 parser.add_argument('--target-lr', dest='target_lr', type=float, default=TARGET_LR, help='Learning rate for the target model.')
 parser.add_argument('--tracker-dir', dest='logs', type=str, required=False, default='', help='Directory to store the performance logs.')
@@ -113,7 +112,7 @@ logs_dir = input_args.logs_dir
 models_dir = input_args.models_dir
 max_steps = input_args.max_steps
 n_hunters = input_args.n_hunters
-n_required_hunters = input_args.n_required_hunters
+n_required_hunters = n_hunters
 online_lr = input_args.online_lr
 prey_type = input_args.prey_type
 start_eps = input_args.start_eps

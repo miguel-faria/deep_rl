@@ -291,16 +291,21 @@ class PursuitEnv(Env):
 					next_positions[a_pos].append(a_id)
 				else:
 					next_positions[a_pos] = [a_id]
-		cant_move = {'hunter': [], 'prey': []}
-		for a_pos, a_ids in next_positions.items():
-			if len(a_ids) > 1:
-				for a_id in a_ids:
-					cant_move['hunter' if self._agents[a_id].agent_type == AgentType.HUNTER else 'prey'].append(a_id)
-		
-		for key in cant_move.keys():
-			for a_id in cant_move[key]:
-				next_positions_d[key][a_id] = self._agents[a_id].pos
-	
+		all_unique = False
+		while not all_unique:
+			all_unique = True
+			for a_pos in list(next_positions.keys()):
+				a_ids = next_positions[a_pos]
+				if len(a_ids) > 1:
+					all_unique = False
+					for a_id in a_ids:
+						next_positions_d['hunter' if self._agents[a_id].agent_type == AgentType.HUNTER else 'prey'][a_id] = self._agents[a_id].pos
+						next_positions[a_pos].remove(a_id)
+						if self._agents[a_id].pos in next_positions.keys():
+							next_positions[self._agents[a_id].pos].append(a_id)
+						else:
+							next_positions[self._agents[a_id].pos] = [a_id]
+
 	def aggregate_obs(self, hunter_obs: List, prey_obs: List) -> List:
 		final_obs = []
 		for idx in range(len(hunter_obs)):

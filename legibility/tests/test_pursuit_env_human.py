@@ -9,6 +9,7 @@ from dl_envs.pursuit.pursuit_env import PursuitEnv, Action, TargetPursuitEnv
 RNG_SEED = 12072023
 ACTION_MAP = {4: 'None', 0: 'Up', 1: 'Down', 2: 'Left', 3: 'Right'}
 KEY_MAP = {'w': 0, 's': 1, 'a': 2, 'd': 3, 'q': 4}
+PREY_TYPES = {'idle': 0, 'greedy': 1, 'random': 2}
 
 
 def main():
@@ -30,12 +31,12 @@ def main():
 	for idx in range(n_hunters):
 		hunters += [(hunter_ids[idx], 1)]
 	for idx in range(n_preys):
-		preys += [(prey_ids[idx], 0)]
+		preys += [(prey_ids[idx], PREY_TYPES['random'])]
 	data_dir = Path(__file__).parent.absolute().parent.absolute() / 'data'
 	
-	env = PursuitEnv(hunters, preys, field_size, hunter_sight, n_catch, max_steps, render_mode=['human', 'rgb_array'])
-	# env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids[0], n_catch, max_steps, use_layer_obs=True, agent_centered=True,
-	#                        render_mode=['human', 'rgb_array'])
+	# env = PursuitEnv(hunters, preys, field_size, hunter_sight, n_catch, max_steps, render_mode=['human', 'rgb_array'])
+	env = TargetPursuitEnv(hunters, preys, field_size, hunter_sight, prey_ids[0], n_catch, max_steps, use_layer_obs=True, agent_centered=True,
+	                       render_mode=['human', 'rgb_array'])
 	env.seed(RNG_SEED)
 	n_hunters = len(hunters)
 	n_preys = len(preys)
@@ -51,7 +52,7 @@ def main():
 	# env.spawn_preys(init_pos_prey)
 	state, *_ = env.reset()
 	frame = env.render()
-	cv2.imwrite(data_dir / 'stills' / 'pursuit_frame.png', cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), [cv2.IMWRITE_PNG_COMPRESSION, 0])
+	# cv2.imwrite(data_dir / 'stills' / 'pursuit_frame.png', cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), [cv2.IMWRITE_PNG_COMPRESSION, 0])
 	input()
 	
 	for i in range(max_steps * 2):
@@ -68,7 +69,8 @@ def main():
 					actions.append(action)
 				else:
 					print('Action ID must be between 0 and 4, you gave ID %d' % action)
-		actions += env.action_space.sample()[n_hunters:].tolist()
+		# actions += env.action_space.sample()[n_hunters:].tolist()
+		actions += [env.agents[p_id].act(env) for p_id in env.prey_alive_ids]
 		print(env.prey_alive_ids, env.target)
 		# for prey_id in prey_ids:
 		# 	valid_action = False
@@ -81,7 +83,7 @@ def main():
 		# 		else:
 		# 			print('Action ID must be between 0 and 4, you gave ID %d' % action)
 		
-		print(' '.join([str(Action(action)) for action in actions]))
+		print(' '.join([str(Action(action).name) for action in actions]))
 		state, rewards, finished, timeout, _ = env.step(actions)
 		env.render()
 

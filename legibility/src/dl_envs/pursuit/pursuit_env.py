@@ -10,6 +10,8 @@ from collections import defaultdict, namedtuple
 from itertools import product
 from gymnasium.utils import seeding
 from gymnasium.spaces import Space, Box, MultiBinary, MultiDiscrete
+
+from deep_rl.legibility.scripts.run_train_pursuit_single_vdn_dqn import prey_type
 from dl_envs.pursuit.agents.target_agent import TargetAgent
 from dl_envs.pursuit.agents.greedy_prey import GreedyPrey
 from dl_envs.pursuit.agents.random_prey import RandomPrey
@@ -59,7 +61,7 @@ class PursuitEnv(Env):
 	_initial_pos: List[Dict[str, Tuple[int, int]]]
 	_env_timestep: int
 	_max_timesteps: int
-	_n_catch: int
+	_n_need_catch: int
 	_freeze_pos: bool
 	
 	metadata = {'render.modes': ['human', 'rgb_array']}
@@ -78,7 +80,7 @@ class PursuitEnv(Env):
 		self._field = np.zeros(field_size)
 		self._hunter_sight = hunter_sight
 		self._max_timesteps = max_steps
-		self._n_catch = n_catch
+		self._n_need_catch = n_catch
 		self._dead_preys = [dead_preys.copy() if dead_preys is not None else [False] * self._n_preys_alive]
 		self._use_encoding = use_encoding
 		self._center_agent = agent_centered
@@ -171,7 +173,7 @@ class PursuitEnv(Env):
 	
 	@property
 	def n_catch(self) -> int:
-		return self._n_catch
+		return self._n_need_catch
 	
 	#######################
 	### UTILITY METHODS ###
@@ -386,14 +388,15 @@ class PursuitEnv(Env):
 				valid_pos.remove(tuple(pos))
 			
 			for prey in self._prey_ids:
-				agent_pos = tuple(self._np_random.choice(valid_pos))
-				while self._field[agent_pos[0], agent_pos[1]] != 0 or any([self._field[pos[0], pos[1]] != 0 for pos in self.adj_pos(agent_pos)]):
-					valid_pos.remove(agent_pos)
-					agent_pos = tuple(self._np_random.choice(valid_pos))
-				self._agents[prey].pos = agent_pos
+				prey_pos = tuple(self._np_random.choice(valid_pos))
+				n_free_adj = len(set(self.adj_pos(prey_pos)))
+				while self._field[prey_pos[0], prey_pos[1]] != 0 or n_free_adj < self._n_need_catch or any([self._field[pos[0], pos[1]] != 0 for pos in self.adj_pos(prey_pos)]):
+					valid_pos.remove(prey_pos)
+					prey_pos = tuple(self._np_random.choice(valid_pos))
+				self._agents[prey].pos = prey_pos
 				self._agents[prey].alive = True
-				self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
-				valid_pos.remove(agent_pos)
+				self._field[prey_pos[0], prey_pos[1]] = AgentType.PREY
+				valid_pos.remove(prey_pos)
 
 		else:
 			for prey in self._prey_ids:
@@ -522,7 +525,7 @@ class PursuitEnv(Env):
 		captured_prey = []
 		for prey_id in self._prey_alive_ids:
 			prey_adj = self.adj_pos(self._agents[prey_id].pos)
-			is_surrounded = sum([new_field[pos[0], pos[1]] == AgentType.HUNTER for pos in prey_adj]) >= self._n_catch
+			is_surrounded = sum([new_field[pos[0], pos[1]] == AgentType.HUNTER for pos in prey_adj]) >= self._n_need_catch
 			if is_surrounded:
 				captured_prey += [prey_id]
 				self._agents[prey_id].alive = False
@@ -793,14 +796,15 @@ class TargetPursuitEnv(PursuitEnv):
 				valid_pos.remove(tuple(pos))
 				
 			for prey in self._prey_ids:
-				agent_pos = tuple(self._np_random.choice(valid_pos))
-				while self._field[agent_pos[0], agent_pos[1]] != 0 or any([self._field[pos[0], pos[1]] != 0 for pos in self.adj_pos(agent_pos)]):
-					valid_pos.remove(agent_pos)
-					agent_pos = tuple(self._np_random.choice(valid_pos))
-				self._agents[prey].pos = agent_pos
+				prey_pos = tuple(self._np_random.choice(valid_pos))
+				n_free_adj = len(set(self.adj_pos(prey_pos)))
+				while self._field[prey_pos[0], prey_pos[1]] != 0 or n_free_adj < self._n_need_catch or any([self._field[pos[0], pos[1]] != 0 for pos in self.adj_pos(prey_pos)]):
+					valid_pos.remove(prey_pos)
+					prey_pos = tuple(self._np_random.choice(valid_pos))
+				self._agents[prey].pos = prey_pos
 				self._agents[prey].alive = True
-				self._field[agent_pos[0], agent_pos[1]] = AgentType.PREY
-				valid_pos.remove(agent_pos)
+				self._field[prey_pos[0], prey_pos[1]] = AgentType.PREY
+				valid_pos.remove(prey_pos)
 
 		else:
 			assert self._target_id in init_pos.keys(), 'When giving starting positions for preys, target prey %s must be among them' % self._target_id
@@ -856,7 +860,7 @@ class TargetPursuitEnv(PursuitEnv):
 			preys_alive.remove(self._target_id)
 			prey_adj = self.adj_pos(self._agents[self._target_id].pos)
 			hunters_capturing = [h_id for h_id in self.get_hunters_in_pos(prey_adj) if h_id not in capturing_hunters]
-			if len(hunters_capturing) >= self._n_catch:
+			if len(hunters_capturing) >= self._n_need_catch:
 				captured_prey += [self._target_id]
 				self._agents[self._target_id].alive = False
 				self._prey_alive_ids.remove(self._target_id)
@@ -868,7 +872,7 @@ class TargetPursuitEnv(PursuitEnv):
 			for h_id in self.get_hunters_in_pos(prey_adj):
 				if h_id not in capturing_hunters:
 					hunters_capturing.append(h_id)
-			is_surrounded = len(hunters_capturing) >= self._n_catch
+			is_surrounded = len(hunters_capturing) >= self._n_need_catch
 			if is_surrounded:
 				captured_prey += [prey_id]
 				self._agents[prey_id].alive = False

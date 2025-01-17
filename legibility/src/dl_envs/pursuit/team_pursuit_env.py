@@ -233,7 +233,7 @@ class TeamPursuitEnv(PursuitEnv):
 				prey_pos = self._agents[prey].pos
 				prey_adj = self.adj_pos(prey_pos)
 				n_surround_hunters = sum([self.correct_prey(hunter_id, prey) and self.agents[hunter_id].pos in prey_adj for hunter_id in self._hunter_ids])
-				is_surrounded = n_surround_hunters >= self._n_catch
+				is_surrounded = n_surround_hunters >= self._n_need_catch
 				# If prey is surrounded, gets a caught penalty and all hunters boxing it get a catching reward
 				if is_surrounded:
 					if self._n_preys_alive == 1:
@@ -250,7 +250,7 @@ class TeamPursuitEnv(PursuitEnv):
 					rewards_preys += [-MOVE_REWARD]
 					for agent_id in all_hunter_ids:
 						if self._agents[agent_id].pos in prey_adj and self.correct_prey(agent_id, prey):
-							rewards_hunters[all_hunter_ids.index(agent_id)] = n_surround_hunters * (CATCH_REWARD / self._n_catch)
+							rewards_hunters[all_hunter_ids.index(agent_id)] = n_surround_hunters * (CATCH_REWARD / self._n_need_catch)
 			# If prey already caught, doesn't get reward
 			else:
 				rewards_preys += [0]

@@ -146,5 +146,6 @@ legibility/data/performances/
 legibility/data/stills/
 llms/wandb/
 llms/src/wandb/
+llms/data/results/
 
 .idea/
